@@ -13,6 +13,13 @@ fn main() -> ExitCode {
     };
     let args: Vec<_> = args.collect();
 
-    // TODO: resolve policy and set up the sandbox before running.
-    runner::exec(&program, &args)
+    // TODO: resolve policy from sandbox.toml to build the env allowlist.
+    // Until then we default-deny: no environment is propagated.
+    match runner::exec(&program, &args, &[]) {
+        Ok(status) => status.code().map_or(ExitCode::FAILURE, |code| ExitCode::from(code as u8)),
+        Err(err) => {
+            eprintln!("crabshell: failed to run {}: {err}", program.to_string_lossy());
+            ExitCode::FAILURE
+        }
+    }
 }

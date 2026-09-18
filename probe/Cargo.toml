@@ -1,0 +1,16 @@
+[package]
+name = "probe"
+version = "0.0.0"
+description = "Test fixture that inspects its sandbox and reports the result."
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+crabshell = { path = "../crabshell" }
+
+[lints]
+workspace = true

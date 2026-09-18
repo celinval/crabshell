@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crabshell"]
+members = ["crabshell", "probe"]
 
 [workspace.package]
 edition = "2024"

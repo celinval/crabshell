@@ -1,22 +1,25 @@
-//! Executes a build script, forwarding stdio and its exit status.
+//! Executes a build script under the resolved policy.
 //!
-//! Currently a passthrough with no confinement; the sandbox (namespaces /
-//! mounts / seccomp) is not yet applied.
+//! The only confinement so far is environment scrubbing: the child starts with
+//! an empty environment and receives only the allowed variables. Filesystem,
+//! network, and syscall confinement are not yet applied.
 
 use std::ffi::OsStr;
-use std::process::{Command, ExitCode};
+use std::io;
+use std::process::{Command, ExitStatus};
 
-/// Run `program` with `args`, returning its exit status.
-pub fn exec<S: AsRef<OsStr>>(program: &S, args: &[S]) -> ExitCode {
-    let program = program.as_ref();
-    match Command::new(program).args(args).status() {
-        Ok(status) => match status.code() {
-            Some(code) => ExitCode::from(code as u8),
-            None => ExitCode::FAILURE, // terminated by a signal
-        },
-        Err(err) => {
-            eprintln!("crabshell: failed to run {}: {err}", program.to_string_lossy());
-            ExitCode::FAILURE
+/// Run `program` with `args`, passing through only the `allowed_env` variables.
+pub fn exec<S: AsRef<OsStr>>(
+    program: &S,
+    args: &[S],
+    allowed_env: &[String],
+) -> io::Result<ExitStatus> {
+    let mut cmd = Command::new(program.as_ref());
+    cmd.args(args).env_clear();
+    for key in allowed_env {
+        if let Some(value) = std::env::var_os(key) {
+            cmd.env(key, value);
         }
     }
+    cmd.status()
 }

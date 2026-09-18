@@ -1,0 +1,21 @@
+[package]
+name = "crabshell"
+version = "0.0.0"
+description = "A sandbox for Cargo build scripts."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "crabshell"
+path = "src/lib.rs"
+
+[[bin]]
+name = "crabshell"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true

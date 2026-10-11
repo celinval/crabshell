@@ -11,6 +11,12 @@
 
 use crate::config::{Fields, ListField, SandboxConfig};
 
+/// Environment variables the structural floor always grants.
+///
+/// Cargo requires a build script to place its output in `OUT_DIR`, so a script
+/// that cannot read it cannot run at all. Floor entries bypass `[limits]`.
+pub const FLOOR_ENV: &[&str] = &["OUT_DIR"];
+
 /// The package whose build script is being run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageContext {
@@ -36,10 +42,13 @@ pub struct Permissions {
 /// Resolve the effective permissions for `pkg` under `config`.
 pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
     let chain = chain(config, pkg);
+    let mut env = resolve_list(&chain, &config.limits, |f| &f.env);
+    env.extend(FLOOR_ENV.iter().map(|name| name.to_string()));
+
     Permissions {
         read: resolve_list(&chain, &config.limits, |f| &f.read),
         run: resolve_list(&chain, &config.limits, |f| &f.run),
-        env: resolve_list(&chain, &config.limits, |f| &f.env),
+        env: dedup(env),
         network: resolve_network(&chain, &config.limits),
     }
 }
@@ -127,10 +136,27 @@ mod tests {
         PackageContext { name: name.to_string(), is_workspace_member: true }
     }
 
+    /// The resolved env minus the structural floor, so a test asserts only on
+    /// what the tables contribute.
+    fn granted_env(config: &SandboxConfig, pkg: &PackageContext) -> Vec<String> {
+        let mut env = resolve(config, pkg).env;
+        env.retain(|name| !FLOOR_ENV.contains(&name.as_str()));
+        env
+    }
+
     #[test]
-    fn floor_grants_nothing() {
+    fn floor_grants_only_out_dir() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
-        assert_eq!(resolved, Permissions::default());
+        assert_eq!(resolved.env, ["OUT_DIR"]);
+        assert!(resolved.read.is_empty());
+        assert!(resolved.run.is_empty());
+        assert!(!resolved.network);
+    }
+
+    #[test]
+    fn floor_survives_limits() {
+        let config = config("[limits]\nenv = []\n");
+        assert_eq!(resolve(&config, &external("dep")).env, ["OUT_DIR"]);
     }
 
     #[test]
@@ -145,8 +171,8 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["EXTERNAL"]);
-        assert_eq!(resolve(&config, &member("mine")).env, ["WS"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["EXTERNAL"]);
+        assert_eq!(granted_env(&config, &member("mine")), ["WS"]);
     }
 
     #[test]
@@ -161,8 +187,8 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["OWN"]);
-        assert_eq!(resolve(&config, &external("other")).env, ["BASE"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["OWN"]);
+        assert_eq!(granted_env(&config, &external("other")), ["BASE"]);
     }
 
     #[test]
@@ -178,9 +204,8 @@ mod tests {
             "#,
         );
 
-        let resolved = resolve(&config, &external("dep"));
-        assert_eq!(resolved.env, ["OWN"]);
-        assert_eq!(resolved.run, ["cc"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["OWN"]);
+        assert_eq!(resolve(&config, &external("dep")).run, ["cc"]);
     }
 
     #[test]
@@ -195,7 +220,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["BASE", "EXTRA"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["BASE", "EXTRA"]);
     }
 
     #[test]
@@ -210,7 +235,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["ONLY"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["ONLY"]);
     }
 
     #[test]
@@ -225,7 +250,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["SHARED", "EXTRA"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["SHARED", "EXTRA"]);
     }
 
     #[test]
@@ -240,7 +265,7 @@ mod tests {
             "#,
         );
 
-        assert_eq!(resolve(&config, &external("dep")).env, ["ALLOWED"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["ALLOWED"]);
     }
 
     #[test]
@@ -256,9 +281,8 @@ mod tests {
             "#,
         );
 
-        let resolved = resolve(&config, &external("dep"));
-        assert!(resolved.env.is_empty());
-        assert_eq!(resolved.run, ["cc"]);
+        assert!(granted_env(&config, &external("dep")).is_empty());
+        assert_eq!(resolve(&config, &external("dep")).run, ["cc"]);
     }
 
     #[test]

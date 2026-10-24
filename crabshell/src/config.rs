@@ -3,6 +3,11 @@
 //! Resolving the effective permission set is [`crate::policy`]'s job. [`find`]
 //! walks up from a directory and returns the closest `sandbox.toml`; for
 //! simplicity only that one file is used.
+//!
+//! A package falls into one of two categories, `[local]` or `[external]`, with
+//! `[package.<name>]` overriding both. Glob keys under `[package]` are rejected
+//! rather than ignored, so a table that would silently grant nothing cannot be
+//! mistaken for an applied policy.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,18 +24,21 @@ pub struct SandboxConfig {
     /// Consumer caps; constrains only the fields it names.
     #[serde(default)]
     pub limits: Fields,
-    /// Policy for workspace members.
+    /// Policy for workspace members and path dependencies.
     #[serde(default)]
-    pub workspace: Fields,
-    /// Per-package policy; `"*"` is the external-dependency catch-all.
+    pub local: Fields,
+    /// Policy for registry and git dependencies.
+    #[serde(default)]
+    pub external: Fields,
+    /// Per-package policy, overriding the category tables.
     #[serde(default)]
     pub package: BTreeMap<String, Fields>,
 }
 
 /// The fields a policy table may set.
 ///
-/// Backs `[limits]`, `[workspace]`, and each `[package.*]` entry; unset fields
-/// fall through during resolution.
+/// Backs `[limits]`, the category tables, and each `[package.<name>]` entry;
+/// unset fields fall through during resolution.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Fields {
@@ -64,16 +72,34 @@ pub fn find(start: &Path) -> Option<PathBuf> {
     start.ancestors().map(|dir| dir.join(FILE_NAME)).find(|candidate| candidate.is_file())
 }
 
-/// Read and parse the `sandbox.toml` at `path`.
+/// Read, parse, and validate the `sandbox.toml` at `path`.
 pub fn load(path: &Path) -> Result<SandboxConfig, ConfigError> {
     let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
         path: path.to_path_buf(),
         source,
     })?;
-    toml::from_str(&text).map_err(|source| ConfigError::Parse {
+    let config: SandboxConfig = toml::from_str(&text).map_err(|source| ConfigError::Parse {
         path: path.to_path_buf(),
         source,
-    })
+    })?;
+    validate(&config, path)?;
+    Ok(config)
+}
+
+/// Reject package keys that would never match a package.
+///
+/// Glob patterns are not supported yet, and a `[package.<glob>]` table that is
+/// quietly ignored reads like an applied restriction while granting nothing.
+fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
+    for key in config.package.keys() {
+        if key.contains('*') {
+            return Err(ConfigError::GlobKey {
+                path: path.to_path_buf(),
+                key: key.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// An error discovering or parsing a `sandbox.toml`.
@@ -83,6 +109,8 @@ pub enum ConfigError {
     Read { path: PathBuf, source: std::io::Error },
     /// The file was not valid TOML or violated the schema.
     Parse { path: PathBuf, source: toml::de::Error },
+    /// A `[package.<name>]` key used an unsupported glob pattern.
+    GlobKey { path: PathBuf, key: String },
 }
 
 impl fmt::Display for ConfigError {
@@ -94,6 +122,13 @@ impl fmt::Display for ConfigError {
             ConfigError::Parse { path, source } => {
                 write!(f, "failed to parse {}: {source}", path.display())
             }
+            ConfigError::GlobKey { path, key } => write!(
+                f,
+                "{}: `[package.\"{key}\"]` is not supported; \
+                 use `[external]` for dependencies, or `[local]` for workspace \
+                 members and path dependencies",
+                path.display()
+            ),
         }
     }
 }
@@ -103,6 +138,7 @@ impl std::error::Error for ConfigError {
         match self {
             ConfigError::Read { source, .. } => Some(source),
             ConfigError::Parse { source, .. } => Some(source),
+            ConfigError::GlobKey { .. } => None,
         }
     }
 }
@@ -117,10 +153,10 @@ mod tests {
             [limits]
             network = false
 
-            [workspace]
+            [local]
             read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
 
-            [package."*"]
+            [external]
             read = ["$include_dir", "$lib_dir"]
 
             [package.openssl-sys]
@@ -132,7 +168,7 @@ mod tests {
 
         assert_eq!(config.limits.network, Some(false));
         assert_eq!(
-            config.workspace.read,
+            config.local.read,
             Some(ListField::Override(vec![
                 "$include_dir".into(),
                 "$lib_dir".into(),
@@ -140,7 +176,7 @@ mod tests {
             ]))
         );
         assert_eq!(
-            config.package["*"].read,
+            config.external.read,
             Some(ListField::Override(vec!["$include_dir".into(), "$lib_dir".into()]))
         );
         assert_eq!(
@@ -165,6 +201,38 @@ mod tests {
     #[test]
     fn unknown_field_is_rejected() {
         assert!(toml::from_str::<SandboxConfig>("[limits]\nbogus = 1\n").is_err());
+    }
+
+    /// Write `text` to a `sandbox.toml` in a fresh directory and load it.
+    fn load_text(text: &str) -> (tempfile::TempDir, Result<SandboxConfig, ConfigError>) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE_NAME);
+        std::fs::write(&path, text).unwrap();
+        let loaded = load(&path);
+        (dir, loaded)
+    }
+
+    #[test]
+    fn catch_all_package_key_is_rejected() {
+        let (_dir, loaded) = load_text("[package.\"*\"]\nnetwork = false\n");
+        let err = loaded.unwrap_err();
+
+        assert!(matches!(&err, ConfigError::GlobKey { key, .. } if key == "*"));
+        let message = err.to_string();
+        assert!(message.contains("[external]"), "{message}");
+        assert!(message.contains("[local]"), "{message}");
+    }
+
+    #[test]
+    fn partial_glob_package_key_is_rejected() {
+        let (_dir, loaded) = load_text("[package.\"*-sys\"]\nnetwork = false\n");
+        assert!(matches!(loaded.unwrap_err(), ConfigError::GlobKey { key, .. } if key == "*-sys"));
+    }
+
+    #[test]
+    fn plain_package_key_is_accepted() {
+        let (_dir, loaded) = load_text("[package.openssl-sys]\nnetwork = true\n");
+        assert_eq!(loaded.unwrap().package["openssl-sys"].network, Some(true));
     }
 
     #[test]

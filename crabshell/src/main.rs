@@ -1,6 +1,6 @@
 //! Cargo invokes us as `crabshell <build-script-exe> [args...]`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use crabshell::policy::{PackageContext, Permissions};
@@ -38,21 +38,55 @@ fn main() -> ExitCode {
 /// we inherit. Without a `sandbox.toml` the structural floor applies and grants
 /// nothing.
 fn permissions() -> Result<Permissions, config::ConfigError> {
-    let start = std::env::var_os("CARGO_MANIFEST_DIR")
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
 
-    let Some(path) = config::find(&start) else {
+    let Some(path) = config_path(&manifest_dir) else {
         return Ok(Permissions::default());
     };
     let config = config::load(&path)?;
 
-    // TODO: determine workspace membership so `[workspace]` can apply; until
-    // then every package resolves through `[package."*"]`.
     let pkg = PackageContext {
         name: std::env::var("CARGO_PKG_NAME").unwrap_or_default(),
-        is_workspace_member: false,
+        is_local: is_local(&manifest_dir),
     };
     Ok(policy::resolve(&config, &pkg))
+}
+
+/// Locate the `sandbox.toml` governing this build.
+///
+/// A dependency's manifest lives under `CARGO_HOME`, so walking up from it
+/// never reaches the consumer's config. `CRABSHELL_CONFIG` carries the path
+/// instead, which Cargo can supply for every build script at once:
+///
+/// ```toml
+/// [env]
+/// CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+/// ```
+fn config_path(manifest_dir: &Path) -> Option<PathBuf> {
+    match std::env::var_os("CRABSHELL_CONFIG") {
+        Some(path) => Some(PathBuf::from(path)),
+        None => config::find(manifest_dir),
+    }
+}
+
+/// Whether the package's source is on the filesystem rather than fetched.
+///
+/// Registry and git dependencies are unpacked under `CARGO_HOME`, so anything
+/// outside it is a workspace member or a path dependency. Vendored
+/// dependencies are a known gap: they sit in the project tree yet are
+/// third-party, and the environment alone cannot distinguish them.
+fn is_local(manifest_dir: &Path) -> bool {
+    let Some(cargo_home) = cargo_home() else {
+        return false;
+    };
+    !manifest_dir.starts_with(&cargo_home)
+}
+
+fn cargo_home() -> Option<PathBuf> {
+    std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
 }

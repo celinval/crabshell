@@ -57,26 +57,32 @@ You set the project policy in `sandbox.toml`:
 [limits]                              # a hard ceiling nothing can exceed
 network = false
 
-[workspace]                           # what your own crates get
+[local]                               # workspace members and path dependencies
 read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
 
-[package."*"]                         # default for external dependencies
+[external]                            # registry and git dependencies
 read = ["$include_dir", "$lib_dir"]
 ```
 
-You add `crabshell` as a host runner in your Cargo `config.toml`.
+You add `crabshell` as a host runner in your Cargo `config.toml`, and point it
+at the policy:
 
 ```toml
 [host]
 runner = ["crabshell"]
+
+[env]
+CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
 ```
+
+`relative = true` resolves the path against the directory holding
+`config.toml`, so every build script in the graph — including dependencies
+unpacked under `CARGO_HOME` — reads the same policy. Without it, crabshell
+falls back to walking up from the package being built, which only finds a
+config for your own crates.
 
 By default a build script gets almost nothing: it can write to `OUT_DIR`, and
 that's it. Everything else is opt-in.
-
-Similar to Cargo, CrabShell will follow your directory hierarchy to find sandbox
-configurations. This allows you to set different policies for different parts of
-your workspace. CrabShell also allows system users to set default limits on resource usage.
 
 ---
 
@@ -175,20 +181,44 @@ of table:
 [limits]
 network = false
 
-# Policy for workspace members. Inherits unset fields from the built-in baseline.
-[workspace]
+# Packages whose source is on your filesystem: workspace members and path
+# dependencies. Inherits unset fields from the built-in baseline.
+[local]
 read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
 
-# External dependencies with no named entry ("*" excludes workspace members).
-[package."*"]
+# Packages Cargo fetched: registry and git dependencies.
+[external]
 read = ["$include_dir", "$lib_dir"]
 
-# One named package (workspace member or external). Inherits from its category
-# table, then the baseline.
+# One named package, local or external. Inherits from its category table, then
+# the baseline.
 [package.openssl-sys]
 read = { inherit = true, value = ["$include_dir/openssl"] }   # append to inherited read paths
 run  = ["cc", "pkg-config"]                                   # override run
 ```
+
+A package is local when its manifest directory is outside `CARGO_HOME`, which
+crabshell reads from the build script's environment. This mirrors the
+distinction Cargo itself uses for `--cap-lints` and rebuild detection: the
+question is whether the source is yours, not whether it is in your member
+list.
+
+Note this is deliberately *not* Cargo's `[profile.*.package."*"]` semantics,
+where `*` means "every package except workspace members" — and so matches a
+path dependency outside the workspace. Using that split here would make such a
+package both `[local]` and part of the catch-all. To keep the categories
+disjoint, crabshell names them explicitly and **rejects** glob keys under
+`[package]`:
+
+```
+error: `[package."*"]` is not supported
+  = help: use `[external]` for dependencies, or `[local]` for workspace
+          members and path dependencies
+```
+
+Rejecting rather than ignoring is deliberate. A silently-dropped
+`[package."*"] network = false` reads like a restriction while granting
+whatever the category table says.
 
 There is no user-authored `baseline` table. The bottom of the chain is the
 built-in **structural floor** — `OUT_DIR` write access and the `OUT_DIR` path
@@ -202,9 +232,9 @@ value from the most specific table that sets `f`, then clamp by `[limits]`:
 
 ```
 value(pkg, f) = first table that sets f, in order:
-    [package.pkg].f            # named entry — matches any package, workspace or external
-    category(pkg).f            # [workspace].f if pkg is a workspace member,
-                               # [package."*"].f if pkg is an external dependency
+    [package.pkg].f            # named entry — matches any package, local or external
+    category(pkg).f            # [local].f if pkg's source is on the filesystem,
+                               # [external].f if Cargo fetched it
     <structural floor>.f       # OUT_DIR write + OUT_DIR path only
 
 then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
@@ -213,8 +243,8 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
 - **Per-field merge, not per-table replace.** A table overrides only the fields
   it names; every other field is inherited.
 - **A named entry inherits from its category.** `[package.foo]` matches `foo`
-  regardless of workspace membership; unset fields fall through to `[workspace]`
-  or `[package."*"]`, then the baseline.
+  regardless of where its source came from; unset fields fall through to
+  `[local]` or `[external]`, then the baseline.
 - **`limits` clamps per field, with a warning — it does not fail the build.**
   When a resolved value exceeds a `limits` field, the runner reduces it to the
   cap and warns. This keeps a build working under a strong global ceiling even
@@ -251,8 +281,17 @@ toolchain-derived ones resolve still needs refinement.
 - **Declared inputs are the cache key.** The contents of declared `read` paths and
   declared `env` vars are the build script's inputs. Enabling `network` disables
   the cache.
-- **Glob patterns.** Only the `*` catch-all is specified; it matches external
-  dependencies only. Broader patterns (`openssl-*`, `*-sys`) are deferred.
+- **Glob patterns.** Deferred, and rejected for now. Because the categories are
+  named tables rather than a glob, patterns like `*-sys` can be added later
+  without competing with a catch-all for precedence.
+- **Vendored dependencies are a known gap.** `cargo vendor` puts third-party
+  source inside your project, so the `CARGO_HOME` test classifies it as
+  `[local]`. The environment alone cannot distinguish a vendored directory from
+  a path dependency; resolving this needs the manifest or `cargo metadata`.
+- **The floor is small enough to be impractical today.** Real build scripts read
+  more than `OUT_DIR` — `serde_core` needs `CARGO_PKG_VERSION_PATCH` and
+  `RUSTC`, for instance. Either the floor grows to cover the variables Cargo
+  itself defines, or every policy repeats the same boilerplate.
 
 ## Capability bundles
 

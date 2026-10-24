@@ -22,8 +22,11 @@ pub const FLOOR_ENV: &[&str] = &["OUT_DIR"];
 pub struct PackageContext {
     /// Package name, matched against `[package.<name>]`.
     pub name: String,
-    /// Whether the package is a workspace member, which selects its category table.
-    pub is_workspace_member: bool,
+    /// Whether the package's source is on the filesystem.
+    ///
+    /// Selects `[local]` for workspace members and path dependencies, and
+    /// `[external]` for registry and git dependencies.
+    pub is_local: bool,
 }
 
 /// The fully resolved permissions a build script runs with.
@@ -54,16 +57,9 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
 }
 
 /// The tables applying to `pkg`, most specific first.
-///
-/// `[package."*"]` covers external dependencies only, so a workspace member
-/// falls through to `[workspace]` instead.
 fn chain<'a>(config: &'a SandboxConfig, pkg: &PackageContext) -> Vec<&'a Fields> {
-    let category = if pkg.is_workspace_member {
-        Some(&config.workspace)
-    } else {
-        config.package.get("*")
-    };
-    config.package.get(&pkg.name).into_iter().chain(category).collect()
+    let category = if pkg.is_local { &config.local } else { &config.external };
+    config.package.get(&pkg.name).into_iter().chain([category]).collect()
 }
 
 /// Resolve one list field down the chain, then clamp it by `limits`.
@@ -129,15 +125,14 @@ mod tests {
     }
 
     fn external(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_workspace_member: false }
+        PackageContext { name: name.to_string(), is_local: false }
     }
 
-    fn member(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_workspace_member: true }
+    fn local(name: &str) -> PackageContext {
+        PackageContext { name: name.to_string(), is_local: true }
     }
 
-    /// The resolved env minus the structural floor, so a test asserts only on
-    /// what the tables contribute.
+    /// The resolved env minus the structural floor.
     fn granted_env(config: &SandboxConfig, pkg: &PackageContext) -> Vec<String> {
         let mut env = resolve(config, pkg).env;
         env.retain(|name| !FLOOR_ENV.contains(&name.as_str()));
@@ -160,26 +155,26 @@ mod tests {
     }
 
     #[test]
-    fn catch_all_applies_to_external_only() {
+    fn category_is_selected_by_locality() {
         let config = config(
             r#"
-            [workspace]
-            env = ["WS"]
+            [local]
+            env = ["LOCAL"]
 
-            [package."*"]
+            [external]
             env = ["EXTERNAL"]
             "#,
         );
 
         assert_eq!(granted_env(&config, &external("dep")), ["EXTERNAL"]);
-        assert_eq!(granted_env(&config, &member("mine")), ["WS"]);
+        assert_eq!(granted_env(&config, &local("mine")), ["LOCAL"]);
     }
 
     #[test]
     fn named_entry_overrides_category() {
         let config = config(
             r#"
-            [package."*"]
+            [external]
             env = ["BASE"]
 
             [package.dep]
@@ -195,7 +190,7 @@ mod tests {
     fn unset_field_falls_through_to_category() {
         let config = config(
             r#"
-            [package."*"]
+            [external]
             env = ["BASE"]
             run = ["cc"]
 
@@ -212,7 +207,7 @@ mod tests {
     fn inherit_appends_to_category() {
         let config = config(
             r#"
-            [package."*"]
+            [external]
             env = ["BASE"]
 
             [package.dep]
@@ -227,7 +222,7 @@ mod tests {
     fn inherit_false_matches_the_array_form() {
         let config = config(
             r#"
-            [package."*"]
+            [external]
             env = ["BASE"]
 
             [package.dep]
@@ -242,7 +237,7 @@ mod tests {
     fn inherit_dedups_overlapping_entries() {
         let config = config(
             r#"
-            [package."*"]
+            [external]
             env = ["SHARED"]
 
             [package.dep]
@@ -260,7 +255,7 @@ mod tests {
             [limits]
             env = ["ALLOWED"]
 
-            [package."*"]
+            [external]
             env = ["ALLOWED", "DENIED"]
             "#,
         );
@@ -275,7 +270,7 @@ mod tests {
             [limits]
             env = []
 
-            [package."*"]
+            [external]
             env = ["DENIED"]
             run = ["cc"]
             "#,
@@ -287,7 +282,7 @@ mod tests {
 
     #[test]
     fn network_is_denied_unless_granted() {
-        let granted = config("[package.\"*\"]\nnetwork = true\n");
+        let granted = config("[external]\nnetwork = true\n");
         assert!(resolve(&granted, &external("dep")).network);
         assert!(!resolve(&SandboxConfig::default(), &external("dep")).network);
     }
@@ -299,7 +294,7 @@ mod tests {
             [limits]
             network = false
 
-            [package."*"]
+            [external]
             network = true
             "#,
         );

@@ -40,6 +40,18 @@ manifest.
 A bonus: once inputs are declared, a build script's result becomes safely
 cacheable and remote-executable — something Cargo can't do reliably today.
 
+### What it doesn't cover
+
+crabshell limits the damage a build script can do while it runs. It is not a
+guarantee against untrusted code:
+
+- **Library code** compiled from a dependency runs unconfined in your tests
+  and binaries.
+- **Proc macros** run inside rustc and cannot be wrapped by the runner.
+- **Build outputs** are trusted by Cargo. A confined script can still write
+  code into `OUT_DIR` that gets `include!`d, or emit linker directives (see
+  [Future possibilities](#future-possibilities)).
+
 ## Usage sketch
 
 A crate author declares needs in `Cargo.toml`:
@@ -108,26 +120,13 @@ stays policy-free — it decides *that* a script runs through a runner; the runn
 decides *how* it's confined. (The hook covers build scripts only; proc-macros
 can't be wrapped this way, since rustc loads them directly.)
 
-### 2. A default namespace-based runner (Linux)
+### 2. A sandbox backend
 
-A reference runner that confines a build script using unprivileged Linux
-namespaces, no root required:
-
-- **Filesystem**: a mount namespace with a read-only view of allowed system
-  paths, a writable bind for `OUT_DIR` and the target dir, and nothing else.
-  Package source is read-only by default; anything unlisted is absent, not just
-  denied.
-- **Network**: a network namespace with no interfaces (loopback only) unless
-  network access is granted.
-- **PID / IPC / user**: isolated PID and IPC namespaces; a user namespace to drop
-  privileges without elevated rights.
-- **Syscalls**: an optional seccomp-bpf filter to deny ungranted syscall classes
-  (e.g. raw sockets, `ptrace`).
-
-The runner translates the effective permission set into concrete namespace,
-bind-mount, and seccomp config. Non-Linux platforms fall back to no confinement
-initially, with the interface left open for backends like macOS sandbox
-profiles later.
+The runner enforces the resolved permissions through a sandbox backend, for
+example Landlock, namespaces (e.g. bubblewrap), or seccomp. The policy format
+describes what a build script may do, not how it is enforced, so backends can
+be swapped or combined without changing it. Platforms without a backend fall
+back to no confinement.
 
 ### 3. Declarative permissions
 
@@ -147,8 +146,8 @@ Only `OUT_DIR` (write) and its path are implicit; everything else must be listed
 **What the consumer grants** — a top-level `sandbox.toml` sets, per package, what
 any build script in the graph is actually allowed. The consumer is the upper
 bound: a package's requests are *restrictive*, not permissive, and the effective
-set is the intersection of the two. The `sandbox.toml` schema is in
-[Appendix A](#appendix-a-sandboxtoml-policy-specification), kept separate because
+set is the intersection of the two. The `sandbox.toml` schema is in the
+[policy specification](#sandboxtoml-policy-specification), kept separate because
 the policy surface can evolve without touching the runner mechanism.
 
 ### Flow
@@ -158,8 +157,8 @@ cargo build
   └─ compiles build.rs → build-script-build
   └─ for each build script (via host.runner):
        runner  ← Cargo invokes runner with the build-script exe + context
-       policy  ← limits(pkg) ∩ (sandbox.toml grant for pkg, else catch-all)
-       runner sets up namespaces / mounts / seccomp per policy
+       policy  ← limits ∩ (named grant for pkg, else [local] / [external])
+       runner applies the sandbox per policy
        runner execs build script inside the sandbox
        Cargo reads cargo:: directives from stdout as usual
 ```
@@ -288,10 +287,12 @@ toolchain-derived ones resolve still needs refinement.
   source inside your project, so the `CARGO_HOME` test classifies it as
   `[local]`. The environment alone cannot distinguish a vendored directory from
   a path dependency; resolving this needs the manifest or `cargo metadata`.
-- **The floor is small enough to be impractical today.** Real build scripts read
-  more than `OUT_DIR` — `serde_core` needs `CARGO_PKG_VERSION_PATCH` and
-  `RUSTC`, for instance. Either the floor grows to cover the variables Cargo
-  itself defines, or every policy repeats the same boilerplate.
+- **What should the default policy grant?** Real build scripts read more than
+  `OUT_DIR`: `serde_core` needs `CARGO_PKG_VERSION_PATCH` and `RUSTC`, for
+  instance. The default will likely include the variables Cargo sets for build
+  scripts, as an explicit list rather than a `CARGO_*` prefix (which would also
+  match secrets like `CARGO_REGISTRY_TOKEN`), and read access to the crate's
+  own directory. Whether those paths are exposed as relative paths is open.
 
 ## Capability bundles
 
@@ -305,3 +306,24 @@ place rather than copy-pasted across thousands of crates.
 
 Capabilities are syntax sugar: a `requires` entry expands to primitives *before*
 clamping and merging. The format and standard set are TBD.
+
+## Future possibilities
+
+- **Output verification.** Cargo acts on a build script's `cargo::` directives
+  with full privileges. Since stdout passes through the runner, it could check
+  them against policy. The main target is `rustc-link-arg`, which can run code
+  at link time outside the sandbox.
+- **Version-scoped grants.** `[package.foo]` also covers future versions of
+  `foo`. Grants could optionally name a version or SEMVER constraint, with a
+  lint warning on broad grants that do not.
+
+## Related work
+
+- [Package manager sandboxing](https://nesbitt.io/2026/09/24/package-manager-sandboxing.html)
+  (Andrew Nesbitt, 2026) surveys how package managers gate, confine, or remove
+  install-time code, and argues the open problem is validating a confined
+  phase's output.
+- [Cackle](https://github.com/cackle-rs/cackle) checks per-crate permissions and
+  sandboxes build scripts, and is the closest prior art for Cargo.
+- [rust-lang/cargo#16591](https://github.com/rust-lang/cargo/issues/16591), the
+  `host.runner` hook crabshell builds on.

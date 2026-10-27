@@ -1,28 +1,62 @@
 //! Test fixture that inspects its sandbox and reports via exit status.
 //!
-//! Run as `probe <check> [args...]`, it performs one check against the
+//! Run as `probe <check> <arg>`, it performs one check against the
 //! environment it was launched in and exits 0 on pass, non-zero on fail. This
 //! lets e2e tests drive it through the runner and assert on the exit status.
 //!
 //! Checks:
 //! - `env-present <NAME>` — the variable is set.
 //! - `env-absent <NAME>`  — the variable is unset.
+//! - `readable <PATH>`    — the file can be read.
+//! - `unreadable <PATH>`  — the file cannot be read.
+//! - `writable <DIR>`     — a new file can be created in the directory.
+//! - `unwritable <DIR>`   — a new file cannot be created in the directory.
+//! - `write-file <PATH>`  — the existing file can be opened for writing.
+//! - `private-tmp <DIR>`  — the temp dir is writable and isn't `DIR`.
+//! - `can-exec <PATH>`    — the program can be spawned.
+//! - `cannot-exec <PATH>` — the program cannot be spawned.
+//! - `connect <ADDR>`     — a TCP connection to `ADDR` succeeds.
+//! - `no-connect <ADDR>`  — a TCP connection to `ADDR` fails.
 
-use std::process::ExitCode;
+use std::net::TcpStream;
+use std::path::Path;
+use std::process::{Command, ExitCode};
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
-    let check = args.next();
-    let name = args.next();
+    let (Some(check), Some(arg)) = (args.next(), args.next()) else {
+        eprintln!("probe: usage: probe <check> <arg>");
+        return ExitCode::FAILURE;
+    };
 
-    let passed = match (check.as_deref(), name.as_deref()) {
-        (Some("env-present"), Some(name)) => std::env::var_os(name).is_some(),
-        (Some("env-absent"), Some(name)) => std::env::var_os(name).is_none(),
+    let passed = match check.as_str() {
+        "env-present" => std::env::var_os(&arg).is_some(),
+        "env-absent" => std::env::var_os(&arg).is_none(),
+        "readable" => std::fs::read(&arg).is_ok(),
+        "unreadable" => std::fs::read(&arg).is_err(),
+        "writable" => can_create(Path::new(&arg)),
+        "unwritable" => !can_create(Path::new(&arg)),
+        "write-file" => std::fs::OpenOptions::new().write(true).open(&arg).is_ok(),
+        "private-tmp" => {
+            let tmp = std::env::temp_dir();
+            tmp != Path::new(&arg) && can_create(&tmp)
+        }
+        "can-exec" => Command::new(&arg).status().is_ok(),
+        "cannot-exec" => Command::new(&arg).status().is_err(),
+        "connect" => TcpStream::connect(&arg).is_ok(),
+        "no-connect" => TcpStream::connect(&arg).is_err(),
         _ => {
-            eprintln!("probe: usage: probe <env-present|env-absent> <NAME>");
+            eprintln!("probe: unknown check `{check}`");
             return ExitCode::FAILURE;
         }
     };
 
     if passed { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+fn can_create(dir: &Path) -> bool {
+    let path = dir.join("probe-write-check");
+    let created = std::fs::write(&path, b"").is_ok();
+    let _ = std::fs::remove_file(&path);
+    created
 }

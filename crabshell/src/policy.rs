@@ -5,17 +5,31 @@
 //! clamps the result. Pure and filesystem-free, so it is covered by unit tests
 //! rather than end-to-end builds.
 //!
-//! Only `env` is enforced by the runner so far. Clamping compares list entries
-//! exactly, which is right for `env` names but not for `read` paths, where
-//! prefix containment is needed.
+//! Clamping and tightening intersect lists entry by entry, where an entry
+//! ending in `*` covers every entry with that prefix. Paths are compared as
+//! strings, so `/usr` doesn't yet cover `/usr/include`.
 
 use crate::config::{Fields, ListField, SandboxConfig};
+use crate::declared::Declared;
 
 /// Environment variables the structural floor always grants.
 ///
 /// Cargo requires a build script to place its output in `OUT_DIR`, so a script
 /// that cannot read it cannot run at all. Floor entries bypass `[limits]`.
 pub const FLOOR_ENV: &[&str] = &["OUT_DIR"];
+
+/// Paths the structural floor always grants read access to: the crate root.
+///
+/// Write access to `OUT_DIR` and a private `TMPDIR` are also structural; the
+/// runner grants them alongside execute access to the build script itself.
+/// Floor entries bypass `[limits]`.
+pub const FLOOR_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
+
+/// Paths the structural floor always grants write access to.
+///
+/// Compile probes silence their output with `Stdio::null()`, which opens
+/// `/dev/null` read-write. It holds no data, so granting it leaks nothing.
+pub const FLOOR_WRITE: &[&str] = &["/dev/null"];
 
 /// The package whose build script is being run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +48,8 @@ pub struct PackageContext {
 pub struct Permissions {
     /// Read-only paths.
     pub read: Vec<String>,
+    /// Writable paths, beyond `OUT_DIR`.
+    pub write: Vec<String>,
     /// Executables the script may run.
     pub run: Vec<String>,
     /// Environment variables the script may read.
@@ -47,12 +63,36 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
     let chain = chain(config, pkg);
     let mut env = resolve_list(&chain, &config.limits, |f| &f.env);
     env.extend(FLOOR_ENV.iter().map(|name| name.to_string()));
+    let mut read = resolve_list(&chain, &config.limits, |f| &f.read);
+    read.extend(FLOOR_READ.iter().map(|path| path.to_string()));
+    let mut write = resolve_list(&chain, &config.limits, |f| &f.write);
+    write.extend(FLOOR_WRITE.iter().map(|path| path.to_string()));
 
     Permissions {
-        read: resolve_list(&chain, &config.limits, |f| &f.read),
+        read: dedup(read),
+        write: dedup(write),
         run: resolve_list(&chain, &config.limits, |f| &f.run),
         env: dedup(env),
         network: resolve_network(&chain, &config.limits),
+    }
+}
+
+/// Narrow `permissions` to what the package `declared` it needs.
+///
+/// Each list becomes its intersection with the declaration, plus the
+/// structural floor. Network survives only if both grant it.
+pub fn tighten(permissions: Permissions, declared: &Declared) -> Permissions {
+    let keep = |granted: Vec<String>, wanted: &[String], floor: &[&str]| -> Vec<String> {
+        let mut out = intersect(&granted, wanted);
+        out.extend(granted.into_iter().filter(|entry| floor.contains(&entry.as_str())));
+        dedup(out)
+    };
+    Permissions {
+        read: keep(permissions.read, &declared.read, FLOOR_READ),
+        write: keep(permissions.write, &declared.write, FLOOR_WRITE),
+        run: keep(permissions.run, &declared.run, &[]),
+        env: keep(permissions.env, &declared.env, FLOOR_ENV),
+        network: permissions.network && declared.network,
     }
 }
 
@@ -68,12 +108,27 @@ fn resolve_list(
     limits: &Fields,
     get: impl Fn(&Fields) -> &Option<ListField> + Copy,
 ) -> Vec<String> {
-    let mut value = lookup_list(chain, get);
-    if let Some(cap) = get(limits) {
-        let cap = entries(cap);
-        value.retain(|entry| cap.contains(entry));
+    let value = lookup_list(chain, get);
+    match get(limits) {
+        Some(cap) => intersect(&value, entries(cap)),
+        None => value,
     }
-    value
+}
+
+/// The entries of either list that the other list covers.
+fn intersect(a: &[String], b: &[String]) -> Vec<String> {
+    let covered = |entry: &&String, by: &[String]| by.iter().any(|pattern| covers(pattern, entry));
+    let mut out: Vec<String> = a.iter().filter(|e| covered(e, b)).cloned().collect();
+    out.extend(b.iter().filter(|e| covered(e, a)).cloned());
+    dedup(out)
+}
+
+/// Whether `pattern` covers `entry`: equal, or a matching `prefix*`.
+fn covers(pattern: &str, entry: &str) -> bool {
+    match pattern.strip_suffix('*') {
+        Some(prefix) => entry.starts_with(prefix),
+        None => pattern == entry,
+    }
 }
 
 /// Take the first table that sets the field, expanding `inherit` upwards.
@@ -140,18 +195,21 @@ mod tests {
     }
 
     #[test]
-    fn floor_grants_only_out_dir() {
+    fn floor_grants_only_out_dir_the_crate_root_and_dev_null() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
         assert_eq!(resolved.env, ["OUT_DIR"]);
-        assert!(resolved.read.is_empty());
+        assert_eq!(resolved.read, ["$CARGO_MANIFEST_DIR"]);
+        assert_eq!(resolved.write, ["/dev/null"]);
         assert!(resolved.run.is_empty());
         assert!(!resolved.network);
     }
 
     #[test]
     fn floor_survives_limits() {
-        let config = config("[limits]\nenv = []\n");
+        let config = config("[limits]\nenv = []\nread = []\nwrite = []\n");
         assert_eq!(resolve(&config, &external("dep")).env, ["OUT_DIR"]);
+        assert_eq!(resolve(&config, &external("dep")).read, ["$CARGO_MANIFEST_DIR"]);
+        assert_eq!(resolve(&config, &external("dep")).write, ["/dev/null"]);
     }
 
     #[test]
@@ -285,6 +343,60 @@ mod tests {
         let granted = config("[external]\nnetwork = true\n");
         assert!(resolve(&granted, &external("dep")).network);
         assert!(!resolve(&SandboxConfig::default(), &external("dep")).network);
+    }
+
+    #[test]
+    fn a_declaration_only_tightens() {
+        let config = config(
+            r#"
+            [external]
+            read = ["/usr/include", "/usr/lib"]
+            run = ["cc"]
+            env = ["TARGET", "CC"]
+            network = true
+            "#,
+        );
+        let declared = Declared {
+            read: vec!["/usr/include".into(), "/etc".into()],
+            write: vec![],
+            run: vec![],
+            env: vec!["TARGET".into(), "HOME".into()],
+            network: false,
+        };
+
+        let tightened = tighten(resolve(&config, &external("dep")), &declared);
+        assert_eq!(tightened.read, ["/usr/include", "$CARGO_MANIFEST_DIR"]);
+        assert!(tightened.run.is_empty());
+        assert_eq!(tightened.env, ["TARGET", "OUT_DIR"]);
+        assert!(!tightened.network);
+    }
+
+    #[test]
+    fn patterns_intersect_by_prefix() {
+        let capped = config(
+            r#"
+            [limits]
+            env = ["CARGO_*"]
+
+            [external]
+            env = ["CARGO_CFG_*", "CARGO_PKG_NAME", "HOME"]
+            "#,
+        );
+        assert_eq!(granted_env(&capped, &external("dep")), ["CARGO_CFG_*", "CARGO_PKG_NAME"]);
+
+        let broad = config("[external]\nenv = [\"*\"]\n");
+        let declared = Declared { env: vec!["TARGET".into()], ..Declared::default() };
+        assert_eq!(
+            tighten(resolve(&broad, &external("dep")), &declared).env,
+            ["TARGET", "OUT_DIR"]
+        );
+    }
+
+    #[test]
+    fn a_declaration_keeps_the_floor() {
+        let tightened =
+            tighten(resolve(&SandboxConfig::default(), &external("dep")), &Declared::default());
+        assert_eq!(tightened, resolve(&SandboxConfig::default(), &external("dep")));
     }
 
     #[test]

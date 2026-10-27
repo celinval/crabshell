@@ -44,6 +44,8 @@ pub struct SandboxConfig {
 pub struct Fields {
     /// Read-only paths.
     pub read: Option<ListField>,
+    /// Writable paths, beyond `OUT_DIR`.
+    pub write: Option<ListField>,
     /// Executables the script may run.
     pub run: Option<ListField>,
     /// Environment variables the script may read.

@@ -18,6 +18,7 @@
   - [Observed labels](build-scripts/labels.md)
   - [Proposed categories](build-scripts/categories.md)
   - [Observations](build-scripts/observations.md)
+  - [Category experiments](build-scripts/experiments.md)
 - [Related work](related-work/README.md)
   - [Comparison with Cackle](related-work/cackle.md)
 

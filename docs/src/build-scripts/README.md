@@ -10,3 +10,5 @@ request and a consumer can grant.
 - [Proposed categories](categories.md): the categories ordered by privilege,
   and how many crates each tier covers.
 - [Observations](observations.md): what the data implies for the policy.
+- [Category experiments](experiments.md): real crates of three categories
+  built under the sandbox, and what they needed.

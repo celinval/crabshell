@@ -10,6 +10,12 @@
   source inside your project, so the `CARGO_HOME` test classifies it as
   `[local]`. The environment alone cannot distinguish a vendored directory from
   a path dependency; resolving this needs the manifest or `cargo metadata`.
+- **Policy changes don't rerun build scripts.** The policy isn't part of
+  Cargo's fingerprint, so after a policy edit, results cached under the old
+  policy remain until a clean build.
+- **Should the floor cover the dynamic loader?** Every dynamically linked
+  build script needs `/lib*`, but granting it is platform-specific; see
+  [category experiments](../build-scripts/experiments.md).
 - **What should the default policy grant?** Real build scripts read more than
   `OUT_DIR`: `serde_core` needs `CARGO_PKG_VERSION_PATCH` and `RUSTC`, for
   instance. The default will likely include the variables Cargo sets for build

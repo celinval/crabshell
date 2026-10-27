@@ -26,6 +26,16 @@ describes what a build script may do, not how it is enforced, so backends can
 be swapped or combined without changing it. Platforms without a backend fall
 back to no confinement.
 
+The prototype's Linux backend uses Landlock. crabshell restricts its own
+process and then execs the build script, which inherits the restriction:
+
+- `read` grants read and execute, `write` grants full access, and `run`
+  grants execute on one resolved program.
+- Unless network is granted, crabshell also enters an empty network namespace
+  (through an unprivileged user namespace). Landlock alone only covers TCP.
+- Denied paths are visible but return `EACCES`; they aren't hidden as they
+  would be with mount namespaces.
+
 ## 3. Declarative permissions
 
 Two inputs feed the runner's policy.
@@ -35,11 +45,15 @@ Two inputs feed the runner's policy.
 ```toml
 [package.metadata.build-rs]
 read = ["/usr/include", "/usr/lib"]   # extra read-only paths
+write = ["$HOME/.cache/foo"]          # extra writable paths
 run  = ["cc", "pkg-config"]           # executables it may exec
 env  = ["TARGET", "OPT_LEVEL"]        # env vars it may read
 ```
 
-Only `OUT_DIR` (write) and its path are implicit; everything else must be listed.
+Only the [structural floor](../policy/structure.md) is implicit: the crate's own
+directory (read), `OUT_DIR`, `/dev/null` and a private `TMPDIR` (write);
+everything else must be listed. Once a crate declares anything, unlisted fields
+request nothing.
 
 **What the consumer grants** — a top-level `sandbox.toml` sets, per package, what
 any build script in the graph is actually allowed. The consumer is the upper

@@ -4,8 +4,12 @@
 code with only the access it actually needs — not the full privileges of
 whoever ran `cargo build`.
 
-> ⚠️ **Prototype.** Exploratory work; the API, permission format, and
+> ⚠️ **Prototype:** Exploratory work; the API, permission format, and
 > confinement mechanism will change. Not for production use.
+
+> 🤖 **AI Generated**: The code in this repo is heavily AI generated (read: vibe coding).
+> The goal at this point is to refine and assess the protocol, not to create a
+> usable solution.
 
 ## Why
 
@@ -93,8 +97,11 @@ unpacked under `CARGO_HOME` — reads the same policy. Without it, crabshell
 falls back to walking up from the package being built, which only finds a
 config for your own crates.
 
-By default a build script gets almost nothing: it can write to `OUT_DIR`, and
-that's it. Everything else is opt-in.
+By default a build script gets almost nothing: it can read its own crate and
+write to `OUT_DIR`, and that's it. Everything else is opt-in.
+
+`e2e-tests/` holds workspaces that build real crates under the sandbox; run
+them with `cargo test -- --ignored` (needs nightly Cargo).
 
 ## Design
 

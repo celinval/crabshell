@@ -1,0 +1,9 @@
+# A candidate `cfg-only` bundle in `[external]`: the loader, plus the env vars
+# Cargo itself defines for build scripts. Crate-specific user knobs such as
+# ICU4X_DATA_DIR are left out; denying them silently selects the default.
+[external]
+read = ["/lib*"]
+env = [
+    "TARGET", "HOST", "PROFILE", "OPT_LEVEL", "DEBUG", "NUM_JOBS",
+    "CARGO_CFG_*", "CARGO_FEATURE_*", "CARGO_PKG_*", "CARGO_MANIFEST_*", "DEP_*",
+]

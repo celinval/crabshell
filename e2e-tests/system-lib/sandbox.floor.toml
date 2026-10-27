@@ -1,0 +1,2 @@
+# The structural floor alone: read the crate root; write OUT_DIR,
+# /dev/null and a private TMPDIR.

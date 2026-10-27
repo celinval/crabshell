@@ -1,0 +1,16 @@
+# Depends on crates whose build scripts (transitively) only read Cargo's
+# environment and their own source, and write `OUT_DIR`.
+[workspace]
+
+[package]
+name = "cfg-only"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+crossbeam-epoch = "0.9"
+crossbeam-utils = "0.8"
+icu_properties_data = "2"
+rayon-core = "1"
+tiny-keccak = { version = "2", features = ["sha3"] }

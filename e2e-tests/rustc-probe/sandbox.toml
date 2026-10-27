@@ -1,0 +1,48 @@
+# Minimal grants for the rustc-probe fixture, attributed per package.
+#
+# Static glibc isn't available, so build scripts are dynamic and need the
+# loader and libc. `$RUSTC` is Cargo's absolute path into the toolchain.
+[external]
+read = ["/lib*", "$RUSTUP_HOME/toolchains"]
+
+[package.getrandom]
+env = ["RUSTC", "RUSTC_WRAPPER", "CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
+
+[package.libc]
+env = [
+    "RUSTC", "RUSTC_WRAPPER", "CARGO_CFG_*", "CARGO_FEATURE_RUSTC_DEP_OF_STD",
+    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+]
+
+[package.nix]
+env = ["CARGO_CFG_*"]
+
+[package.parking_lot_core]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.proc-macro2]
+env = [
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "CARGO_ENCODED_RUSTFLAGS", "TARGET",
+]
+
+[package.quote]
+env = ["RUSTC"]
+
+[package.rustix]
+env = [
+    "RUSTC", "RUSTC_WRAPPER", "CARGO_CFG_*", "CARGO_FEATURE_RUSTC_DEP_OF_STD",
+    "CARGO_FEATURE_USE_LIBC", "CARGO_ENCODED_RUSTFLAGS", "TARGET",
+]
+
+[package.serde]
+env = ["RUSTC", "CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+env = ["RUSTC", "CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.thiserror]
+env = [
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "CARGO_ENCODED_RUSTFLAGS", "CARGO_PKG_VERSION_PATCH", "TARGET",
+]

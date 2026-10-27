@@ -1,0 +1,11 @@
+# The `rustc-probe` bundle under a consumer ceiling that only allows the
+# loader to be read. `$RUSTC` can no longer run.
+[limits]
+read = ["/lib*"]
+[external]
+read = ["/lib*", "$RUSTUP_HOME/toolchains"]
+env = [
+    "TARGET", "HOST", "PROFILE", "OPT_LEVEL", "DEBUG", "NUM_JOBS",
+    "CARGO_CFG_*", "CARGO_FEATURE_*", "CARGO_PKG_*", "CARGO_MANIFEST_*", "DEP_*",
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_LINKER", "CARGO_ENCODED_RUSTFLAGS",
+]

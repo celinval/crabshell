@@ -1,0 +1,16 @@
+# Depends on `*-sys` crates that locate an installed native library through
+# pkg-config instead of building a vendored copy.
+[workspace]
+
+[package]
+name = "system-lib"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+libsqlite3-sys = "0.35"
+libz-sys = "1"
+lzma-sys = "0.1"
+openssl-sys = "0.9"
+zstd-sys = { version = "2", default-features = false, features = ["pkg-config"] }

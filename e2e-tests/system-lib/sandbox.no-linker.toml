@@ -1,0 +1,16 @@
+# The `system-lib` bundle without the linker. libz-sys links a test program
+# to detect the system zlib; when that fails it silently builds its vendored
+# copy instead. `ar` is granted so that fallback build completes.
+[external]
+read = [
+    "/lib*", "$RUSTUP_HOME/toolchains",
+    "/usr/lib64/pkgconfig", "/usr/share/pkgconfig", "/usr/include", "/usr/libexec/gcc",
+]
+run = ["pkg-config", "sh", "rpm", "x86_64-amazon-linux-gnu-pkg-config", "pkgconf", "cc", "as", "ar"]
+env = [
+    "TARGET", "HOST", "PROFILE", "OPT_LEVEL", "DEBUG", "NUM_JOBS",
+    "CARGO_CFG_*", "CARGO_FEATURE_*", "CARGO_PKG_*", "CARGO_MANIFEST_*", "DEP_*",
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_LINKER", "CARGO_ENCODED_RUSTFLAGS",
+    "PKG_CONFIG*", "HOST_PKG_CONFIG*", "CC*", "CFLAGS*", "HOST_CC", "HOST_CFLAGS",
+    "CRATE_CC_NO_DEFAULTS", "SOURCE_DATE_EPOCH", "PATH",
+]

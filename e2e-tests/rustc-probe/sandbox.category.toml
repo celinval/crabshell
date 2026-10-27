@@ -1,0 +1,10 @@
+# A candidate `rustc-probe` bundle in `[external]`: the `cfg-only` bundle, plus
+# running `$RUSTC` (and wrappers Cargo announces) from the toolchain.
+# User knobs (RUSTC_BOOTSTRAP, RUST_LIBC_UNSTABLE_*) are left out.
+[external]
+read = ["/lib*", "$RUSTUP_HOME/toolchains"]
+env = [
+    "TARGET", "HOST", "PROFILE", "OPT_LEVEL", "DEBUG", "NUM_JOBS",
+    "CARGO_CFG_*", "CARGO_FEATURE_*", "CARGO_PKG_*", "CARGO_MANIFEST_*", "DEP_*",
+    "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_LINKER", "CARGO_ENCODED_RUSTFLAGS",
+]

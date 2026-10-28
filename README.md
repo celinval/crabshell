@@ -101,7 +101,8 @@ By default a build script gets almost nothing: it can read its own crate and
 write to `OUT_DIR`, and that's it. Everything else is opt-in.
 
 `e2e-tests/` holds workspaces that build real crates under the sandbox; run
-them with `cargo test -- --ignored` (needs nightly Cargo).
+them with `cargo test -- --ignored`. They build with the nightly pinned in
+`e2e-tests/rust-toolchain.toml`.
 
 ## Design
 

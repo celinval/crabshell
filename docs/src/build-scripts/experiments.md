@@ -22,8 +22,29 @@ variant and compares every build script's `cargo:` directives with the
 baseline. **A build that succeeds isn't enough:** many build scripts degrade
 silently when access is denied.
 
-Environment: Amazon Linux 2023, kernel 6.12, nightly Cargo with
-`-Zhost-config -Ztarget-applies-to-host`. No static glibc is installed.
+The crates under test may be untrusted, so every build runs inside an outer
+**jail** (`probe`'s `jail` helper, reusing crabshell's confinement) around the
+whole `cargo build`. That includes proc-macros, which crabshell never sees. The
+jail has no network, reads only the toolchain, the fixture and the fetched
+crates, and writes only the build's target dir and a scratch `TMPDIR`. The
+baseline is the jail without crabshell; each variant adds crabshell inside it.
+For trusted fixtures, an unjailed reference build must match the baseline,
+showing that the jail itself doesn't change behavior.
+
+Each test run gets a fresh scratch dir holding:
+
+- `CARGO_HOME`, filled by `cargo fetch` before the jail starts (fetching runs
+  no crate code), so it holds no credentials;
+- an empty `HOME`;
+- one target dir per build.
+
+Builds see only `PATH`, `CARGO_HOME`, `RUSTUP_HOME`, `HOME`, `TMPDIR`, `RUSTC`
+and a fake token. The harness asserts that the `system-lib` baseline leaks the
+fake token (see below), and that no sandboxed build does.
+
+Environment: Amazon Linux 2023, kernel 6.12, `nightly-2026-10-13` (pinned in
+`e2e-tests/rust-toolchain.toml`) with `-Zhost-config -Ztarget-applies-to-host`.
+No static glibc is installed.
 
 ## Results
 
@@ -113,3 +134,11 @@ env   = ["PKG_CONFIG*", "HOST_PKG_CONFIG*", "CC*", "CFLAGS*", "HOST_CC", "HOST_C
   from the old policy remain.
 - **Toolchain roots need roles.** `$RUSTUP_HOME/toolchains` works only under
   rustup; a `$sysroot` role derived from `$RUSTC` would be portable.
+
+## Methodology TODOs
+
+- **A control variant for crabshell's own effect.** A permissive policy
+  (`read = ["/"]`, `env = ["*"]`), run inside the jail and compared against the
+  baseline, would show that crabshell's mechanism alone (env re-export,
+  private `TMPDIR`, nested Landlock) doesn't change behavior. Today that's
+  assumed. Worth adding once the policy contract settles.

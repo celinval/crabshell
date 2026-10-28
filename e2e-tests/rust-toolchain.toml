@@ -1,0 +1,6 @@
+# The toolchain every e2e workspace builds with. `host.runner` and the build
+# directory layout the tests inspect are unstable, so the nightly is pinned.
+# `rustc` from this nightly is commit e9bbadf (2026-10-12); Cargo is 29c5daa1a.
+[toolchain]
+channel = "nightly-2026-10-13"
+profile = "minimal"

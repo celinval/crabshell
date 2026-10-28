@@ -1,16 +1,18 @@
 [package]
 name = "probe"
 version = "0.0.0"
-description = "Test fixture that inspects its sandbox and reports the result."
+description = "Test fixtures: `probe` inspects its sandbox, `jail` confines a command."
 publish = false
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# The `jail` helper reuses crabshell's confinement.
+crabshell = { path = "../crabshell" }
 
 [dev-dependencies]
-crabshell = { path = "../crabshell" }
+tempfile = "3"
 
 [lints]
 workspace = true

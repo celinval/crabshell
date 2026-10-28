@@ -1,0 +1,3 @@
+# A loose consumer policy: any environment variable.
+[external]
+env = ["*"]

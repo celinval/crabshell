@@ -1,9 +1,12 @@
 //! Builds each `e2e-tests/` workspace through crabshell.
 //!
-//! A sandboxed build passes when it succeeds and every build script printed
-//! the same directives as in a baseline build without crabshell. A build
-//! script denied an optional env var or file often degrades silently rather
-//! than failing, so success alone proves little.
+//! Each fixture runs a matrix of crate requests × consumer grants (see
+//! [`Scenario`]): without requests, or with the precise requests in its
+//! `requests.toml`; under the floor alone, its `sandbox.tight.toml`, or its
+//! `sandbox.loose.toml`. A scenario that should work must succeed with every
+//! build script printing the same directives as in a baseline build without
+//! crabshell. A build script denied an optional env var or file often
+//! degrades silently rather than failing, so success alone proves little.
 //!
 //! The crates under test may be untrusted, so every build, the baseline
 //! included, runs inside an outer jail (the `jail` helper from the `probe`
@@ -24,35 +27,95 @@
 //! baseline, showing that the jail itself doesn't change behavior.
 //!
 //! The fixtures build with the nightly pinned in `e2e-tests/rust-toolchain.toml`
-//! and fetch crates, so these tests are ignored by default. Run them with
-//! `cargo test -- --ignored`.
+//! and fetch crates, so these tests are ignored by default. Requests are
+//! injected through the `test-requests` feature, so run them with
+//! `cargo test --features test-requests -- --ignored`.
 
+
+// Without `test-requests`, `check` only explains how to run the tests.
+#![cfg_attr(not(feature = "test-requests"), allow(dead_code))]
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::OnceLock;
 
-/// What a policy variant is expected to do to the build.
-#[derive(Debug, PartialEq, Eq)]
-enum Expect {
-    /// The build succeeds with the baseline's build-script output.
-    Same,
-    /// The build succeeds, but some build script's output differs: a silent
-    /// degradation.
-    Differs,
-    /// The build fails.
-    Fails,
+/// Whether crates request permissions, standing in for their own declarations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Requests {
+    /// No crate declares anything: the consumer must work out what's needed.
+    None,
+    /// Every crate requests exactly what it uses (`requests.toml`).
+    Precise,
 }
 
-/// An `e2e-tests/` workspace and what its baseline is expected to do.
+/// The consumer policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Grants {
+    /// No policy: only the floor.
+    Floor,
+    /// The union of the precise requests (`sandbox.tight.toml`).
+    Tight,
+    /// A broad policy, e.g. any env var (`sandbox.loose.toml`).
+    Loose,
+}
+
+/// One cell of the requests × grants matrix.
+#[derive(Debug, Clone, Copy)]
+struct Scenario {
+    requests: Requests,
+    grants: Grants,
+}
+
+impl Scenario {
+    const ALL: [Scenario; 6] = {
+        use Grants::*;
+        use Requests::*;
+        [
+            Scenario { requests: None, grants: Floor },
+            Scenario { requests: None, grants: Tight },
+            Scenario { requests: None, grants: Loose },
+            Scenario { requests: Precise, grants: Floor },
+            Scenario { requests: Precise, grants: Tight },
+            Scenario { requests: Precise, grants: Loose },
+        ]
+    };
+
+    fn name(&self) -> String {
+        format!("{:?}-{:?}", self.requests, self.grants).to_lowercase()
+    }
+
+    /// The `CRABSHELL_CONFIG` for `fixture`. The floor is an empty config.
+    fn config(&self, fixture: &Fixture) -> PathBuf {
+        match self.grants {
+            Grants::Floor => PathBuf::from("/dev/null"),
+            Grants::Tight => fixture.dir().join("sandbox.tight.toml"),
+            Grants::Loose => fixture.dir().join("sandbox.loose.toml"),
+        }
+    }
+
+    /// Whether the build should work. Neither side alone is enough: requests
+    /// only narrow, and the floor grants none of the fixtures' needs.
+    fn succeeds(&self) -> bool {
+        self.grants != Grants::Floor
+    }
+
+    /// Whether `fixture`'s build should leak [`FAKE_TOKEN`]: only where a
+    /// build script dumps its environment and nothing narrows the loose `*`.
+    fn leaks(&self, fixture: &Fixture) -> bool {
+        fixture.dumps_env && self.requests == Requests::None && self.grants == Grants::Loose
+    }
+}
+
+/// An `e2e-tests/` workspace.
 struct Fixture {
     name: &'static str,
     /// Whether the fixture's pinned crates are reviewed, so they may also be
     /// built outside the jail.
     trusted: bool,
-    /// Whether the baseline is expected to leak [`FAKE_TOKEN`].
-    baseline_leaks: bool,
+    /// Whether some build script prints its whole environment, so the
+    /// baseline leaks [`FAKE_TOKEN`].
+    dumps_env: bool,
 }
 
 impl Fixture {
@@ -199,8 +262,8 @@ enum Mode<'a> {
     Reference,
     /// In the jail, without crabshell.
     Baseline,
-    /// In the jail, through crabshell under this `sandbox.*.toml`.
-    Sandboxed(&'a str),
+    /// In the jail, through crabshell.
+    Sandboxed(&'a Scenario),
 }
 
 /// A finished build of a fixture.
@@ -221,10 +284,13 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
         Mode::Baseline | Mode::Sandboxed(_) => jail(fixture, target_dir),
     };
     cmd.env_clear().envs(outer_env());
-    if let Mode::Sandboxed(sandbox) = mode {
+    if let Mode::Sandboxed(scenario) = mode {
         let runner = format!("host.runner=[{:?}]", env!("CARGO_BIN_EXE_crabshell"));
         cmd.args(["-Zhost-config", "-Ztarget-applies-to-host", "--config", &runner])
-            .env("CRABSHELL_CONFIG", fixture.dir().join(sandbox));
+            .env("CRABSHELL_CONFIG", scenario.config(fixture));
+        if scenario.requests == Requests::Precise {
+            cmd.env("CRABSHELL_REQUESTS", fixture.dir().join("requests.toml"));
+        }
     }
     let output = cmd
         .args(["build", "--frozen", "--target-dir"])
@@ -351,8 +417,15 @@ fn directives(target_dir: &Path) -> BTreeMap<String, String> {
     out
 }
 
-/// Build `fixture` under each `(sandbox, expect)` variant and check the outcome.
-fn check(fixture: &Fixture, variants: &[(&str, Expect)]) {
+/// Build `fixture` in every [`Scenario`] and check each outcome.
+#[cfg(not(feature = "test-requests"))]
+fn check(fixture: &Fixture) {
+    panic!("{}: the precise-requests scenarios need `--features test-requests`", fixture.name);
+}
+
+/// Build `fixture` in every [`Scenario`] and check each outcome.
+#[cfg(feature = "test-requests")]
+fn check(fixture: &Fixture) {
     let name = fixture.name;
     let scratch = Scratch::get();
     fetch(fixture);
@@ -361,10 +434,11 @@ fn check(fixture: &Fixture, variants: &[(&str, Expect)]) {
     let baseline = build(fixture, &baseline_dir, &Mode::Baseline);
     assert!(baseline.output.status.success(), "{name}: baseline failed:\n{}", stderr(&baseline));
     assert_eq!(
-        baseline.leaks_fake_token, fixture.baseline_leaks,
+        baseline.leaks_fake_token, fixture.dumps_env,
         "{name}: baseline leaks the fake token"
     );
     let expected = directives(&baseline_dir);
+    assert_requests_cover(fixture, &expected);
 
     if fixture.trusted {
         let reference_dir = scratch.target(fixture, "reference");
@@ -377,32 +451,37 @@ fn check(fixture: &Fixture, variants: &[(&str, Expect)]) {
         assert_eq!(directives(&reference_dir), expected, "{name}: the jail changes the output");
     }
 
-    for (sandbox, expect) in variants {
-        let target_dir = scratch.target(fixture, sandbox.trim_end_matches(".toml"));
-        let build = build(fixture, &target_dir, &Mode::Sandboxed(sandbox));
-        assert!(!build.leaks_fake_token, "{name}/{sandbox}: leaked the fake token");
-        let output = build.output;
-        match expect {
-            Expect::Fails => {
-                assert!(!output.status.success(), "{name}/{sandbox}: expected the build to fail");
-            }
-            Expect::Same => {
-                assert!(
-                    output.status.success(),
-                    "{name}/{sandbox}: failed:\n{}",
-                    output_stderr(&output)
-                );
-                assert_eq!(directives(&target_dir), expected, "{name}/{sandbox}: output differs");
-            }
-            Expect::Differs => {
-                assert!(
-                    output.status.success(),
-                    "{name}/{sandbox}: failed:\n{}",
-                    output_stderr(&output)
-                );
-                assert_ne!(directives(&target_dir), expected, "{name}/{sandbox}: output matches");
-            }
+    for scenario in &Scenario::ALL {
+        let label = format!("{name}/{}", scenario.name());
+        let target_dir = scratch.target(fixture, &scenario.name());
+        let build = build(fixture, &target_dir, &Mode::Sandboxed(scenario));
+        assert_eq!(build.leaks_fake_token, scenario.leaks(fixture), "{label}: fake token leak");
+        if scenario.succeeds() {
+            assert!(build.output.status.success(), "{label}: failed:\n{}", stderr(&build));
+            assert_eq!(directives(&target_dir), expected, "{label}: output differs");
+        } else {
+            assert!(!build.output.status.success(), "{label}: expected the build to fail");
         }
+    }
+}
+
+/// Fail unless `requests.toml` lists every package whose build script runs.
+///
+/// An unlisted package would keep the consumer's full grant, hiding a missing
+/// request.
+fn assert_requests_cover(fixture: &Fixture, scripts: &BTreeMap<String, String>) {
+    #[derive(serde::Deserialize)]
+    struct Requests {
+        package: BTreeMap<String, toml::Value>,
+    }
+    let text = std::fs::read_to_string(fixture.dir().join("requests.toml")).unwrap();
+    let requests: Requests = toml::from_str(&text).unwrap();
+    for pkg in scripts.keys() {
+        assert!(
+            requests.package.contains_key(pkg),
+            "{}: requests.toml misses `{pkg}`",
+            fixture.name
+        );
     }
 }
 
@@ -417,28 +496,13 @@ fn output_stderr(output: &Output) -> String {
 #[test]
 #[ignore = "needs the pinned nightly and network"]
 fn cfg_only() {
-    check(
-        &Fixture { name: "cfg-only", trusted: true, baseline_leaks: false },
-        &[
-            ("sandbox.toml", Expect::Same),
-            ("sandbox.category.toml", Expect::Same),
-            ("sandbox.floor.toml", Expect::Fails),
-        ],
-    );
+    check(&Fixture { name: "cfg-only", trusted: true, dumps_env: false });
 }
 
 #[test]
 #[ignore = "needs the pinned nightly and network"]
 fn rustc_probe() {
-    check(
-        &Fixture { name: "rustc-probe", trusted: true, baseline_leaks: false },
-        &[
-            ("sandbox.toml", Expect::Same),
-            ("sandbox.category.toml", Expect::Same),
-            ("sandbox.limits.toml", Expect::Fails),
-            ("sandbox.floor.toml", Expect::Fails),
-        ],
-    );
+    check(&Fixture { name: "rustc-probe", trusted: true, dumps_env: false });
 }
 
 #[test]
@@ -446,13 +510,5 @@ fn rustc_probe() {
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.
-    check(
-        &Fixture { name: "system-lib", trusted: true, baseline_leaks: true },
-        &[
-            ("sandbox.toml", Expect::Same),
-            ("sandbox.category.toml", Expect::Same),
-            ("sandbox.no-linker.toml", Expect::Differs),
-            ("sandbox.floor.toml", Expect::Fails),
-        ],
-    );
+    check(&Fixture { name: "system-lib", trusted: true, dumps_env: true });
 }

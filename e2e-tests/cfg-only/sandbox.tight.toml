@@ -1,0 +1,4 @@
+# The tightest consumer policy that works without crate requests: the union of
+# requests.toml, granted to every external crate.
+[external]
+env = ["TARGET", "CARGO_CFG_SANITIZE", "ICU4X_DATA_DIR"]

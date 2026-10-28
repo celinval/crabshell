@@ -135,6 +135,38 @@ env   = ["PKG_CONFIG*", "HOST_PKG_CONFIG*", "CC*", "CFLAGS*", "HOST_CC", "HOST_C
 - **Toolchain roots need roles.** `$RUSTUP_HOME/toolchains` works only under
   rustup; a `$sysroot` role derived from `$RUSTC` would be portable.
 
+## Round 2: requests × grants
+
+The fixtures were reworked into a matrix (see `e2e-tests/README.md`): crates
+with no requests or with precise vendor-view requests (`requests.toml`), under
+the floor, the union of all requests, or a loose policy. With the loader and
+libc in the floor and named grants for `rustc`, `cc` and `pkg-config`, all
+three fixtures behave as expected in every cell: the floor alone fails, and
+every other cell matches the baseline. Under the loose policy, requests
+narrow `env = ["*"]` to exactly the names requested.
+
+What the requests cost, per build script:
+
+| Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
+|---|---:|---|---|---:|
+| `cfg-only` | 7 | 0–2 | – | 0 |
+| `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
+| `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
+
+- **No request names a path or a program.** The floor and named grants
+  absorb all host knowledge, so a vendor can write requests without knowing
+  the user's system.
+- **Env names are the whole remaining cost,** and about half are variables
+  Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
+  Granting those by default would roughly halve the largest requests (`libc`,
+  `openssl-sys`); see the open question on the default policy.
+- **Some knobs can't be expressed portably.** openssl-sys reads each knob
+  also prefixed with the target triple (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`).
+  Patterns only match prefixes, so the request has to name the triple.
+- **The only machine-specific config is the consumer's.** On Amazon Linux the
+  built-in `pkg-config` grant needs extending (`sh`, `rpm` and rpm's
+  libraries); no request changes.
+
 ## Methodology TODOs
 
 - **A control variant for crabshell's own effect.** A permissive policy

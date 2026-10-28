@@ -35,3 +35,7 @@ target
 
 # mdBook output
 /docs/book
+
+# Scratch policies for manual runs in e2e-tests fixtures; the tests point
+# CRABSHELL_CONFIG at the scenario files instead.
+e2e-tests/**/sandbox.toml

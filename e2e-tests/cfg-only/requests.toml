@@ -1,0 +1,24 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed; an empty table requests
+# nothing beyond the floor.
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-epoch]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-deque]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# Optional override of the bundled data.
+[package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
+# Only emit directives and write OUT_DIR, which the floor covers.
+[package.rayon-core]
+[package.tiny-keccak]
+[package.crunchy]

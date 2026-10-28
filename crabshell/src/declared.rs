@@ -8,6 +8,7 @@
 //! write = ["/dev/null"]
 //! run  = ["pkg-config"]
 //! env  = ["TARGET"]
+//! requests = ["cc"]
 //! ```
 //!
 //! A declaration only tightens the consumer's policy (see
@@ -38,6 +39,9 @@ pub struct Declared {
     /// Whether the script needs network access.
     #[serde(default)]
     pub network: bool,
+    /// Named grants the script may use, which expand to the fields above.
+    #[serde(default)]
+    pub requests: Vec<String>,
 }
 
 /// Read the declaration from the manifest in `manifest_dir`.
@@ -49,7 +53,27 @@ pub fn load(manifest_dir: &Path) -> Result<Option<Declared>, DeclaredError> {
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(None);
     };
-    parse(&text).map_err(|source| DeclaredError { path, source })
+    parse(&text).map_err(|source| DeclaredError::Parse { path, source })
+}
+
+/// Read `package`'s declaration from a test file of requests.
+///
+/// The file maps package names to declarations (`[package.<name>]` tables in
+/// the `[package.metadata.build-rs]` format), standing in for what crates we
+/// can't edit would declare. Returns `None` for packages the file doesn't list.
+#[cfg(feature = "test-requests")]
+pub fn injected(path: &Path, package: &str) -> Result<Option<Declared>, DeclaredError> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Requests {
+        #[serde(default)]
+        package: std::collections::BTreeMap<String, Declared>,
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|source| DeclaredError::Read { path: path.to_path_buf(), source })?;
+    let requests: Requests = toml::from_str(&text)
+        .map_err(|source| DeclaredError::Parse { path: path.to_path_buf(), source })?;
+    Ok(requests.package.get(package).cloned())
 }
 
 fn parse(text: &str) -> Result<Option<Declared>, toml::de::Error> {
@@ -71,22 +95,34 @@ fn parse(text: &str) -> Result<Option<Declared>, toml::de::Error> {
     Ok(manifest.package.and_then(|p| p.metadata).and_then(|m| m.build_rs))
 }
 
-/// A malformed `[package.metadata.build-rs]` table, or manifest.
+/// A declaration that can't be read or parsed.
 #[derive(Debug)]
-pub struct DeclaredError {
-    path: PathBuf,
-    source: toml::de::Error,
+pub enum DeclaredError {
+    /// A requests file could not be read.
+    Read { path: PathBuf, source: std::io::Error },
+    /// A manifest or requests file was malformed.
+    Parse { path: PathBuf, source: toml::de::Error },
 }
 
 impl fmt::Display for DeclaredError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "failed to parse {}: {}", self.path.display(), self.source)
+        match self {
+            DeclaredError::Read { path, source } => {
+                write!(f, "failed to read {}: {source}", path.display())
+            }
+            DeclaredError::Parse { path, source } => {
+                write!(f, "failed to parse {}: {source}", path.display())
+            }
+        }
     }
 }
 
 impl std::error::Error for DeclaredError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
+        match self {
+            DeclaredError::Read { source, .. } => Some(source),
+            DeclaredError::Parse { source, .. } => Some(source),
+        }
     }
 }
 

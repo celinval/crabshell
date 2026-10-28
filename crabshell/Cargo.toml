@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# Honors CRABSHELL_REQUESTS, a file of requests standing in for crates' own
+# declarations. For the e2e-tests matrix only.
+test-requests = []
+
 [lib]
 name = "crabshell"
 path = "src/lib.rs"

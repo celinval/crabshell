@@ -7,6 +7,7 @@
 
 pub mod config;
 pub mod declared;
+pub mod grants;
 pub mod paths;
 pub mod policy;
 pub mod runner;

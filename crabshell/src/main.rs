@@ -57,10 +57,32 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         host: std::env::var("HOST").unwrap_or_default(),
     };
     let permissions = policy::resolve(&config, &pkg);
-    Ok(match declared::load(&manifest_dir)? {
-        Some(declared) => policy::tighten(permissions, &declared, &pkg),
+    let declared = match injected(&pkg.name)? {
+        Some(declared) => Some(declared),
+        None => declared::load(&manifest_dir)?,
+    };
+    Ok(match declared {
+        Some(declared) => policy::tighten(permissions, &declared, &pkg, &config),
         None => permissions,
     })
+}
+
+/// The package's declaration from the `CRABSHELL_REQUESTS` test file, if any.
+///
+/// Lets tests model what crates we can't edit would declare. Only builds with
+/// the `test-requests` feature honor it; others reject it rather than silently
+/// running without the requests a test expects.
+fn injected(package: &str) -> Result<Option<declared::Declared>, Box<dyn std::error::Error>> {
+    let Some(path) = std::env::var_os("CRABSHELL_REQUESTS") else {
+        return Ok(None);
+    };
+    #[cfg(feature = "test-requests")]
+    return Ok(declared::injected(Path::new(&path), package)?);
+    #[cfg(not(feature = "test-requests"))]
+    {
+        let _ = (path, package);
+        Err("CRABSHELL_REQUESTS needs a crabshell built with the `test-requests` feature".into())
+    }
 }
 
 /// Locate the `sandbox.toml` governing this build.

@@ -1,0 +1,61 @@
+# Built-in named grants.
+#
+# User or project config overrides a grant per field with `[grant.<name>]`:
+# an array replaces that field, `{ inherit = true, value = [...] }` extends it.
+#
+# A grant holds what a *tool* needs; what the crate's own code reads (TARGET,
+# its own knobs) the crate requests itself. Paths use the prototype's syntax
+# until `:variables` land. Library paths list both Fedora-style (/lib64) and
+# Debian-style (/lib/x86_64-linux-gnu) locations; missing ones are skipped.
+
+# Running `$RUSTC`, as compile probes and version checks do.
+[grant.rustc]
+read = [
+    "$RUSTUP_HOME/toolchains",
+    # rustc's system libraries beyond the floor (from `readelf -d`).
+    "/lib64/libm.so.6", "/lib/x86_64-linux-gnu/libm.so.6",
+    "/lib64/libz.so.1", "/lib/x86_64-linux-gnu/libz.so.1",
+    "/lib64/libdl.so.2", "/lib/x86_64-linux-gnu/libdl.so.2",
+    "/lib64/librt.so.1", "/lib/x86_64-linux-gnu/librt.so.1",
+    "/lib64/libpthread.so.0", "/lib/x86_64-linux-gnu/libpthread.so.0",
+]
+env = ["RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_LINKER", "CARGO_ENCODED_RUSTFLAGS"]
+
+# Compiling and linking C through the cc crate. Linking searches the system
+# library dirs, so those are readable as a whole.
+[grant.cc]
+run = ["cc", "as", "ld"]
+read = [
+    "/usr/include",
+    "/usr/libexec/gcc", "/usr/lib/gcc",
+    "/lib64", "/usr/lib64", "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+]
+env = [
+    # Cargo's inputs the cc crate reads on the crate's behalf.
+    "TARGET", "HOST", "OPT_LEVEL", "DEBUG", "PROFILE", "NUM_JOBS",
+    "CARGO_ENCODED_RUSTFLAGS", "CARGO_CFG_TARGET_*", "CARGO_CFG_SANITIZE",
+    "CARGO_TRIM_PATHS_*", "RUSTC_LINKER", "RUSTC_WRAPPER",
+    # The compiler's own configuration.
+    "CC", "CC_*", "CFLAGS", "CFLAGS_*", "HOST_CC", "HOST_CFLAGS", "TARGET_CC", "TARGET_CFLAGS",
+    "CXX", "CXX_*", "CXXFLAGS", "CXXFLAGS_*", "HOST_CXX", "HOST_CXXFLAGS", "TARGET_CXX", "TARGET_CXXFLAGS",
+    "AR", "AR_*", "ARFLAGS", "ARFLAGS_*", "HOST_AR", "TARGET_AR",
+    "CRATE_CC_NO_DEFAULTS", "CC_ENABLE_DEBUG_OUTPUT", "CC_KNOWN_WRAPPER_CUSTOM", "CROSS_COMPILE",
+    "SOURCE_DATE_EPOCH", "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH",
+    "COMPILER_PATH", "GCC_EXEC_PREFIX", "SYSROOT",
+    # gcc finds cc1 relative to its own location, through PATH.
+    "PATH",
+]
+
+# Querying pkg-config. Library-specific knobs (`<LIB>_NO_PKG_CONFIG`,
+# `<LIB>_STATIC`, ...) belong to the crate that probes that library.
+[grant.pkg-config]
+run = ["pkg-config", "pkgconf"]
+read = [
+    "/usr/lib64/pkgconfig", "/usr/share/pkgconfig", "/usr/lib/pkgconfig",
+    "/usr/lib/x86_64-linux-gnu/pkgconfig",
+    "/lib64/libpkgconf.so.3", "/lib/x86_64-linux-gnu/libpkgconf.so.3",
+]
+env = [
+    "TARGET", "HOST", "CARGO_PKG_NAME", "SYSROOT",
+    "PKG_CONFIG", "PKG_CONFIG_*", "HOST_PKG_CONFIG", "HOST_PKG_CONFIG_*",
+]

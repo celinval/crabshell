@@ -1,8 +1,8 @@
 //! Resolving the effective permission set the runner enforces.
 //!
 //! Resolution is per field: the most specific table that sets a field wins, a
-//! table with `inherit = true` appends to the next table up, and `[limits]`
-//! clamps the result. Pure and filesystem-free, so it is covered by unit tests
+//! table with `inherit = true` appends to the next table up, named grants add
+//! their entries, and `[limits]` clamps the result. Pure and filesystem-free, so it is covered by unit tests
 //! rather than end-to-end builds.
 //!
 //! Clamping and tightening intersect lists entry by entry, where an entry
@@ -11,6 +11,7 @@
 
 use crate::config::{Fields, ListField, SandboxConfig};
 use crate::declared::Declared;
+use crate::grants;
 
 /// Environment variables the structural floor always grants.
 ///
@@ -92,39 +93,65 @@ pub struct Permissions {
 /// Resolve the effective permissions for `pkg` under `config`.
 pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
     let chain = chain(config, pkg);
-    let mut env = resolve_list(&chain, &config.limits, |f| &f.env);
+    let grants = grants::effective(config);
+    let names = lookup_list(&chain, |f| &f.grants);
+    let field = |get: fn(&Fields) -> &Option<ListField>| {
+        let mut value = lookup_list(&chain, get);
+        value.extend(grants::expand(&grants, &names, get));
+        clamp(dedup(value), get(&config.limits))
+    };
+    let mut env = field(|f| &f.env);
     env.extend(FLOOR_ENV.iter().map(|name| name.to_string()));
-    let mut read = resolve_list(&chain, &config.limits, |f| &f.read);
+    let mut read = field(|f| &f.read);
     read.extend(floor_read(&pkg.host).map(str::to_string));
-    let mut write = resolve_list(&chain, &config.limits, |f| &f.write);
+    let mut write = field(|f| &f.write);
     write.extend(FLOOR_WRITE.iter().map(|path| path.to_string()));
+    let network = chain.iter().find_map(|fields| fields.network);
+    let network = network.unwrap_or_else(|| grants::expand_network(&grants, &names));
 
     Permissions {
         read: dedup(read),
         write: dedup(write),
-        run: resolve_list(&chain, &config.limits, |f| &f.run),
+        run: field(|f| &f.run),
         env: dedup(env),
-        network: resolve_network(&chain, &config.limits),
+        network: network && config.limits.network.unwrap_or(true),
         list: Vec::new(),
     }
 }
 
 /// Narrow `permissions` to what the package `declared` it needs.
 ///
-/// Each list becomes its intersection with the declaration, plus the
+/// The declaration's `requests` expand through `config`'s grants first. Each
+/// list then becomes its intersection with the declaration, plus the
 /// structural floor. Network survives only if both grant it.
-pub fn tighten(permissions: Permissions, declared: &Declared, pkg: &PackageContext) -> Permissions {
-    let keep = |granted: Vec<String>, wanted: &[String], floor: &[&str]| -> Vec<String> {
-        let mut out = intersect(&granted, wanted);
+pub fn tighten(
+    permissions: Permissions,
+    declared: &Declared,
+    pkg: &PackageContext,
+    config: &SandboxConfig,
+) -> Permissions {
+    let grants = grants::effective(config);
+    let wanted = |own: &[String], get: fn(&Fields) -> &Option<ListField>| {
+        let mut value = own.to_vec();
+        value.extend(grants::expand(&grants, &declared.requests, get));
+        value
+    };
+    let keep = |granted: Vec<String>, wanted: Vec<String>, floor: &[&str]| -> Vec<String> {
+        let mut out = intersect(&granted, &wanted);
         out.extend(granted.into_iter().filter(|entry| floor.contains(&entry.as_str())));
         dedup(out)
     };
+    let network = declared.network || grants::expand_network(&grants, &declared.requests);
     Permissions {
-        read: keep(permissions.read, &declared.read, &floor_read(&pkg.host).collect::<Vec<_>>()),
-        write: keep(permissions.write, &declared.write, FLOOR_WRITE),
-        run: keep(permissions.run, &declared.run, &[]),
-        env: keep(permissions.env, &declared.env, FLOOR_ENV),
-        network: permissions.network && declared.network,
+        read: keep(
+            permissions.read,
+            wanted(&declared.read, |f| &f.read),
+            &floor_read(&pkg.host).collect::<Vec<_>>(),
+        ),
+        write: keep(permissions.write, wanted(&declared.write, |f| &f.write), FLOOR_WRITE),
+        run: keep(permissions.run, wanted(&declared.run, |f| &f.run), &[]),
+        env: keep(permissions.env, wanted(&declared.env, |f| &f.env), FLOOR_ENV),
+        network: permissions.network && network,
         list: permissions.list,
     }
 }
@@ -140,14 +167,9 @@ fn chain<'a>(config: &'a SandboxConfig, pkg: &PackageContext) -> Vec<&'a Fields>
     config.package.get(&pkg.name).into_iter().chain([category]).collect()
 }
 
-/// Resolve one list field down the chain, then clamp it by `limits`.
-fn resolve_list(
-    chain: &[&Fields],
-    limits: &Fields,
-    get: impl Fn(&Fields) -> &Option<ListField> + Copy,
-) -> Vec<String> {
-    let value = lookup_list(chain, get);
-    match get(limits) {
+/// Clamp a resolved list by its `[limits]` field, if set.
+fn clamp(value: Vec<String>, cap: &Option<ListField>) -> Vec<String> {
+    match cap {
         Some(cap) => intersect(&value, entries(cap)),
         None => value,
     }
@@ -187,12 +209,6 @@ fn lookup_list(
             dedup(out)
         }
     }
-}
-
-/// Network is denied by the floor, granted by the chain, and clamped by `limits`.
-fn resolve_network(chain: &[&Fields], limits: &Fields) -> bool {
-    let granted = chain.iter().find_map(|fields| fields.network).unwrap_or(false);
-    granted && limits.network.unwrap_or(true)
 }
 
 /// The entries a list field carries, ignoring whether it inherits.
@@ -407,9 +423,11 @@ mod tests {
             run: vec![],
             env: vec!["TARGET".into(), "HOME".into()],
             network: false,
+            requests: vec![],
         };
 
-        let tightened = tighten(resolve(&config, &external("dep")), &declared, &external("dep"));
+        let tightened =
+            tighten(resolve(&config, &external("dep")), &declared, &external("dep"), &config);
         let mut expected = vec!["/usr/include".to_string()];
         expected.extend(floor());
         assert_eq!(tightened.read, expected);
@@ -434,7 +452,7 @@ mod tests {
         let broad = config("[external]\nenv = [\"*\"]\n");
         let declared = Declared { env: vec!["TARGET".into()], ..Declared::default() };
         assert_eq!(
-            tighten(resolve(&broad, &external("dep")), &declared, &external("dep")).env,
+            tighten(resolve(&broad, &external("dep")), &declared, &external("dep"), &broad).env,
             ["TARGET", "OUT_DIR"]
         );
     }
@@ -445,8 +463,64 @@ mod tests {
             resolve(&SandboxConfig::default(), &external("dep")),
             &Declared::default(),
             &external("dep"),
+            &SandboxConfig::default(),
         );
         assert_eq!(tightened, resolve(&SandboxConfig::default(), &external("dep")));
+    }
+
+    #[test]
+    fn grants_expand_into_fields() {
+        let config = config(
+            r#"
+            [external]
+            grants = ["pkg-config"]
+            env = ["TARGET"]
+
+            [grant.pkg-config]
+            run = ["pkgconf"]
+            env = ["PKG_CONFIG_PATH"]
+            "#,
+        );
+        let resolved = resolve(&config, &external("dep"));
+        assert_eq!(resolved.run, ["pkgconf"]);
+        assert_eq!(granted_env(&config, &external("dep")), ["TARGET", "PKG_CONFIG_PATH"]);
+    }
+
+    #[test]
+    fn limits_clamp_granted_entries() {
+        let config = config(
+            r#"
+            [limits]
+            run = []
+
+            [external]
+            grants = ["cc"]
+            "#,
+        );
+        assert!(resolve(&config, &external("dep")).run.is_empty());
+    }
+
+    #[test]
+    fn requests_narrow_like_their_fields() {
+        let config = config(
+            r#"
+            [external]
+            grants = ["cc", "pkg-config"]
+            env = ["*"]
+            "#,
+        );
+        let declared = Declared {
+            env: vec!["ZLIB_STATIC".into()],
+            requests: vec!["pkg-config".into()],
+            ..Declared::default()
+        };
+        let tightened =
+            tighten(resolve(&config, &external("dep")), &declared, &external("dep"), &config);
+        // Only pkg-config's tools survive; cc's are dropped.
+        assert_eq!(tightened.run, ["pkg-config", "pkgconf"]);
+        assert!(tightened.env.contains(&"ZLIB_STATIC".to_string()));
+        assert!(tightened.env.contains(&"PKG_CONFIG_*".to_string()));
+        assert!(!tightened.env.contains(&"CC".to_string()));
     }
 
     #[test]

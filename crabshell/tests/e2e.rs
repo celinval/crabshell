@@ -333,3 +333,28 @@ fn the_floor_grants_dev_null_and_a_private_tmpdir() {
     assert!(build.check("dep", Origin::External, &[], &["private-tmp", "/tmp"]));
     assert!(build.check("dep", Origin::External, &[], &["unwritable", "/tmp"]));
 }
+
+/// A requests file stands in for a crate's `[package.metadata.build-rs]`.
+#[cfg(feature = "test-requests")]
+#[test]
+fn injected_requests_tighten_the_grant() {
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
+    let requests = build.dir.path().join("requests.toml");
+    std::fs::write(&requests, "[package.dep]\nenv = [\"CRABSHELL_GRANTED\"]\n").unwrap();
+    let mut env = GRANTED.to_vec();
+    env.push(("CRABSHELL_REQUESTS", requests.to_str().unwrap()));
+
+    assert!(build.check("dep", Origin::External, &env, &["env-present", "CRABSHELL_GRANTED"]));
+    assert!(build.check("dep", Origin::External, &env, &["env-absent", "CRABSHELL_UNGRANTED"]));
+    // Packages the file doesn't list keep the consumer's grant.
+    assert!(build.check("other", Origin::External, &env, &["env-present", "CRABSHELL_UNGRANTED"]));
+}
+
+#[cfg(not(feature = "test-requests"))]
+#[test]
+fn a_requests_file_needs_the_test_feature() {
+    let build = Build::new("");
+    let env = [("CRABSHELL_REQUESTS", "/dev/null")];
+
+    assert!(!build.check("dep", Origin::External, &env, &["env-absent", "ANYTHING"]));
+}

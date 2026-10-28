@@ -7,7 +7,8 @@
 //! A package falls into one of two categories, `[local]` or `[external]`, with
 //! `[package.<name>]` overriding both. Glob keys under `[package]` are rejected
 //! rather than ignored, so a table that would silently grant nothing cannot be
-//! mistaken for an applied policy.
+//! mistaken for an applied policy. `[grant.<name>]` tables define or override
+//! [named grants](crate::grants).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -33,6 +34,9 @@ pub struct SandboxConfig {
     /// Per-package policy, overriding the category tables.
     #[serde(default)]
     pub package: BTreeMap<String, Fields>,
+    /// Named grants, overriding built-ins of the same name per field.
+    #[serde(default)]
+    pub grant: BTreeMap<String, Fields>,
 }
 
 /// The fields a policy table may set.
@@ -52,6 +56,8 @@ pub struct Fields {
     pub env: Option<ListField>,
     /// Whether network access is granted.
     pub network: Option<bool>,
+    /// Named grants to apply, which expand to the fields above.
+    pub grants: Option<ListField>,
 }
 
 /// A list field, following Cargo's array-or-table idiom.
@@ -88,11 +94,12 @@ pub fn load(path: &Path) -> Result<SandboxConfig, ConfigError> {
     Ok(config)
 }
 
-/// Reject package keys that would never match a package.
+/// Reject tables that would never apply, and grant names that don't resolve.
 ///
 /// Glob patterns are not supported yet, and a `[package.<glob>]` table that is
 /// quietly ignored reads like an applied restriction while granting nothing.
 fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
+    let error = |kind| ConfigError::Grant { path: path.to_path_buf(), kind };
     for key in config.package.keys() {
         if key.contains('*') {
             return Err(ConfigError::GlobKey {
@@ -101,7 +108,35 @@ fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
             });
         }
     }
+    for (name, grant) in &config.grant {
+        if !crate::grants::is_valid_name(name) {
+            return Err(error(GrantError::InvalidName(name.clone())));
+        }
+        if grant.grants.is_some() {
+            return Err(error(GrantError::Nested(name.clone())));
+        }
+    }
+    if config.limits.grants.is_some() {
+        return Err(error(GrantError::InLimits));
+    }
+    let known = crate::grants::effective(config);
+    let tables = [&config.local, &config.external].into_iter().chain(config.package.values());
+    for name in tables.filter_map(|t| t.grants.as_ref()).flat_map(list_entries) {
+        if !crate::grants::is_valid_name(name) {
+            return Err(error(GrantError::InvalidName(name.clone())));
+        }
+        if !known.contains_key(name) {
+            return Err(error(GrantError::Unknown(name.clone())));
+        }
+    }
     Ok(())
+}
+
+fn list_entries(field: &ListField) -> &[String] {
+    match field {
+        ListField::Override(value) => value,
+        ListField::Inherit { value, .. } => value,
+    }
 }
 
 /// An error discovering or parsing a `sandbox.toml`.
@@ -113,6 +148,36 @@ pub enum ConfigError {
     Parse { path: PathBuf, source: toml::de::Error },
     /// A `[package.<name>]` key used an unsupported glob pattern.
     GlobKey { path: PathBuf, key: String },
+    /// A named grant is invalid or used where it can't apply.
+    Grant { path: PathBuf, kind: GrantError },
+}
+
+/// What is wrong with a named grant in `sandbox.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GrantError {
+    /// The name isn't `[a-z][a-z0-9_-]*`.
+    InvalidName(String),
+    /// A policy table grants a name that is neither built in nor defined.
+    Unknown(String),
+    /// A `[grant.<name>]` table itself sets `grants`.
+    Nested(String),
+    /// `[limits]` sets `grants`; limits cap fields, they don't grant.
+    InLimits,
+}
+
+impl fmt::Display for GrantError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GrantError::InvalidName(name) => {
+                write!(f, "`{name}` is not a valid grant name; use `[a-z][a-z0-9_-]*`")
+            }
+            GrantError::Unknown(name) => {
+                write!(f, "unknown grant `{name}`; define it with `[grant.{name}]`")
+            }
+            GrantError::Nested(name) => write!(f, "`[grant.{name}]` can't set `grants`"),
+            GrantError::InLimits => write!(f, "`[limits]` can't set `grants`"),
+        }
+    }
 }
 
 impl fmt::Display for ConfigError {
@@ -124,6 +189,7 @@ impl fmt::Display for ConfigError {
             ConfigError::Parse { path, source } => {
                 write!(f, "failed to parse {}: {source}", path.display())
             }
+            ConfigError::Grant { path, kind } => write!(f, "{}: {kind}", path.display()),
             ConfigError::GlobKey { path, key } => write!(
                 f,
                 "{}: `[package.\"{key}\"]` is not supported; \
@@ -140,7 +206,7 @@ impl std::error::Error for ConfigError {
         match self {
             ConfigError::Read { source, .. } => Some(source),
             ConfigError::Parse { source, .. } => Some(source),
-            ConfigError::GlobKey { .. } => None,
+            ConfigError::GlobKey { .. } | ConfigError::Grant { .. } => None,
         }
     }
 }
@@ -263,5 +329,26 @@ mod tests {
     fn find_returns_none_when_absent() {
         let root = tempfile::tempdir().unwrap();
         assert_eq!(find(root.path()), None);
+    }
+
+    fn load_err(text: &str) -> String {
+        let (_dir, loaded) = load_text(text);
+        loaded.unwrap_err().to_string()
+    }
+
+    #[test]
+    fn accepts_builtin_and_defined_grants() {
+        let (_dir, loaded) = load_text(
+            "[external]\ngrants = [\"cc\", \"protoc\"]\n\n[grant.protoc]\nrun = [\"protoc\"]\n",
+        );
+        assert!(loaded.is_ok(), "{loaded:?}");
+    }
+
+    #[test]
+    fn rejects_bad_grants() {
+        assert!(load_err("[external]\ngrants = [\"nope\"]\n").contains("unknown grant `nope`"));
+        assert!(load_err("[grant.Bad]\nrun = []\n").contains("not a valid grant name"));
+        assert!(load_err("[grant.x]\ngrants = [\"cc\"]\n").contains("can't set `grants`"));
+        assert!(load_err("[limits]\ngrants = [\"cc\"]\n").contains("`[limits]` can't set"));
     }
 }

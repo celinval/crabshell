@@ -14,8 +14,9 @@ pub const ROOTS: &[&str] = &["CARGO_MANIFEST_DIR", "OUT_DIR", "CARGO_HOME", "HOM
 
 /// Expand `entry` into the paths it names.
 ///
-/// `var` looks up a root's value. A glob that matches nothing expands to no
-/// paths.
+/// `var` looks up a root's value. A glob that matches nothing, or whose
+/// parent dir doesn't exist, expands to no paths; a parent that can't be
+/// listed is an error, since silently granting less would hide the cause.
 pub fn expand(
     entry: &str,
     var: impl Fn(&str) -> Option<OsString>,
@@ -51,8 +52,10 @@ fn glob(path: PathBuf) -> Result<Vec<PathBuf>, PathError> {
         return Err(PathError::Glob(path.display().to_string()));
     }
     let parent = path.parent().unwrap_or(&path);
-    let Ok(entries) = std::fs::read_dir(parent) else {
-        return Ok(Vec::new());
+    let entries = match std::fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(PathError::List(path.display().to_string(), err.to_string())),
     };
     let mut matches: Vec<PathBuf> = entries
         .filter_map(Result::ok)
@@ -74,6 +77,8 @@ pub enum PathError {
     Relative(String),
     /// The glob is not a single trailing `*`.
     Glob(String),
+    /// The glob's parent dir exists but can't be listed.
+    List(String, String),
 }
 
 impl fmt::Display for PathError {
@@ -87,6 +92,7 @@ impl fmt::Display for PathError {
                 write!(f, "`{entry}`: path must be absolute or `$ROOT/...`")
             }
             PathError::Glob(entry) => write!(f, "`{entry}`: only a trailing `*` is supported"),
+            PathError::List(entry, err) => write!(f, "`{entry}`: can't list its parent dir: {err}"),
         }
     }
 }
@@ -134,5 +140,10 @@ mod tests {
             expand(&entry, vars).unwrap(),
             [dir.path().join("lib"), dir.path().join("lib64")]
         );
+    }
+
+    #[test]
+    fn a_glob_under_a_missing_dir_matches_nothing() {
+        assert_eq!(expand("/nonexistent/crabshell/lib*", vars).unwrap(), Vec::<PathBuf>::new());
     }
 }

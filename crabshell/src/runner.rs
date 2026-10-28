@@ -86,6 +86,8 @@ struct Grants {
     exec: Vec<PathBuf>,
     /// Writable trees: `write` entries, `OUT_DIR` and the private temp dir.
     write: Vec<PathBuf>,
+    /// Trees whose directories may only be listed.
+    list: Vec<PathBuf>,
     /// The private temp dir, exported as `TMPDIR`.
     tmp: Option<PathBuf>,
 }
@@ -106,7 +108,11 @@ impl Grants {
         for entry in &permissions.write {
             write.extend(expand(entry)?);
         }
-        Ok(Self { read, exec, write, tmp })
+        let mut list = Vec::new();
+        for entry in &permissions.list {
+            list.extend(expand(entry)?);
+        }
+        Ok(Self { read, exec, write, list, tmp })
     }
 }
 
@@ -152,7 +158,7 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
         path_beneath_rules,
     };
 
-    if !network {
+    if !network && has_route() {
         isolate_network()?;
     }
 
@@ -171,12 +177,28 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
             r.add_rules(path_beneath_rules(&grants.exec, AccessFs::Execute | AccessFs::ReadFile))
         })
         .and_then(|r| r.add_rules(path_beneath_rules(&grants.write, AccessFs::from_all(abi))))
+        .and_then(|r| r.add_rules(path_beneath_rules(&grants.list, AccessFs::ReadDir)))
         .and_then(|r| r.restrict_self())
         .map_err(io::Error::other)?;
     if status.ruleset == RulesetStatus::NotEnforced {
         return Err(io::Error::other("Landlock is not supported by this kernel"));
     }
     Ok(())
+}
+
+/// Whether the current network namespace can route to the outside world.
+///
+/// `connect` on a UDP socket only looks up a route; it sends nothing. Without a
+/// route there's nothing to isolate from, which is the case when crabshell
+/// runs nested inside another sandbox's network namespace. That sandbox's
+/// Landlock domain may also deny the `/proc` writes [`isolate_network`] needs.
+#[cfg(target_os = "linux")]
+fn has_route() -> bool {
+    let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") else {
+        return false;
+    };
+    // A TEST-NET-3 address (RFC 5737): routable syntax, never a real host.
+    socket.connect("203.0.113.1:9").is_ok()
 }
 
 /// Move into a new user and network namespace, which has only a down loopback.

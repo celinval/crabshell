@@ -56,6 +56,11 @@ pub struct Permissions {
     pub env: Vec<String>,
     /// Whether network access is granted.
     pub network: bool,
+    /// Directories whose entries may be listed, but not read.
+    ///
+    /// Not settable from `sandbox.toml`; lets an outer sandbox allow the
+    /// directory listing an inner crabshell needs to expand globs like `/lib*`.
+    pub list: Vec<String>,
 }
 
 /// Resolve the effective permissions for `pkg` under `config`.
@@ -74,6 +79,7 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
         run: resolve_list(&chain, &config.limits, |f| &f.run),
         env: dedup(env),
         network: resolve_network(&chain, &config.limits),
+        list: Vec::new(),
     }
 }
 
@@ -93,6 +99,7 @@ pub fn tighten(permissions: Permissions, declared: &Declared) -> Permissions {
         run: keep(permissions.run, &declared.run, &[]),
         env: keep(permissions.env, &declared.env, FLOOR_ENV),
         network: permissions.network && declared.network,
+        list: permissions.list,
     }
 }
 

@@ -24,9 +24,11 @@
   (`DEP_*`, `CARGO_PKG_*`) in variable definitions by name only. The
   `host.runner` contract could tell the runner which values Cargo injected,
   which would make the check exact. An upstream ask.
-- **Should the floor cover the dynamic loader?** Every dynamically linked
-  build script needs `/lib*`, but granting it is platform-specific; see
-  [category experiments](../build-scripts/experiments.md).
+- **Per-platform variable values.** The floor's runtime libraries depend on
+  the *host* (where build scripts run); paths such as a cross sysroot's
+  headers depend on the *target*. Variables will need per-host and per-target
+  values, perhaps mirroring Cargo's `[host]` and `[target.<triple>]` tables.
+  Today only `x86_64-unknown-linux-gnu` has floor defaults.
 - **What should the default policy grant?** Real build scripts read more than
   `OUT_DIR`: `serde_core` needs `CARGO_PKG_VERSION_PATCH` and `RUSTC`, for
   instance. The default will likely include the variables Cargo sets for build

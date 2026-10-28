@@ -54,10 +54,11 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let pkg = PackageContext {
         name: std::env::var("CARGO_PKG_NAME").unwrap_or_default(),
         is_local: is_local(&manifest_dir),
+        host: std::env::var("HOST").unwrap_or_default(),
     };
     let permissions = policy::resolve(&config, &pkg);
     Ok(match declared::load(&manifest_dir)? {
-        Some(declared) => policy::tighten(permissions, &declared),
+        Some(declared) => policy::tighten(permissions, &declared, &pkg),
         None => permissions,
     })
 }

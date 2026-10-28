@@ -55,6 +55,12 @@ built-in **floor**, in two parts:
 - **Structural**, which a build script can't run without, so nothing removes
   it:
   - write access to `OUT_DIR` and `/dev/null`,
+  - read access to the dynamic loader and the libraries every std build script
+    links: on `x86_64-unknown-linux-gnu`, `ld-linux-x86-64.so.2`, `libc.so.6`
+    and `libgcc_s.so.1`. A build script is always a host program built with
+    std, even for a `no_std` crate. Their locations are per-host defaults for
+    now, which will become overridable variables. Statically linked hosts
+    (musl) need none.
   - a private, empty `TMPDIR`,
   - the `OUT_DIR` and `TMPDIR` values.
 - **Default**: read access to the crate's own directory (`:manifest_dir`). A

@@ -11,15 +11,24 @@
 //! sibling of `crabshell`. Run these with `cargo test` from the workspace root
 //! so that both have been built.
 //!
-//! `probe` is dynamically linked, so every policy that expects it to start
-//! grants [`LOADER`].
+//! `probe` is dynamically linked like any build script, so these tests also
+//! cover the floor's runtime libraries: no policy here grants them.
 
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::sync::OnceLock;
 
-/// A `read` grant for the dynamic loader and libc.
-const LOADER: &str = r#"read = ["/lib*"]"#;
+/// The host triple, which Cargo passes to build scripts as `HOST`.
+fn host() -> &'static str {
+    static HOST: OnceLock<String> = OnceLock::new();
+    HOST.get_or_init(|| {
+        let output = Command::new("rustc").arg("-vV").output().unwrap();
+        let info = String::from_utf8(output.stdout).unwrap();
+        let host = info.lines().find_map(|line| line.strip_prefix("host: "));
+        host.expect("rustc -vV prints the host").to_string()
+    })
+}
 
 fn crabshell() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_crabshell"))
@@ -93,6 +102,7 @@ impl Build {
             .env("CARGO_PKG_NAME", pkg)
             .env("CARGO_MANIFEST_DIR", self.manifest_dir(pkg, &origin))
             .env("CARGO_HOME", self.cargo_home())
+            .env("HOST", host())
             .env("OUT_DIR", self.out_dir())
             .env("CRABSHELL_CONFIG", self.dir.path().join("sandbox.toml"));
         for (key, value) in env {
@@ -106,7 +116,7 @@ const GRANTED: [(&str, &str); 2] = [("CRABSHELL_GRANTED", "yes"), ("CRABSHELL_UN
 
 #[test]
 fn propagates_only_granted_env() {
-    let build = Build::new(&format!("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n{LOADER}\n"));
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
     assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
     assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_UNGRANTED"]));
@@ -114,17 +124,15 @@ fn propagates_only_granted_env() {
 
 #[test]
 fn category_follows_the_manifest_location() {
-    let build = Build::new(&format!(
+    let build = Build::new(
         r#"
         [local]
         env = ["CRABSHELL_GRANTED"]
-        {LOADER}
 
         [external]
         env = []
-        {LOADER}
         "#,
-    ));
+    );
 
     assert!(build.check("mine", Origin::Local, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
     assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
@@ -132,16 +140,15 @@ fn category_follows_the_manifest_location() {
 
 #[test]
 fn named_package_overrides_its_category() {
-    let build = Build::new(&format!(
+    let build = Build::new(
         r#"
         [external]
         env = []
-        {LOADER}
 
         [package.special]
         env = ["CRABSHELL_GRANTED"]
         "#,
-    ));
+    );
 
     assert!(build.check(
         "special",
@@ -154,23 +161,22 @@ fn named_package_overrides_its_category() {
 
 #[test]
 fn limits_clamp_a_category_grant() {
-    let build = Build::new(&format!(
+    let build = Build::new(
         r#"
         [limits]
         env = []
 
         [external]
         env = ["CRABSHELL_GRANTED"]
-        {LOADER}
         "#,
-    ));
+    );
 
     assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
 }
 
 #[test]
 fn out_dir_is_always_granted() {
-    let build = Build::new(&format!("[external]\nenv = []\n{LOADER}\n"));
+    let build = Build::new("[external]\nenv = []\n");
 
     assert!(build.check("dep", Origin::External, &[], &["env-present", "OUT_DIR"]));
 }
@@ -182,7 +188,6 @@ fn a_rejected_config_fails_the_build() {
     assert!(!build.check("dep", Origin::External, &GRANTED, &["env-absent", "ANYTHING"]));
 }
 
-/// The floor doesn't cover the dynamic loader, so a dynamic program can't start.
 #[test]
 fn without_a_config_nothing_is_granted() {
     let dir = tempfile::tempdir().unwrap();
@@ -194,19 +199,20 @@ fn without_a_config_nothing_is_granted() {
         .args(["env-absent", "CRABSHELL_GRANTED"])
         .env("CARGO_PKG_NAME", "dep")
         .env("CARGO_MANIFEST_DIR", &manifest)
+        .env("HOST", host())
         .env_remove("CRABSHELL_CONFIG")
         .env("CRABSHELL_GRANTED", "yes")
         .status()
         .unwrap();
 
-    assert!(!status.success());
+    assert!(status.success());
 }
 
 /// Without `CRABSHELL_CONFIG`, crabshell walks up from the manifest directory.
 #[test]
 fn config_is_discovered_by_walking_up() {
     let dir = tempfile::tempdir().unwrap();
-    let sandbox = format!("[local]\nenv = [\"CRABSHELL_GRANTED\"]\n{LOADER}\n");
+    let sandbox = "[local]\nenv = [\"CRABSHELL_GRANTED\"]\n";
     std::fs::write(dir.path().join("sandbox.toml"), sandbox).unwrap();
     let manifest = dir.path().join("nested/pkg");
     std::fs::create_dir_all(&manifest).unwrap();
@@ -217,6 +223,7 @@ fn config_is_discovered_by_walking_up() {
         .env("CARGO_PKG_NAME", "mine")
         .env("CARGO_MANIFEST_DIR", &manifest)
         .env("CARGO_HOME", dir.path().join("cargo-home"))
+        .env("HOST", host())
         .env_remove("CRABSHELL_CONFIG")
         .env("CRABSHELL_GRANTED", "yes")
         .status()
@@ -227,7 +234,7 @@ fn config_is_discovered_by_walking_up() {
 
 #[test]
 fn ungranted_paths_are_unreadable() {
-    let build = Build::new(&format!("[external]\n{LOADER}\n"));
+    let build = Build::new("[external]\n");
     let secret = build.secret();
 
     assert!(build.check("dep", Origin::External, &[], &["unreadable", secret.to_str().unwrap()]));
@@ -240,7 +247,7 @@ fn read_grants_are_read_only() {
     let dir = build.dir.path().to_str().unwrap();
     std::fs::write(
         build.dir.path().join("sandbox.toml"),
-        format!("[external]\nread = [\"/lib*\", \"{dir}\"]\n"),
+        format!("[external]\nread = [\"{dir}\"]\n"),
     )
     .unwrap();
 
@@ -250,7 +257,7 @@ fn read_grants_are_read_only() {
 
 #[test]
 fn the_crate_root_is_readable_and_out_dir_writable() {
-    let build = Build::new(&format!("[external]\n{LOADER}\n"));
+    let build = Build::new("[external]\n");
     let manifest = build.manifest_dir("dep", &Origin::External);
     std::fs::write(manifest.join("Cargo.toml"), "").unwrap();
     let out_dir = build.out_dir();
@@ -267,7 +274,7 @@ fn the_crate_root_is_readable_and_out_dir_writable() {
 
 #[test]
 fn only_granted_programs_can_run() {
-    let build = Build::new(&format!("[external]\nrun = [\"true\"]\n{LOADER}\n"));
+    let build = Build::new("[external]\nrun = [\"true\"]\n");
     let path = std::env::var("PATH").unwrap();
     let env = [("PATH", path.as_str())];
 
@@ -279,15 +286,14 @@ fn only_granted_programs_can_run() {
 fn network_is_denied_unless_granted() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
-    let build = Build::new(&format!(
+    let build = Build::new(
         r#"
         [external]
-        {LOADER}
 
         [package.online]
         network = true
         "#,
-    ));
+    );
 
     assert!(build.check("dep", Origin::External, &[], &["no-connect", &addr]));
     assert!(build.check("online", Origin::External, &[], &["connect", &addr]));
@@ -295,7 +301,7 @@ fn network_is_denied_unless_granted() {
 
 #[test]
 fn granting_network_to_external_warns() {
-    let build = Build::new(&format!("[external]\nnetwork = true\n{LOADER}\n"));
+    let build = Build::new("[external]\nnetwork = true\n");
 
     let output = build.run("dep", Origin::External, &[], &["env-absent", "ANYTHING"]);
     assert!(output.status.success());
@@ -307,13 +313,11 @@ fn granting_network_to_external_warns() {
 
 #[test]
 fn a_declaration_tightens_the_grant() {
-    let build = Build::new(&format!(
-        "[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n{LOADER}\n"
-    ));
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
     let manifest = build.manifest_dir("dep", &Origin::External);
     std::fs::write(
         manifest.join("Cargo.toml"),
-        "[package]\nname = \"dep\"\n\n[package.metadata.build-rs]\nread = [\"/lib*\"]\nenv = [\"CRABSHELL_GRANTED\"]\n",
+        "[package]\nname = \"dep\"\n\n[package.metadata.build-rs]\nenv = [\"CRABSHELL_GRANTED\"]\n",
     )
     .unwrap();
 
@@ -323,7 +327,7 @@ fn a_declaration_tightens_the_grant() {
 
 #[test]
 fn the_floor_grants_dev_null_and_a_private_tmpdir() {
-    let build = Build::new(&format!("[external]\n{LOADER}\n"));
+    let build = Build::new("[external]\n");
 
     assert!(build.check("dep", Origin::External, &[], &["write-file", "/dev/null"]));
     assert!(build.check("dep", Origin::External, &[], &["private-tmp", "/tmp"]));

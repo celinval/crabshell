@@ -18,7 +18,7 @@ use crate::declared::Declared;
 /// that cannot read it cannot run at all. Floor entries bypass `[limits]`.
 pub const FLOOR_ENV: &[&str] = &["OUT_DIR"];
 
-/// Paths the structural floor always grants read access to: the crate root.
+/// Paths the floor always grants read access to: the crate root.
 ///
 /// Write access to `OUT_DIR` and a private `TMPDIR` are also structural; the
 /// runner grants them alongside execute access to the build script itself.
@@ -31,6 +31,29 @@ pub const FLOOR_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
 /// `/dev/null` read-write. It holds no data, so granting it leaks nothing.
 pub const FLOOR_WRITE: &[&str] = &["/dev/null"];
 
+/// The dynamic loader and the libraries every std build script links on `host`.
+///
+/// A build script is a host program built with std. On `x86_64-*-linux-gnu`
+/// its ELF interpreter is the dynamic loader, and it needs `libc.so.6` and
+/// `libgcc_s.so.1` (for unwinding). Each library has candidate locations
+/// (Fedora-style `/lib64`, Debian-style `/lib/x86_64-linux-gnu`); candidates
+/// that don't exist are skipped. Hosts not listed get nothing, which fails
+/// closed.
+///
+/// These stand in for built-in variables with per-host defaults that config
+/// will be able to override; see `docs/src/policy/paths.md`.
+pub fn floor_runtime(host: &str) -> Vec<&'static str> {
+    let candidates: &[&[&str]] = match host {
+        "x86_64-unknown-linux-gnu" => &[
+            &["/lib64/ld-linux-x86-64.so.2"],
+            &["/lib64/libc.so.6", "/lib/x86_64-linux-gnu/libc.so.6"],
+            &["/lib64/libgcc_s.so.1", "/lib/x86_64-linux-gnu/libgcc_s.so.1"],
+        ],
+        _ => &[],
+    };
+    candidates.iter().flat_map(|lib| lib.iter().copied()).collect()
+}
+
 /// The package whose build script is being run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageContext {
@@ -41,6 +64,9 @@ pub struct PackageContext {
     /// Selects `[local]` for workspace members and path dependencies, and
     /// `[external]` for registry and git dependencies.
     pub is_local: bool,
+    /// The host triple the build script runs on (Cargo's `HOST`), which
+    /// selects the floor's runtime libraries.
+    pub host: String,
 }
 
 /// The fully resolved permissions a build script runs with.
@@ -69,7 +95,7 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
     let mut env = resolve_list(&chain, &config.limits, |f| &f.env);
     env.extend(FLOOR_ENV.iter().map(|name| name.to_string()));
     let mut read = resolve_list(&chain, &config.limits, |f| &f.read);
-    read.extend(FLOOR_READ.iter().map(|path| path.to_string()));
+    read.extend(floor_read(&pkg.host).map(str::to_string));
     let mut write = resolve_list(&chain, &config.limits, |f| &f.write);
     write.extend(FLOOR_WRITE.iter().map(|path| path.to_string()));
 
@@ -87,20 +113,25 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
 ///
 /// Each list becomes its intersection with the declaration, plus the
 /// structural floor. Network survives only if both grant it.
-pub fn tighten(permissions: Permissions, declared: &Declared) -> Permissions {
+pub fn tighten(permissions: Permissions, declared: &Declared, pkg: &PackageContext) -> Permissions {
     let keep = |granted: Vec<String>, wanted: &[String], floor: &[&str]| -> Vec<String> {
         let mut out = intersect(&granted, wanted);
         out.extend(granted.into_iter().filter(|entry| floor.contains(&entry.as_str())));
         dedup(out)
     };
     Permissions {
-        read: keep(permissions.read, &declared.read, FLOOR_READ),
+        read: keep(permissions.read, &declared.read, &floor_read(&pkg.host).collect::<Vec<_>>()),
         write: keep(permissions.write, &declared.write, FLOOR_WRITE),
         run: keep(permissions.run, &declared.run, &[]),
         env: keep(permissions.env, &declared.env, FLOOR_ENV),
         network: permissions.network && declared.network,
         list: permissions.list,
     }
+}
+
+/// Every path the floor grants read access to on `host`.
+fn floor_read(host: &str) -> impl Iterator<Item = &'static str> {
+    FLOOR_READ.iter().copied().chain(floor_runtime(host))
 }
 
 /// The tables applying to `pkg`, most specific first.
@@ -186,12 +217,19 @@ mod tests {
         toml::from_str(toml).unwrap()
     }
 
+    const HOST: &str = "x86_64-unknown-linux-gnu";
+
     fn external(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_local: false }
+        PackageContext { name: name.to_string(), is_local: false, host: HOST.to_string() }
     }
 
     fn local(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_local: true }
+        PackageContext { name: name.to_string(), is_local: true, host: HOST.to_string() }
+    }
+
+    /// Every read path the floor grants.
+    fn floor() -> Vec<String> {
+        floor_read(HOST).map(str::to_string).collect()
     }
 
     /// The resolved env minus the structural floor.
@@ -205,7 +243,7 @@ mod tests {
     fn floor_grants_only_out_dir_the_crate_root_and_dev_null() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
         assert_eq!(resolved.env, ["OUT_DIR"]);
-        assert_eq!(resolved.read, ["$CARGO_MANIFEST_DIR"]);
+        assert_eq!(resolved.read, floor());
         assert_eq!(resolved.write, ["/dev/null"]);
         assert!(resolved.run.is_empty());
         assert!(!resolved.network);
@@ -215,7 +253,7 @@ mod tests {
     fn floor_survives_limits() {
         let config = config("[limits]\nenv = []\nread = []\nwrite = []\n");
         assert_eq!(resolve(&config, &external("dep")).env, ["OUT_DIR"]);
-        assert_eq!(resolve(&config, &external("dep")).read, ["$CARGO_MANIFEST_DIR"]);
+        assert_eq!(resolve(&config, &external("dep")).read, floor());
         assert_eq!(resolve(&config, &external("dep")).write, ["/dev/null"]);
     }
 
@@ -371,8 +409,10 @@ mod tests {
             network: false,
         };
 
-        let tightened = tighten(resolve(&config, &external("dep")), &declared);
-        assert_eq!(tightened.read, ["/usr/include", "$CARGO_MANIFEST_DIR"]);
+        let tightened = tighten(resolve(&config, &external("dep")), &declared, &external("dep"));
+        let mut expected = vec!["/usr/include".to_string()];
+        expected.extend(floor());
+        assert_eq!(tightened.read, expected);
         assert!(tightened.run.is_empty());
         assert_eq!(tightened.env, ["TARGET", "OUT_DIR"]);
         assert!(!tightened.network);
@@ -394,15 +434,18 @@ mod tests {
         let broad = config("[external]\nenv = [\"*\"]\n");
         let declared = Declared { env: vec!["TARGET".into()], ..Declared::default() };
         assert_eq!(
-            tighten(resolve(&broad, &external("dep")), &declared).env,
+            tighten(resolve(&broad, &external("dep")), &declared, &external("dep")).env,
             ["TARGET", "OUT_DIR"]
         );
     }
 
     #[test]
     fn a_declaration_keeps_the_floor() {
-        let tightened =
-            tighten(resolve(&SandboxConfig::default(), &external("dep")), &Declared::default());
+        let tightened = tighten(
+            resolve(&SandboxConfig::default(), &external("dep")),
+            &Declared::default(),
+            &external("dep"),
+        );
         assert_eq!(tightened, resolve(&SandboxConfig::default(), &external("dep")));
     }
 

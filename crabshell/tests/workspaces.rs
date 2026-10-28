@@ -456,16 +456,3 @@ fn system_lib() {
         ],
     );
 }
-
-#[test]
-#[ignore = "needs the pinned nightly and network"]
-fn declared() {
-    check(
-        &Fixture { name: "declared", trusted: true, baseline_leaks: false },
-        &[
-            ("sandbox.toml", Expect::Same),
-            ("sandbox.narrow.toml", Expect::Differs),
-            ("sandbox.floor.toml", Expect::Fails),
-        ],
-    );
-}

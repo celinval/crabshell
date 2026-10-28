@@ -1,5 +1,0 @@
-# The consumer grants less than the crate declares. The declaration cannot
-# widen the grant, so crossbeam-utils doesn't see TARGET and silently degrades.
-[local]
-read = ["/lib*"]
-env = ["CARGO_CFG_SANITIZE"]

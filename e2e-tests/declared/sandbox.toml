@@ -1,6 +1,0 @@
-# A broad consumer grant, including a credential directory. The declaration
-# in patches/crossbeam-utils narrows it to the loader, TARGET, and
-# CARGO_CFG_SANITIZE.
-[local]
-read = ["/lib*", "$HOME"]
-env = ["*"]

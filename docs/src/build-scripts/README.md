@@ -2,7 +2,7 @@
 
 This chapter maps observed build-script behavior onto candidate sandbox
 categories: named bundles of permissions (see
-[Capability bundles](../design/capability-bundles.md)) that a crate can
+[Named grants](../design/capability-bundles.md)) that a crate can
 request and a consumer can grant.
 
 - [Observed labels](labels.md): the source data and how each label maps to a

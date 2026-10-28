@@ -8,7 +8,7 @@ value(pkg, f) = first table that sets f, in order:
     [package.pkg].f            # named entry — matches any package, local or external
     category(pkg).f            # [local].f if pkg's source is on the filesystem,
                                # [external].f if Cargo fetched it
-    <structural floor>.f       # OUT_DIR write + OUT_DIR path only
+    <floor>.f                  # see Structure: structural + default
 
 then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
 ```
@@ -26,6 +26,13 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
   intersected with what the package declares, so a package can voluntarily reduce
   its access but never exceed the consumer's policy. This is the invariant that
   stops a compromised dependency update from escalating its own privileges.
+  - Paths intersect by containment, so a declaration can select subpaths of a
+    grant, including the default floor's crate root, but never reach outside
+    one. That holds whatever variables the declaration uses.
+  - The structural floor survives every declaration.
+- **Named grants expand first.** A consumer's `grants = [...]` and a crate's
+  `requests = [...]` expand to their fields before clamping and narrowing; see
+  [Named grants](grants.md).
 
 ## List fields
 

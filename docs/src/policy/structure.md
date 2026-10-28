@@ -50,15 +50,21 @@ Rejecting rather than ignoring is deliberate. A silently-dropped
 whatever the category table says.
 
 There is no user-authored `baseline` table. The bottom of the chain is the
-built-in **structural floor**, and nothing else:
+built-in **floor**, in two parts:
 
-- read access to the crate's own directory,
-- write access to `OUT_DIR` and `/dev/null`,
-- a private, empty `TMPDIR`,
-- the `OUT_DIR` and `TMPDIR` values.
+- **Structural**, which a build script can't run without, so nothing removes
+  it:
+  - write access to `OUT_DIR` and `/dev/null`,
+  - a private, empty `TMPDIR`,
+  - the `OUT_DIR` and `TMPDIR` values.
+- **Default**: read access to the crate's own directory (`:manifest_dir`). A
+  crate's declaration may narrow it to the files its build script reads
+  (decided, not implemented yet: the prototype keeps the whole directory).
+
+A build script gets nothing beyond the floor unless a table or its own
+declaration grants it.
 
 `TMPDIR` is `crabshell-tmp` in the build script's unit directory (next to
 `OUT_DIR`), emptied at the start of every run. A shared `/tmp` would let build
 scripts leave files for each other, and crabshell can't remove a temp dir
-after the script exits because it replaces itself with the script. A build script gets nothing beyond the floor unless a table
-or its own declaration grants it.
+after the script exits because it replaces itself with the script.

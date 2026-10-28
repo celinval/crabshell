@@ -8,9 +8,10 @@
 - [Policy specification](policy/README.md)
   - [Structure](policy/structure.md)
   - [Resolution](policy/resolution.md)
-  - [Paths](policy/paths.md)
+  - [Paths and variables](policy/paths.md)
+  - [Named grants](policy/grants.md)
   - [Open questions](policy/open-questions.md)
-- [Capability bundles](design/capability-bundles.md)
+- [Named grants](design/capability-bundles.md)
 
 # Research
 

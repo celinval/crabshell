@@ -6,5 +6,8 @@
 - [Structure](structure.md): the tables and what each one matches.
 - [Resolution](resolution.md): how a package's effective permissions are
   computed, and how list fields merge.
-- [Paths](paths.md): symbolic roots.
+- [Paths and variables](paths.md): `:variables`, where their values come from,
+  and how paths compare.
+- [Named grants](grants.md): reusable permission sets, built in or defined in
+  config.
 - [Open questions](open-questions.md): known gaps and undecided defaults.

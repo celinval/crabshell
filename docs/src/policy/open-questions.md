@@ -13,6 +13,17 @@
 - **Policy changes don't rerun build scripts.** The policy isn't part of
   Cargo's fingerprint, so after a policy edit, results cached under the old
   policy remain until a clean build.
+- **User vs project config.** Parked. A Cargo-style optional include is
+  probably enough for now; a project lint (e.g. no absolute machine paths in a
+  checked-in `sandbox.toml`) can come later.
+- **Combining path lists.** A variable's alternatives mean "first defined
+  wins", which fits `PKG_CONFIG_LIBDIR` (it replaces the default search path).
+  `PKG_CONFIG_PATH` instead *extends* it, so definitions also need a way to
+  concatenate lists.
+- **Value provenance from Cargo.** crabshell rejects crate-chosen env vars
+  (`DEP_*`, `CARGO_PKG_*`) in variable definitions by name only. The
+  `host.runner` contract could tell the runner which values Cargo injected,
+  which would make the check exact. An upstream ask.
 - **Should the floor cover the dynamic loader?** Every dynamically linked
   build script needs `/lib*`, but granting it is platform-specific; see
   [category experiments](../build-scripts/experiments.md).

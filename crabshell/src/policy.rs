@@ -13,24 +13,28 @@ use crate::config::{Fields, ListField, SandboxConfig};
 use crate::declared::Declared;
 use crate::grants;
 
-/// Environment variables the structural floor always grants.
+/// Environment variables every build script has implicit access to.
 ///
 /// Cargo requires a build script to place its output in `OUT_DIR`, so a script
-/// that cannot read it cannot run at all. Floor entries bypass `[limits]`.
-pub const FLOOR_ENV: &[&str] = &["OUT_DIR"];
+/// that cannot read it cannot run at all. Implicit access is not policy:
+/// neither `[limits]` nor requests remove it.
+pub const IMPLICIT_ENV: &[&str] = &["OUT_DIR"];
 
-/// Paths the floor always grants read access to: the crate root.
-///
-/// Write access to `OUT_DIR` and a private `TMPDIR` are also structural; the
-/// runner grants them alongside execute access to the build script itself.
-/// Floor entries bypass `[limits]`.
-pub const FLOOR_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
-
-/// Paths the structural floor always grants write access to.
+/// Paths every build script has implicit write access to.
 ///
 /// Compile probes silence their output with `Stdio::null()`, which opens
-/// `/dev/null` read-write. It holds no data, so granting it leaks nothing.
-pub const FLOOR_WRITE: &[&str] = &["/dev/null"];
+/// `/dev/null` read-write. It holds no data, so granting it leaks nothing. The
+/// runner adds write access to `OUT_DIR` and a private `TMPDIR`, and execute
+/// access to the build script itself.
+pub const IMPLICIT_WRITE: &[&str] = &["/dev/null"];
+
+/// The default grant for `read`: the crate root.
+///
+/// It's what `read` resolves to when no table sets it, so tables can replace
+/// it (an array) or extend it (`inherit = true`), `[limits]` clamps it, and a
+/// request narrows it. Requests compare paths as strings for now, so a crate
+/// that reads its own files requests `$CARGO_MANIFEST_DIR` as a whole.
+pub const DEFAULT_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
 
 /// The dynamic loader and the libraries every std build script links on `host`.
 ///
@@ -41,9 +45,10 @@ pub const FLOOR_WRITE: &[&str] = &["/dev/null"];
 /// that don't exist are skipped. Hosts not listed get nothing, which fails
 /// closed.
 ///
-/// These stand in for built-in variables with per-host defaults that config
-/// will be able to override; see `docs/src/policy/paths.md`.
-pub fn floor_runtime(host: &str) -> Vec<&'static str> {
+/// They're implicit access. These stand in for built-in variables with
+/// per-host defaults that config will be able to override; see
+/// `docs/src/policy/paths.md`.
+pub fn implicit_runtime(host: &str) -> Vec<&'static str> {
     let candidates: &[&[&str]] = match host {
         "x86_64-unknown-linux-gnu" => &[
             &["/lib64/ld-linux-x86-64.so.2"],
@@ -94,25 +99,25 @@ pub struct Permissions {
 pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
     let chain = chain(config, pkg);
     let grants = grants::effective(config);
-    let names = lookup_list(&chain, |f| &f.grants);
-    let field = |get: fn(&Fields) -> &Option<ListField>| {
-        let mut value = lookup_list(&chain, get);
+    let names = lookup_list(&chain, |f| &f.grants, &[]);
+    let field = |get: fn(&Fields) -> &Option<ListField>, default: &[&str]| {
+        let mut value = lookup_list(&chain, get, default);
         value.extend(grants::expand(&grants, &names, get));
         clamp(dedup(value), get(&config.limits))
     };
-    let mut env = field(|f| &f.env);
-    env.extend(FLOOR_ENV.iter().map(|name| name.to_string()));
-    let mut read = field(|f| &f.read);
-    read.extend(floor_read(&pkg.host).map(str::to_string));
-    let mut write = field(|f| &f.write);
-    write.extend(FLOOR_WRITE.iter().map(|path| path.to_string()));
+    let mut env = field(|f| &f.env, &[]);
+    env.extend(IMPLICIT_ENV.iter().map(|name| name.to_string()));
+    let mut read = field(|f| &f.read, DEFAULT_READ);
+    read.extend(implicit_runtime(&pkg.host).into_iter().map(str::to_string));
+    let mut write = field(|f| &f.write, &[]);
+    write.extend(IMPLICIT_WRITE.iter().map(|path| path.to_string()));
     let network = chain.iter().find_map(|fields| fields.network);
     let network = network.unwrap_or_else(|| grants::expand_network(&grants, &names));
 
     Permissions {
         read: dedup(read),
         write: dedup(write),
-        run: field(|f| &f.run),
+        run: field(|f| &f.run, &[]),
         env: dedup(env),
         network: network && config.limits.network.unwrap_or(true),
         list: Vec::new(),
@@ -123,7 +128,7 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
 ///
 /// The declaration's `requests` expand through `config`'s grants first. Each
 /// list then becomes its intersection with the declaration, plus the
-/// structural floor. Network survives only if both grant it.
+/// implicit access. Network survives only if both grant it.
 pub fn tighten(
     permissions: Permissions,
     declared: &Declared,
@@ -146,19 +151,14 @@ pub fn tighten(
         read: keep(
             permissions.read,
             wanted(&declared.read, |f| &f.read),
-            &floor_read(&pkg.host).collect::<Vec<_>>(),
+            &implicit_runtime(&pkg.host),
         ),
-        write: keep(permissions.write, wanted(&declared.write, |f| &f.write), FLOOR_WRITE),
+        write: keep(permissions.write, wanted(&declared.write, |f| &f.write), IMPLICIT_WRITE),
         run: keep(permissions.run, wanted(&declared.run, |f| &f.run), &[]),
-        env: keep(permissions.env, wanted(&declared.env, |f| &f.env), FLOOR_ENV),
+        env: keep(permissions.env, wanted(&declared.env, |f| &f.env), IMPLICIT_ENV),
         network: permissions.network && network,
         list: permissions.list,
     }
-}
-
-/// Every path the floor grants read access to on `host`.
-fn floor_read(host: &str) -> impl Iterator<Item = &'static str> {
-    FLOOR_READ.iter().copied().chain(floor_runtime(host))
 }
 
 /// The tables applying to `pkg`, most specific first.
@@ -192,19 +192,21 @@ fn covers(pattern: &str, entry: &str) -> bool {
 }
 
 /// Take the first table that sets the field, expanding `inherit` upwards.
+///
+/// Below the tables, the field resolves to its `default` grant.
 fn lookup_list(
     chain: &[&Fields],
     get: impl Fn(&Fields) -> &Option<ListField> + Copy,
+    default: &[&str],
 ) -> Vec<String> {
     let Some((head, rest)) = chain.split_first() else {
-        // The structural floor sets no lists.
-        return Vec::new();
+        return default.iter().map(|entry| entry.to_string()).collect();
     };
     match get(head) {
-        None => lookup_list(rest, get),
+        None => lookup_list(rest, get, default),
         Some(ListField::Override(value)) => dedup(value.clone()),
         Some(ListField::Inherit { inherit, value }) => {
-            let mut out = if *inherit { lookup_list(rest, get) } else { Vec::new() };
+            let mut out = if *inherit { lookup_list(rest, get, default) } else { Vec::new() };
             out.extend(value.iter().cloned());
             dedup(out)
         }
@@ -243,34 +245,53 @@ mod tests {
         PackageContext { name: name.to_string(), is_local: true, host: HOST.to_string() }
     }
 
-    /// Every read path the floor grants.
-    fn floor() -> Vec<String> {
-        floor_read(HOST).map(str::to_string).collect()
+    /// Every read path implicit access grants.
+    fn implicit() -> Vec<String> {
+        implicit_runtime(HOST).into_iter().map(str::to_string).collect()
     }
 
-    /// The resolved env minus the structural floor.
+    /// The default read grant followed by implicit access.
+    fn default_read() -> Vec<String> {
+        DEFAULT_READ.iter().map(|path| path.to_string()).chain(implicit()).collect()
+    }
+
+    /// The resolved env minus implicit access.
     fn granted_env(config: &SandboxConfig, pkg: &PackageContext) -> Vec<String> {
         let mut env = resolve(config, pkg).env;
-        env.retain(|name| !FLOOR_ENV.contains(&name.as_str()));
+        env.retain(|name| !IMPLICIT_ENV.contains(&name.as_str()));
         env
     }
 
     #[test]
-    fn floor_grants_only_out_dir_the_crate_root_and_dev_null() {
+    fn no_policy_grants_the_crate_root_and_implicit_access() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
         assert_eq!(resolved.env, ["OUT_DIR"]);
-        assert_eq!(resolved.read, floor());
+        assert_eq!(resolved.read, default_read());
         assert_eq!(resolved.write, ["/dev/null"]);
         assert!(resolved.run.is_empty());
         assert!(!resolved.network);
     }
 
     #[test]
-    fn floor_survives_limits() {
+    fn implicit_access_survives_limits_but_the_default_grant_doesnt() {
         let config = config("[limits]\nenv = []\nread = []\nwrite = []\n");
         assert_eq!(resolve(&config, &external("dep")).env, ["OUT_DIR"]);
-        assert_eq!(resolve(&config, &external("dep")).read, floor());
+        assert_eq!(resolve(&config, &external("dep")).read, implicit());
         assert_eq!(resolve(&config, &external("dep")).write, ["/dev/null"]);
+    }
+
+    #[test]
+    fn tables_replace_or_extend_the_default_grant() {
+        let replaced = config("[external]\nread = [\"/usr/include\"]\n");
+        let mut expected = vec!["/usr/include".to_string()];
+        expected.extend(implicit());
+        assert_eq!(resolve(&replaced, &external("dep")).read, expected);
+
+        let extended =
+            config("[external]\nread = { inherit = true, value = [\"/usr/include\"] }\n");
+        let mut expected = vec![DEFAULT_READ[0].to_string(), "/usr/include".to_string()];
+        expected.extend(implicit());
+        assert_eq!(resolve(&extended, &external("dep")).read, expected);
     }
 
     #[test]
@@ -429,7 +450,7 @@ mod tests {
         let tightened =
             tighten(resolve(&config, &external("dep")), &declared, &external("dep"), &config);
         let mut expected = vec!["/usr/include".to_string()];
-        expected.extend(floor());
+        expected.extend(implicit());
         assert_eq!(tightened.read, expected);
         assert!(tightened.run.is_empty());
         assert_eq!(tightened.env, ["TARGET", "OUT_DIR"]);
@@ -458,14 +479,16 @@ mod tests {
     }
 
     #[test]
-    fn a_declaration_keeps_the_floor() {
+    fn a_declaration_narrows_the_default_grant_but_not_implicit_access() {
         let tightened = tighten(
             resolve(&SandboxConfig::default(), &external("dep")),
             &Declared::default(),
             &external("dep"),
             &SandboxConfig::default(),
         );
-        assert_eq!(tightened, resolve(&SandboxConfig::default(), &external("dep")));
+        assert_eq!(tightened.read, implicit());
+        assert_eq!(tightened.write, ["/dev/null"]);
+        assert_eq!(tightened.env, ["OUT_DIR"]);
     }
 
     #[test]

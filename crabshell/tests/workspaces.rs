@@ -31,7 +31,6 @@
 //! injected through the `test-requests` feature, so run them with
 //! `cargo test --features test-requests -- --ignored`.
 
-
 // Without `test-requests`, `check` only explains how to run the tests.
 #![cfg_attr(not(feature = "test-requests"), allow(dead_code))]
 use std::collections::BTreeMap;
@@ -52,8 +51,8 @@ enum Requests {
 /// The consumer policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Grants {
-    /// No policy: only the floor.
-    Floor,
+    /// No policy: only the default grant (crate-root read).
+    Default,
     /// The union of the precise requests (`sandbox.tight.toml`).
     Tight,
     /// A broad policy, e.g. any env var (`sandbox.loose.toml`).
@@ -72,10 +71,10 @@ impl Scenario {
         use Grants::*;
         use Requests::*;
         [
-            Scenario { requests: None, grants: Floor },
+            Scenario { requests: None, grants: Default },
             Scenario { requests: None, grants: Tight },
             Scenario { requests: None, grants: Loose },
-            Scenario { requests: Precise, grants: Floor },
+            Scenario { requests: Precise, grants: Default },
             Scenario { requests: Precise, grants: Tight },
             Scenario { requests: Precise, grants: Loose },
         ]
@@ -85,19 +84,19 @@ impl Scenario {
         format!("{:?}-{:?}", self.requests, self.grants).to_lowercase()
     }
 
-    /// The `CRABSHELL_CONFIG` for `fixture`. The floor is an empty config.
+    /// The `CRABSHELL_CONFIG` for `fixture`. The default grant is an empty config.
     fn config(&self, fixture: &Fixture) -> PathBuf {
         match self.grants {
-            Grants::Floor => PathBuf::from("/dev/null"),
+            Grants::Default => PathBuf::from("/dev/null"),
             Grants::Tight => fixture.dir().join("sandbox.tight.toml"),
             Grants::Loose => fixture.dir().join("sandbox.loose.toml"),
         }
     }
 
     /// Whether the build should work. Neither side alone is enough: requests
-    /// only narrow, and the floor grants none of the fixtures' needs.
+    /// only narrow, and the default grant covers none of the fixtures' needs.
     fn succeeds(&self) -> bool {
-        self.grants != Grants::Floor
+        self.grants != Grants::Default
     }
 
     /// Whether `fixture`'s build should leak [`FAKE_TOKEN`]: only where a

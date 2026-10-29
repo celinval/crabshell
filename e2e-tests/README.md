@@ -18,7 +18,7 @@ every version; `rust-toolchain.toml` pins the nightly.
 
 Every fixture builds in each cell of **requests × grants**:
 
-| | floor | tight | loose |
+| | default | tight | loose |
 |---|---|---|---|
 | **no requests** | fails | same as baseline | same as baseline |
 | **precise requests** | fails | same as baseline | same as baseline |
@@ -29,7 +29,7 @@ Every fixture builds in each cell of **requests × grants**:
   tools through [named grants](../docs/src/policy/grants.md). They're
   injected with `CRABSHELL_REQUESTS`, which only the `test-requests` feature
   honors.
-- **Grants** are the consumer's policy: the floor alone (no config),
+- **Grants** are the consumer's policy: the default grant alone (no config),
   `sandbox.tight.toml` (the union of all requests), or `sandbox.loose.toml`
   (the category's grants and any env var).
 

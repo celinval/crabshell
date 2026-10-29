@@ -2,7 +2,7 @@
 
 `sandbox.toml` is resolved **per field**, in the spirit of Cargo's `[profile]`
 inheritance: a table sets only the fields it cares about; unset fields fall
-through to a less-specific table, ultimately to a built-in baseline. Three kinds
+through to a less-specific table, ultimately to the built-in default grant. Three kinds
 of table:
 
 ```toml
@@ -11,7 +11,7 @@ of table:
 network = false
 
 # Packages whose source is on your filesystem: workspace members and path
-# dependencies. Inherits unset fields from the built-in baseline.
+# dependencies. Inherits unset fields from the default grant.
 [local]
 read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
 
@@ -20,7 +20,7 @@ read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
 read = ["$include_dir", "$lib_dir"]
 
 # One named package, local or external. Inherits from its category table, then
-# the baseline.
+# the default grant.
 [package.openssl-sys]
 read = { inherit = true, value = ["$include_dir/openssl"] }   # append to inherited read paths
 run  = ["cc", "pkg-config"]                                   # override run
@@ -49,25 +49,27 @@ Rejecting rather than ignoring is deliberate. A silently-dropped
 `[package."*"] network = false` reads like a restriction while granting
 whatever the category table says.
 
-There is no user-authored `baseline` table. The bottom of the chain is the
-built-in **floor**, in two parts:
+Beneath the tables, two built-ins apply to every build script:
 
-- **Structural**, which a build script can't run without, so nothing removes
-  it:
-  - write access to `OUT_DIR` and `/dev/null`,
+- **Implicit access** is what a build script can't run without. It isn't
+  policy: no table grants it, and neither `[limits]` nor a request removes it.
+  - write access to `OUT_DIR` and `/dev/null`;
   - read access to the dynamic loader and the libraries every std build script
     links: on `x86_64-unknown-linux-gnu`, `ld-linux-x86-64.so.2`, `libc.so.6`
     and `libgcc_s.so.1`. A build script is always a host program built with
     std, even for a `no_std` crate. Their locations are per-host defaults for
     now, which will become overridable variables. Statically linked hosts
-    (musl) need none.
-  - a private, empty `TMPDIR`,
+    (musl) need none;
+  - a private, empty `TMPDIR`;
   - the `OUT_DIR` and `TMPDIR` values.
-- **Default**: read access to the crate's own directory (`:manifest_dir`). A
-  crate's declaration may narrow it to the files its build script reads
-  (decided, not implemented yet: the prototype keeps the whole directory).
+- **The default grant** is the bottom of the grant chain: what a field
+  resolves to when no table sets it. For `read` it's the crate's own
+  directory (`:manifest_dir`); other fields default to nothing. Like any
+  grant, an array replaces it, `inherit = true` extends it, `[limits]` clamps
+  it, and a request narrows it. Until paths compare by containment, a crate
+  that reads its own files requests the whole crate root.
 
-A build script gets nothing beyond the floor unless a table or its own
+A build script gets nothing beyond these unless a table or its own
 declaration grants it.
 
 `TMPDIR` is `crabshell-tmp` in the build script's unit directory (next to

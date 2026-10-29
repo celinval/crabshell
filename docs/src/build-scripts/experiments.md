@@ -139,10 +139,10 @@ env   = ["PKG_CONFIG*", "HOST_PKG_CONFIG*", "CC*", "CFLAGS*", "HOST_CC", "HOST_C
 
 The fixtures were reworked into a matrix (see `e2e-tests/README.md`): crates
 with no requests or with precise vendor-view requests (`requests.toml`), under
-the floor, the union of all requests, or a loose policy. With the loader and
-libc in the floor and named grants for `rustc`, `cc` and `pkg-config`, all
-three fixtures behave as expected in every cell: the floor alone fails, and
-every other cell matches the baseline. Under the loose policy, requests
+the default grant, the union of all requests, or a loose policy. With the
+loader and libc as implicit access and named grants for `rustc`, `cc` and
+`pkg-config`, all three fixtures behave as expected in every cell: the default
+grant alone fails, and every other cell matches the baseline. Under the loose policy, requests
 narrow `env = ["*"]` to exactly the names requested.
 
 What the requests cost, per build script:
@@ -160,6 +160,10 @@ What the requests cost, per build script:
   Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
   Granting those by default would roughly halve the largest requests (`libc`,
   `openssl-sys`); see the open question on the default policy.
+- **8 of 23 build scripts read their own crate,** so they request the crate
+  root, which requests otherwise narrow away. Two of them, proc-macro2 and
+  thiserror, compile probe sources from their crate: without that request
+  they still succeed, but silently lose cfgs.
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob
   also prefixed with the target triple (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`).
   Patterns only match prefixes, so the request has to name the triple.

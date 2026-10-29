@@ -5,8 +5,8 @@
 //! replaces itself with the build script, so the confinement is inherited:
 //!
 //! - **Filesystem and exec** through Landlock: only granted paths are
-//!   accessible, plus the structural floor (see [`crate::policy::FLOOR_READ`]
-//!   and [`crate::policy::FLOOR_WRITE`]) and a private `TMPDIR`.
+//!   accessible, plus implicit access (see [`crate::policy::IMPLICIT_WRITE`]
+//!   and [`crate::policy::implicit_runtime`]) and a private `TMPDIR`.
 //! - **Network**, unless granted, through an empty network namespace, with
 //!   Landlock's TCP rules as a second layer.
 //!

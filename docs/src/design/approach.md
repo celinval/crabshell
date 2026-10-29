@@ -50,10 +50,13 @@ run  = ["cc", "pkg-config"]           # executables it may exec
 env  = ["TARGET", "OPT_LEVEL"]        # env vars it may read
 ```
 
-Only the [structural floor](../policy/structure.md) is implicit: the crate's own
-directory (read), `OUT_DIR`, `/dev/null` and a private `TMPDIR` (write);
-everything else must be listed. Once a crate declares anything, unlisted fields
-request nothing.
+Nothing needs listing for what a build script can't run without: its
+[implicit access](../policy/structure.md) (`OUT_DIR`, `/dev/null`, a private
+`TMPDIR`, the dynamic loader and libc). When the policy says nothing, a
+package is also granted read access to its own directory, the **default
+grant**, which tables can replace and a request may narrow.
+Everything else must be listed. Once a crate declares anything, unlisted
+fields request nothing.
 
 **What the consumer grants** — a top-level `sandbox.toml` sets, per package, what
 any build script in the graph is actually allowed. The consumer is the upper

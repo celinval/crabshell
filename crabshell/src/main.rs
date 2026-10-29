@@ -25,14 +25,18 @@ fn main() -> ExitCode {
     };
 
     let err = runner::exec(&program, &args, &permissions);
-    eprintln!("crabshell: failed to run {}: {err}", program.to_string_lossy());
+    eprintln!(
+        "crabshell: failed to run {}: {err}",
+        program.to_string_lossy()
+    );
     ExitCode::FAILURE
 }
 
 /// Resolve the permissions for the package Cargo is building.
 ///
 /// Cargo identifies the package through the build script's environment, which
-/// we inherit. Without a `sandbox.toml` only the structural floor applies. The
+/// we inherit. Without a `sandbox.toml` only implicit access and the default floor
+/// apply. The
 /// package's own declaration, if any, then tightens the result.
 fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")

@@ -8,7 +8,7 @@ value(pkg, f) = first table that sets f, in order:
     [package.pkg].f            # named entry — matches any package, local or external
     category(pkg).f            # [local].f if pkg's source is on the filesystem,
                                # [external].f if Cargo fetched it
-    <floor>.f                  # see Structure: structural + default
+    <default grant>.f          # crate-root read for `read`, else nothing
 
 then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
 ```
@@ -17,7 +17,7 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
   it names; every other field is inherited.
 - **A named entry inherits from its category.** `[package.foo]` matches `foo`
   regardless of where its source came from; unset fields fall through to
-  `[local]` or `[external]`, then the baseline.
+  `[local]` or `[external]`, then the default grant.
 - **`limits` clamps per field, with a warning — it does not fail the build.**
   When a resolved value exceeds a `limits` field, the runner reduces it to the
   cap and warns. This keeps a build working under a strong global ceiling even
@@ -27,9 +27,9 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
   its access but never exceed the consumer's policy. This is the invariant that
   stops a compromised dependency update from escalating its own privileges.
   - Paths intersect by containment, so a declaration can select subpaths of a
-    grant, including the default floor's crate root, but never reach outside
+    grant, including the default grant's crate root, but never reach outside
     one. That holds whatever variables the declaration uses.
-  - The structural floor survives every declaration.
+  - Implicit access isn't part of resolution, so no declaration affects it.
 - **Named grants expand first.** A consumer's `grants = [...]` and a crate's
   `requests = [...]` expand to their fields before clamping and narrowing; see
   [Named grants](grants.md).

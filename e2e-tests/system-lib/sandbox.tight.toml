@@ -2,14 +2,15 @@
 # requests.toml, granted to every external crate.
 [external]
 grants = ["rustc", "pkg-config", "cc"]
-env = [
-    "TARGET", "HOST", "CARGO_MANIFEST_DIR", "DEP_OPENSSL_INCLUDE", "DEP_BSSL_CONF",
-    "CARGO_CFG_TARGET_*", "CARGO_CFG_LIBC_UNSTABLE_*", "CARGO_CFG_UNIX", "CARGO_CFG_WINDOWS",
-    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
-    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
-    "LIBSQLITE3_*", "SQLITE_MAX_*", "SQLITE3_*", "ZLIB_*", "LZMA_API_STATIC", "LIBLZMA_*",
-    "OPENSSL_*", "X86_64_UNKNOWN_LINUX_GNU_OPENSSL_*", "ZSTD_SYS_*", "LIBZSTD_*",
-]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "CARGO_MANIFEST_DIR", "DEP_OPENSSL_INCLUDE",
+    "DEP_BSSL_CONF", "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*",
+    "WIND_RELEASE_ID", "LIBSQLITE3_*", "SQLITE_MAX_*", "SQLITE3_*", "ZLIB_*",
+    "LZMA_API_STATIC", "LIBLZMA_*", "OPENSSL_*",
+    "X86_64_UNKNOWN_LINUX_GNU_OPENSSL_*", "ZSTD_SYS_*", "LIBZSTD_*",
+] }
 
 # On Amazon Linux, `pkg-config` is a shell wrapper that runs `rpm --eval` to
 # find the platform, then a second wrapper that execs `pkgconf`. That is

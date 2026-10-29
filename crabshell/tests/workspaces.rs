@@ -93,10 +93,10 @@ impl Scenario {
         }
     }
 
-    /// Whether the build should work. Neither side alone is enough: requests
-    /// only narrow, and the default grant covers none of the fixtures' needs.
-    fn succeeds(&self) -> bool {
-        self.grants != Grants::Default
+    /// Whether the build should work. Requests only narrow, so the default
+    /// column works only for fixtures the default grant covers.
+    fn succeeds(&self, fixture: &Fixture) -> bool {
+        self.grants != Grants::Default || fixture.default_suffices
     }
 
     /// Whether `fixture`'s build should leak [`FAKE_TOKEN`]: only where a
@@ -115,6 +115,8 @@ struct Fixture {
     /// Whether some build script prints its whole environment, so the
     /// baseline leaks [`FAKE_TOKEN`].
     dumps_env: bool,
+    /// Whether the default grant alone covers every build script's needs.
+    default_suffices: bool,
 }
 
 impl Fixture {
@@ -455,7 +457,7 @@ fn check(fixture: &Fixture) {
         let target_dir = scratch.target(fixture, &scenario.name());
         let build = build(fixture, &target_dir, &Mode::Sandboxed(scenario));
         assert_eq!(build.leaks_fake_token, scenario.leaks(fixture), "{label}: fake token leak");
-        if scenario.succeeds() {
+        if scenario.succeeds(fixture) {
             assert!(build.output.status.success(), "{label}: failed:\n{}", stderr(&build));
             assert_eq!(directives(&target_dir), expected, "{label}: output differs");
         } else {
@@ -495,13 +497,19 @@ fn output_stderr(output: &Output) -> String {
 #[test]
 #[ignore = "needs the pinned nightly and network"]
 fn cfg_only() {
-    check(&Fixture { name: "cfg-only", trusted: true, dumps_env: false });
+    // Its scripts only read TARGET and CARGO_CFG_*, which the default covers.
+    check(&Fixture { name: "cfg-only", trusted: true, dumps_env: false, default_suffices: true });
 }
 
 #[test]
 #[ignore = "needs the pinned nightly and network"]
 fn rustc_probe() {
-    check(&Fixture { name: "rustc-probe", trusted: true, dumps_env: false });
+    check(&Fixture {
+        name: "rustc-probe",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: false,
+    });
 }
 
 #[test]
@@ -509,5 +517,5 @@ fn rustc_probe() {
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.
-    check(&Fixture { name: "system-lib", trusted: true, dumps_env: true });
+    check(&Fixture { name: "system-lib", trusted: true, dumps_env: true, default_suffices: false });
 }

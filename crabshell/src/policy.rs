@@ -36,6 +36,16 @@ pub const IMPLICIT_WRITE: &[&str] = &["/dev/null"];
 /// that reads its own files requests `$CARGO_MANIFEST_DIR` as a whole.
 pub const DEFAULT_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
 
+/// The default grant for `env`: the target and host triples, and what Cargo
+/// derives from the target and the enabled features.
+///
+/// None of these hold user secrets or machine-specific paths, which would
+/// also leak into the build script's cache key. Like any grant, tables
+/// replace or extend it, and a request narrows it: a crate still requests the
+/// names it reads.
+pub const DEFAULT_ENV: &[&str] =
+    &["TARGET", "HOST", "CARGO_CFG_*", "CARGO_FEATURE_*"];
+
 /// The dynamic loader and the libraries every std build script links on `host`.
 ///
 /// A build script is a host program built with std. On `x86_64-*-linux-gnu`
@@ -105,7 +115,7 @@ pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
         value.extend(grants::expand(&grants, &names, get));
         clamp(dedup(value), get(&config.limits))
     };
-    let mut env = field(|f| &f.env, &[]);
+    let mut env = field(|f| &f.env, DEFAULT_ENV);
     env.extend(IMPLICIT_ENV.iter().map(|name| name.to_string()));
     let mut read = field(|f| &f.read, DEFAULT_READ);
     read.extend(implicit_runtime(&pkg.host).into_iter().map(str::to_string));
@@ -263,9 +273,11 @@ mod tests {
     }
 
     #[test]
-    fn no_policy_grants_the_crate_root_and_implicit_access() {
+    fn no_policy_grants_the_defaults_and_implicit_access() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
-        assert_eq!(resolved.env, ["OUT_DIR"]);
+        let mut expected: Vec<String> = DEFAULT_ENV.iter().map(|name| name.to_string()).collect();
+        expected.push("OUT_DIR".into());
+        assert_eq!(resolved.env, expected);
         assert_eq!(resolved.read, default_read());
         assert_eq!(resolved.write, ["/dev/null"]);
         assert!(resolved.run.is_empty());
@@ -278,6 +290,15 @@ mod tests {
         assert_eq!(resolve(&config, &external("dep")).env, ["OUT_DIR"]);
         assert_eq!(resolve(&config, &external("dep")).read, implicit());
         assert_eq!(resolve(&config, &external("dep")).write, ["/dev/null"]);
+    }
+
+    #[test]
+    fn requests_narrow_the_default_env_grant() {
+        let declared = Declared { env: vec!["CARGO_CFG_TARGET_OS".into()], ..Declared::default() };
+        let none = SandboxConfig::default();
+        let tightened =
+            tighten(resolve(&none, &external("dep")), &declared, &external("dep"), &none);
+        assert_eq!(tightened.env, ["CARGO_CFG_TARGET_OS", "OUT_DIR"]);
     }
 
     #[test]

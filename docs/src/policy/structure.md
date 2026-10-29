@@ -63,11 +63,22 @@ Beneath the tables, two built-ins apply to every build script:
   - a private, empty `TMPDIR`;
   - the `OUT_DIR` and `TMPDIR` values.
 - **The default grant** is the bottom of the grant chain: what a field
-  resolves to when no table sets it. For `read` it's the crate's own
-  directory (`:manifest_dir`); other fields default to nothing. Like any
-  grant, an array replaces it, `inherit = true` extends it, `[limits]` clamps
-  it, and a request narrows it. Until paths compare by containment, a crate
-  that reads its own files requests the whole crate root.
+  resolves to when no table sets it:
+  - `read`: the crate's own directory (`:manifest_dir`). Cargo runs a build
+    script inside it, so relative paths reach it without the
+    `CARGO_MANIFEST_DIR` variable.
+  - `env`: `TARGET`, `HOST`, `CARGO_CFG_*` and `CARGO_FEATURE_*`, facts
+    about the build with no secrets or machine-specific paths, which would
+    also leak into the cache key. Variables holding absolute paths
+    (`CARGO_MANIFEST_DIR`), per-profile settings (`OPT_LEVEL`) or package
+    metadata (`CARGO_PKG_*`) are requested explicitly. `DEP_<links>_*` too: its keys are
+    open-ended and its values come from other crates' build scripts, so a
+    crate requests the ones for the `links` dependencies it consumes.
+  - other fields: nothing.
+
+  Like any grant, an array replaces it, `inherit = true` extends it,
+  `[limits]` clamps it, and a request narrows it. Until paths compare by
+  containment, a crate that reads its own files requests the whole crate root.
 
 A build script gets nothing beyond these unless a table or its own
 declaration grants it.

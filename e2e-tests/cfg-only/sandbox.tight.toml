@@ -1,4 +1,8 @@
 # The tightest consumer policy that works without crate requests: the union of
 # requests.toml, granted to every external crate.
 [external]
-env = ["TARGET", "CARGO_CFG_SANITIZE", "ICU4X_DATA_DIR"]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "ICU4X_DATA_DIR",
+] }

@@ -2,10 +2,10 @@
 # requests.toml, granted to every external crate.
 [external]
 grants = ["rustc"]
-env = [
-    "TARGET", "CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
-    "CARGO_CFG_SANITIZE", "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_*",
-    "CARGO_CFG_LIBC_UNSTABLE_*", "CARGO_CFG_RUSTIX_*",
-    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC",
-    "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
-]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "CARGO_PKG_VERSION_PATCH",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+] }

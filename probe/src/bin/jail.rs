@@ -18,11 +18,14 @@
 
 use std::process::ExitCode;
 
-use crabshell::policy::Permissions;
+use crabshell::paths::{Expander, Variables};
+use crabshell::policy::{Expand, Permissions};
 use crabshell::runner;
 
 fn main() -> ExitCode {
-    match parse(std::env::args().skip(1)) {
+    match parse(std::env::args().skip(1))
+        .and_then(|(p, program, args)| Ok((expand(p)?, program, args)))
+    {
         Ok((permissions, program, args)) => {
             let err = runner::exec(&program, &args, &permissions);
             eprintln!("jail: failed to run {program}: {err}");
@@ -50,6 +53,24 @@ fn parse(
     }
     let program = args.next().ok_or("missing PROGRAM after `--`")?;
     Ok((permissions, program, args.collect()))
+}
+
+/// Expand the glob patterns in `permissions`' paths.
+fn expand(permissions: Permissions) -> Result<Permissions, String> {
+    let x = Expander::new(Variables::new(&Default::default(), |_| None), Vec::new());
+    let paths = |entries: Vec<String>| -> Result<Vec<String>, String> {
+        let mut out = Vec::new();
+        for entry in entries {
+            out.extend(x.paths(&entry).map_err(|err| err.to_string())?);
+        }
+        Ok(out)
+    };
+    Ok(Permissions {
+        read: paths(permissions.read)?,
+        write: paths(permissions.write)?,
+        list: paths(permissions.list)?,
+        ..permissions
+    })
 }
 
 fn value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {

@@ -17,7 +17,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::paths;
 use crate::policy::Permissions;
 
 /// Build the command for `program` with only the `allowed_env` variables.
@@ -133,9 +132,12 @@ fn private_tmp(out_dir: &Path) -> io::Result<PathBuf> {
     Ok(tmp)
 }
 
-/// Expand a policy entry, whose variables are already expanded, into paths.
+/// The path a resolved entry names; resolution already expanded patterns.
 fn expand(entry: &str) -> io::Result<Vec<PathBuf>> {
-    paths::glob(entry).map_err(io::Error::other)
+    if !Path::new(entry).is_absolute() {
+        return Err(io::Error::other(format!("`{entry}`: expected an absolute path")));
+    }
+    Ok(vec![PathBuf::from(entry)])
 }
 
 /// Resolve a `run` entry: a path is expanded, a bare name is searched on `PATH`.

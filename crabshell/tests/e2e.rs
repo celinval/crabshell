@@ -384,3 +384,25 @@ fn a_path_with_an_env_var_fails_the_build() {
 
     assert!(!build.check("dep", Origin::External, &[], &["env-absent", "ANYTHING"]));
 }
+
+/// Entries compare after expanding, so an absolute `[limits]` cap applies to a
+/// grant written with a variable.
+#[test]
+fn limits_compare_paths_after_expanding_variables() {
+    let build = Build::new("");
+    let manifest = build.manifest_dir("dep", &Origin::External);
+    std::fs::write(manifest.join("Cargo.toml"), "").unwrap();
+    let file = manifest.join("Cargo.toml");
+    let file = file.to_str().unwrap();
+    let write_policy = |cap: &str| {
+        let policy = format!("[limits]\nread = [\"{cap}\"]\n");
+        std::fs::write(build.dir.path().join("sandbox.toml"), policy).unwrap();
+    };
+
+    // A cap above the crate root keeps the default `:manifest_dir` grant.
+    write_policy(build.cargo_home().to_str().unwrap());
+    assert!(build.check("dep", Origin::External, &[], &["readable", file]));
+    // A cap elsewhere removes it.
+    write_policy("/usr");
+    assert!(build.check("dep", Origin::External, &[], &["unreadable", file]));
+}

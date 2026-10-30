@@ -34,7 +34,7 @@ fn main() -> ExitCode {
 /// Cargo identifies the package through the build script's environment, which
 /// we inherit. Without a `sandbox.toml` only implicit access and the default
 /// grant apply. The package's own declaration, if any, then tightens the
-/// result, and finally `:variables` expand to concrete paths.
+/// result. Entries expand to concrete paths and names before they're compared.
 fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
@@ -57,17 +57,19 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         is_local: is_local(&manifest_dir),
         host: std::env::var("HOST").unwrap_or_default(),
     };
-    let permissions = policy::resolve(&config, &pkg);
+    let variables = paths::Variables::new(&config.variables, |name| std::env::var_os(name));
+    let names = std::env::vars_os().filter_map(|(name, _)| name.into_string().ok()).collect();
+    let x = paths::Expander::new(variables, names);
+    let permissions = policy::resolve(&config, &pkg, &x)?;
     let declared = match injected(&pkg.name)? {
         Some(declared) => Some(declared),
         None => declared::load(&manifest_dir)?,
     };
     let permissions = match declared {
-        Some(declared) => policy::tighten(permissions, &declared, &pkg, &config),
+        Some(declared) => policy::tighten(permissions, &declared, &pkg, &config, &x)?,
         None => permissions,
     };
-    let variables = paths::Variables::new(&config.variables, |name| std::env::var_os(name));
-    let (permissions, dropped) = variables.apply(permissions)?;
+    let dropped = x.dropped();
     if !dropped.is_empty() && std::env::var_os("CRABSHELL_LOG").is_some() {
         eprintln!("crabshell: dropped entries with undefined variables: {dropped:?}");
     }

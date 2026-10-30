@@ -12,18 +12,21 @@
 //! a path list like `PATH`, so a single path is a one-element list, and a path
 //! containing `:` can't be imported.
 //!
-//! [`Variables::apply`] expands variables after resolution and narrowing,
-//! which compare entries as written. The runner then expands globs with
-//! [`glob`]: a trailing `*` in the last component matches every sibling with
-//! that prefix (`/lib*`).
+//! Entries may also be glob patterns, in the syntax of the [`glob`] crate:
+//! `*` and `?` within a component, `[...]` character classes, and `**` as a
+//! whole component for any depth. [`Expander`] expands variables, then globs,
+//! before resolution compares anything; env entries match the same syntax
+//! against the variables actually set.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use std::cell::RefCell;
+
 use crate::config::{Source, VariableDef};
-use crate::policy::Permissions;
+use crate::policy::Expand;
 
 /// Variables crabshell defines, from the build script's environment.
 pub const BUILTIN: &[&str] = &["manifest_dir", "manifest_path", "out_dir", "cargo_home", "sysroot"];
@@ -99,32 +102,6 @@ impl Variables {
                 .collect()
         }))
     }
-
-    /// Expand every path entry in `permissions`.
-    ///
-    /// Returns the expanded permissions and the entries dropped because their
-    /// variable is undefined.
-    pub fn apply(&self, permissions: Permissions) -> Result<(Permissions, Vec<String>), PathError> {
-        let mut dropped = Vec::new();
-        let mut list = |entries: Vec<String>| -> Result<Vec<String>, PathError> {
-            let mut out = Vec::new();
-            for entry in entries {
-                match self.expand(&entry)? {
-                    Some(paths) => out.extend(paths),
-                    None => dropped.push(entry),
-                }
-            }
-            Ok(out)
-        };
-        let expanded = Permissions {
-            read: list(permissions.read)?,
-            write: list(permissions.write)?,
-            run: list(permissions.run)?,
-            list: list(permissions.list)?,
-            ..permissions
-        };
-        Ok((expanded, dropped))
-    }
 }
 
 /// The paths of a user-defined variable: the union of its sources'.
@@ -165,34 +142,78 @@ fn sysroot(rustc: Option<OsString>, path: Option<OsString>) -> Option<PathBuf> {
     rustc.parent()?.parent().map(Path::to_path_buf)
 }
 
-/// Expand a trailing `prefix*` in the last component; other paths pass through.
+/// Expands entries against the variables, filesystem and environment.
+pub struct Expander {
+    variables: Variables,
+    names: Vec<String>,
+    dropped: RefCell<Vec<String>>,
+}
+
+impl Expander {
+    /// An expander using `variables`, matching env patterns against `names`.
+    pub fn new(variables: Variables, names: Vec<String>) -> Self {
+        Self { variables, names, dropped: RefCell::new(Vec::new()) }
+    }
+
+    /// The entries dropped so far because their variable is undefined.
+    pub fn dropped(&self) -> Vec<String> {
+        self.dropped.borrow().clone()
+    }
+}
+
+impl Expand for Expander {
+    fn paths(&self, entry: &str) -> Result<Vec<String>, PathError> {
+        let Some(expanded) = self.variables.expand(entry)? else {
+            self.dropped.borrow_mut().push(entry.to_string());
+            return Ok(Vec::new());
+        };
+        let mut out = Vec::new();
+        for path in expanded {
+            if is_pattern(&path) {
+                out.extend(glob(&path)?.iter().map(|p| p.to_string_lossy().into_owned()));
+            } else if path.contains('/') && !Path::new(&path).is_absolute() {
+                return Err(PathError::Relative(entry.to_string()));
+            } else {
+                out.push(path);
+            }
+        }
+        Ok(out)
+    }
+
+    fn names(&self, entry: &str) -> Vec<String> {
+        if !is_pattern(entry) {
+            return vec![entry.to_string()];
+        }
+        match glob::Pattern::new(entry) {
+            Ok(pattern) => self.names.iter().filter(|n| pattern.matches(n)).cloned().collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+}
+
+fn is_pattern(entry: &str) -> bool {
+    entry.contains(['*', '?', '['])
+}
+
+/// The paths matching an absolute glob `pattern`.
 ///
-/// A glob under a missing directory matches nothing; a directory that exists
-/// but can't be listed is an error, since silently granting less would hide
-/// the cause.
-pub fn glob(entry: &str) -> Result<Vec<PathBuf>, PathError> {
-    let path = PathBuf::from(entry);
-    if !path.is_absolute() {
-        return Err(PathError::Relative(entry.to_string()));
+/// A pattern under a missing directory matches nothing; a directory that
+/// exists but can't be listed is an error, since silently granting less would
+/// hide the cause.
+pub fn glob(pattern: &str) -> Result<Vec<PathBuf>, PathError> {
+    if !Path::new(pattern).is_absolute() {
+        return Err(PathError::Relative(pattern.to_string()));
     }
-    let Some(prefix) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix('*'))
-    else {
-        return Ok(vec![path]);
-    };
-    if prefix.contains('*') {
-        return Err(PathError::Glob(entry.to_string()));
+    let paths =
+        glob::glob(pattern).map_err(|err| PathError::Glob(format!("{pattern}: {}", err.msg)))?;
+    let mut matches = Vec::new();
+    for path in paths {
+        match path {
+            Ok(path) => matches.push(path),
+            Err(err) if err.error().kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(PathError::List(pattern.to_string(), err.error().to_string())),
+        }
     }
-    let parent = path.parent().unwrap_or(&path);
-    let entries = match std::fs::read_dir(parent) {
-        Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(err) => return Err(PathError::List(entry.to_string(), err.to_string())),
-    };
-    let mut matches: Vec<PathBuf> = entries
-        .filter_map(Result::ok)
-        .filter(|e| e.file_name().to_str().is_some_and(|n| n.starts_with(prefix)))
-        .map(|e| e.path())
-        .collect();
     matches.sort();
     Ok(matches)
 }
@@ -208,9 +229,9 @@ pub enum PathError {
     Unknown(String),
     /// The entry is neither absolute nor a variable.
     Relative(String),
-    /// The glob is not a single trailing `*`.
+    /// The glob pattern is malformed.
     Glob(String),
-    /// The glob's parent dir exists but can't be listed.
+    /// A directory the glob walks exists but can't be listed.
     List(String, String),
 }
 
@@ -233,8 +254,8 @@ impl fmt::Display for PathError {
             PathError::Relative(entry) => {
                 write!(f, "`{entry}`: path must be absolute or start with a `:variable`")
             }
-            PathError::Glob(entry) => write!(f, "`{entry}`: only a trailing `*` is supported"),
-            PathError::List(entry, err) => write!(f, "`{entry}`: can't list its parent dir: {err}"),
+            PathError::Glob(detail) => write!(f, "invalid glob pattern `{detail}`"),
+            PathError::List(entry, err) => write!(f, "`{entry}`: can't list a directory: {err}"),
         }
     }
 }
@@ -245,6 +266,7 @@ impl std::error::Error for PathError {}
 mod tests {
     use super::*;
     use crate::config::EnvImport;
+    use crate::policy::Expand;
 
     fn env(name: &str) -> Option<OsString> {
         match name {
@@ -326,20 +348,50 @@ mod tests {
         assert_eq!(v.expand(":Bad"), Err(PathError::InvalidName(":Bad".into())));
         assert_eq!(v.expand(":nope/x"), Err(PathError::Unknown(":nope/x".into())));
         assert_eq!(glob("usr/lib"), Err(PathError::Relative("usr/lib".into())));
-        assert_eq!(glob("/a/*b*"), Err(PathError::Glob("/a/*b*".into())));
+    }
+
+    fn expander(v: Variables) -> Expander {
+        Expander::new(
+            v,
+            ["TARGET", "CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX", "HOME"].map(String::from).to_vec(),
+        )
     }
 
     #[test]
-    fn apply_drops_entries_with_undefined_variables() {
-        let permissions = Permissions {
-            read: vec![":manifest_dir".into(), ":out_dir/gen".into()],
-            run: vec!["cc".into()],
-            ..Permissions::default()
-        };
-        let (expanded, dropped) = vars(&[]).apply(permissions).unwrap();
-        assert_eq!(expanded.read, ["/src/dep"]);
-        assert_eq!(expanded.run, ["cc"]);
-        assert_eq!(dropped, [":out_dir/gen"]);
+    fn the_expander_drops_entries_with_undefined_variables() {
+        let x = expander(vars(&[]));
+        assert_eq!(x.paths(":manifest_dir").unwrap(), ["/src/dep"]);
+        assert_eq!(x.paths(":out_dir/gen").unwrap(), Vec::<String>::new());
+        assert_eq!(x.paths("cc").unwrap(), ["cc"]);
+        assert_eq!(x.dropped(), [":out_dir/gen"]);
+    }
+
+    #[test]
+    fn the_expander_globs_any_component() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        for sub in ["xz-5.2/src", "xz-5.4/src", "other/src", "deep/a/b"] {
+            std::fs::create_dir_all(root.join(sub)).unwrap();
+        }
+        std::fs::write(root.join("deep/a/b/probe.rs"), "").unwrap();
+        std::fs::write(root.join("deep/probe.rs"), "").unwrap();
+        let x = expander(vars(&[]));
+        let root = root.display();
+
+        let mid = x.paths(&format!("{root}/xz-*/src")).unwrap();
+        assert_eq!(mid, [format!("{root}/xz-5.2/src"), format!("{root}/xz-5.4/src")]);
+        let deep = x.paths(&format!("{root}/deep/**/probe.rs")).unwrap();
+        assert_eq!(deep, [format!("{root}/deep/a/b/probe.rs"), format!("{root}/deep/probe.rs")]);
+        assert!(matches!(x.paths(&format!("{root}/xz**")), Err(PathError::Glob(_))));
+    }
+
+    #[test]
+    fn the_expander_matches_env_patterns_against_set_names() {
+        let x = expander(vars(&[]));
+        assert_eq!(x.names("CARGO_CFG_*"), ["CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX"]);
+        assert_eq!(x.names("OPENSSL_*"), Vec::<String>::new());
+        // A plain name stays, set or not.
+        assert_eq!(x.names("OPENSSL_DIR"), ["OPENSSL_DIR"]);
     }
 
     #[test]

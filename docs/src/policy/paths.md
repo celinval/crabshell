@@ -68,19 +68,29 @@ static data; when they're wrong for a machine, the user sets the variable.
 
 ## Globs
 
-A trailing `*` in the last component matches every sibling with that prefix
-(`/lib*`). A glob under a missing directory matches nothing; a directory that
-exists but can't be listed is an error. `env` entries also accept a trailing
-`*` (`CARGO_CFG_*`).
+Path entries may be glob patterns, in the syntax of the
+[`glob`](https://docs.rs/glob) crate: `*` and `?` within a component, `[...]`
+character classes, and `**` as a whole component for any depth:
+
+```toml
+read = [":manifest_dir/xz-*", ":manifest_dir/**/probe.rs"]
+```
+
+- Patterns expand when the build script starts, so files created afterwards
+  aren't covered.
+- A matched directory grants its whole subtree; a trailing `dir/**` is the same
+  as `dir`.
+- A pattern under a missing directory matches nothing; a directory that exists
+  but can't be listed is an error, since silently granting less would hide
+  the cause.
+- `env` entries use the same syntax, matched against the variables actually
+  set: `CARGO_CFG_*`.
 
 ## Comparing paths
 
-Clamping and narrowing compare paths by **containment**: a requested
-`:manifest_dir/build/probe.rs` is inside a granted `:manifest_dir`, and
-`/usr/include` inside `/usr`. That's what lets a crate narrow its read access
-to the files it uses. A trailing `*` pattern covers every entry with its
-prefix.
-
-Entries compare as written, before variables expand. So
-`:manifest_dir/build` is inside `:manifest_dir`, but not inside the absolute
-path `:manifest_dir` expands to.
+Every entry expands to concrete values before anything is compared:
+variables and globs to paths, env patterns to names. Clamping and narrowing
+then compare **concrete values**: a path covers the paths under it, at a `/`
+boundary, and env names compare by equality. So a request for
+`:manifest_dir/build/probe.rs` is inside the granted `:manifest_dir`, and an
+absolute `[limits]` cap applies to grants written with variables.

@@ -2,17 +2,47 @@
 //!
 //! Resolution is per field: the most specific table that sets a field wins, a
 //! table with `inherit = true` appends to the next table up, named grants add
-//! their entries, and `[limits]` clamps the result. Pure and filesystem-free, so it is covered by unit tests
-//! rather than end-to-end builds.
+//! their entries, and `[limits]` clamps the result.
 //!
-//! Clamping and tightening intersect lists entry by entry. An entry ending in
-//! `*` covers every entry with that prefix, and a path covers the paths under
-//! it, so a request can narrow a granted directory to a few files. Paths
-//! compare as written, before `:variables` expand.
+//! Every entry expands to concrete values first, through an [`Expand`]:
+//! `:variables` and glob patterns to paths, env patterns to the names actually
+//! set. Clamping and narrowing then intersect concrete values only: a path
+//! covers the paths under it, so a request can narrow a granted directory to a
+//! few files, and env names compare by equality. The expander is the only
+//! part that touches the filesystem or environment, so this module is covered
+//! by unit tests.
 
 use crate::config::{Fields, ListField, SandboxConfig};
 use crate::declared::Declared;
 use crate::grants;
+use crate::paths::PathError;
+
+/// Turns policy entries into the concrete values they stand for.
+pub trait Expand {
+    /// The paths a `read`, `write` or `run` entry names. A bare program name
+    /// (`cc`) stays as it is.
+    fn paths(&self, entry: &str) -> Result<Vec<String>, PathError>;
+    /// The env var names an `env` entry names.
+    fn names(&self, entry: &str) -> Vec<String>;
+}
+
+/// Which kind of values a list field holds.
+#[derive(Clone, Copy)]
+enum Kind {
+    Paths,
+    Names,
+}
+
+fn expand_all(x: &impl Expand, kind: Kind, entries: &[String]) -> Result<Vec<String>, PathError> {
+    let mut out = Vec::new();
+    for entry in entries {
+        match kind {
+            Kind::Paths => out.extend(x.paths(entry)?),
+            Kind::Names => out.extend(x.names(entry)),
+        }
+    }
+    Ok(dedup(out))
+}
 
 /// Environment variables every build script has implicit access to.
 ///
@@ -105,32 +135,40 @@ pub struct Permissions {
 }
 
 /// Resolve the effective permissions for `pkg` under `config`.
-pub fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
+pub fn resolve(
+    config: &SandboxConfig,
+    pkg: &PackageContext,
+    x: &impl Expand,
+) -> Result<Permissions, PathError> {
     let chain = chain(config, pkg);
     let grants = grants::effective(config);
     let names = lookup_list(&chain, |f| &f.grants, &[]);
-    let field = |get: fn(&Fields) -> &Option<ListField>, default: &[&str]| {
+    let field = |get: fn(&Fields) -> &Option<ListField>, kind, default: &[&str]| {
         let mut value = lookup_list(&chain, get, default);
         value.extend(grants::expand(&grants, &names, get));
-        clamp(dedup(value), get(&config.limits))
+        let value = expand_all(x, kind, &value)?;
+        Ok(match get(&config.limits) {
+            Some(cap) => intersect(&value, &expand_all(x, kind, entries(cap))?),
+            None => value,
+        })
     };
-    let mut env = field(|f| &f.env, DEFAULT_ENV);
+    let mut env = field(|f| &f.env, Kind::Names, DEFAULT_ENV)?;
     env.extend(IMPLICIT_ENV.iter().map(|name| name.to_string()));
-    let mut read = field(|f| &f.read, DEFAULT_READ);
+    let mut read = field(|f| &f.read, Kind::Paths, DEFAULT_READ)?;
     read.extend(implicit_runtime(&pkg.host).into_iter().map(str::to_string));
-    let mut write = field(|f| &f.write, &[]);
+    let mut write = field(|f| &f.write, Kind::Paths, &[])?;
     write.extend(IMPLICIT_WRITE.iter().map(|path| path.to_string()));
     let network = chain.iter().find_map(|fields| fields.network);
     let network = network.unwrap_or_else(|| grants::expand_network(&grants, &names));
 
-    Permissions {
+    Ok(Permissions {
         read: dedup(read),
         write: dedup(write),
-        run: field(|f| &f.run, &[]),
+        run: field(|f| &f.run, Kind::Paths, &[])?,
         env: dedup(env),
         network: network && config.limits.network.unwrap_or(true),
         list: Vec::new(),
-    }
+    })
 }
 
 /// Narrow `permissions` to what the package `declared` it needs.
@@ -143,12 +181,13 @@ pub fn tighten(
     declared: &Declared,
     pkg: &PackageContext,
     config: &SandboxConfig,
-) -> Permissions {
+    x: &impl Expand,
+) -> Result<Permissions, PathError> {
     let grants = grants::effective(config);
-    let wanted = |own: &[String], get: fn(&Fields) -> &Option<ListField>| {
+    let wanted = |own: &[String], get: fn(&Fields) -> &Option<ListField>, kind| {
         let mut value = own.to_vec();
         value.extend(grants::expand(&grants, &declared.requests, get));
-        value
+        expand_all(x, kind, &value)
     };
     let keep = |granted: Vec<String>, wanted: Vec<String>, floor: &[&str]| -> Vec<String> {
         let mut out = intersect(&granted, &wanted);
@@ -156,18 +195,22 @@ pub fn tighten(
         dedup(out)
     };
     let network = declared.network || grants::expand_network(&grants, &declared.requests);
-    Permissions {
+    Ok(Permissions {
         read: keep(
             permissions.read,
-            wanted(&declared.read, |f| &f.read),
+            wanted(&declared.read, |f| &f.read, Kind::Paths)?,
             &implicit_runtime(&pkg.host),
         ),
-        write: keep(permissions.write, wanted(&declared.write, |f| &f.write), IMPLICIT_WRITE),
-        run: keep(permissions.run, wanted(&declared.run, |f| &f.run), &[]),
-        env: keep(permissions.env, wanted(&declared.env, |f| &f.env), IMPLICIT_ENV),
+        write: keep(
+            permissions.write,
+            wanted(&declared.write, |f| &f.write, Kind::Paths)?,
+            IMPLICIT_WRITE,
+        ),
+        run: keep(permissions.run, wanted(&declared.run, |f| &f.run, Kind::Paths)?, &[]),
+        env: keep(permissions.env, wanted(&declared.env, |f| &f.env, Kind::Names)?, IMPLICIT_ENV),
         network: permissions.network && network,
         list: permissions.list,
-    }
+    })
 }
 
 /// The tables applying to `pkg`, most specific first.
@@ -176,34 +219,19 @@ fn chain<'a>(config: &'a SandboxConfig, pkg: &PackageContext) -> Vec<&'a Fields>
     config.package.get(&pkg.name).into_iter().chain([category]).collect()
 }
 
-/// Clamp a resolved list by its `[limits]` field, if set.
-fn clamp(value: Vec<String>, cap: &Option<ListField>) -> Vec<String> {
-    match cap {
-        Some(cap) => intersect(&value, entries(cap)),
-        None => value,
-    }
-}
-
-/// The entries of either list that the other list covers.
+/// The entries of either concrete list that the other list covers.
 fn intersect(a: &[String], b: &[String]) -> Vec<String> {
-    let covered = |entry: &&String, by: &[String]| by.iter().any(|pattern| covers(pattern, entry));
+    let covered = |entry: &&String, by: &[String]| by.iter().any(|outer| covers(outer, entry));
     let mut out: Vec<String> = a.iter().filter(|e| covered(e, b)).cloned().collect();
     out.extend(b.iter().filter(|e| covered(e, a)).cloned());
     dedup(out)
 }
 
-/// Whether `pattern` covers `entry`: equal, a matching `prefix*`, or a path
-/// under `pattern` at a `/` boundary.
-///
-/// Paths compare as written, before variables expand, so `:manifest_dir/build`
-/// is under `:manifest_dir`, but not under the absolute path it expands to.
-/// Env names contain no `/`, so for them this is plain equality.
-fn covers(pattern: &str, entry: &str) -> bool {
-    if let Some(prefix) = pattern.strip_suffix('*') {
-        return entry.starts_with(prefix);
-    }
-    match entry.strip_prefix(pattern) {
-        Some(rest) => rest.is_empty() || rest.starts_with('/') || pattern.ends_with('/'),
+/// Whether concrete `outer` covers `entry`: equal, or a path under `outer` at
+/// a `/` boundary. Env names contain no `/`, so for them it's plain equality.
+fn covers(outer: &str, entry: &str) -> bool {
+    match entry.strip_prefix(outer) {
+        Some(rest) => rest.is_empty() || rest.starts_with('/') || outer.ends_with('/'),
         None => false,
     }
 }
@@ -248,6 +276,51 @@ fn dedup(mut value: Vec<String>) -> Vec<String> {
 mod tests {
     use super::*;
 
+    /// Keeps paths as written, and matches env patterns against [`NAMES`].
+    struct Fixed;
+
+    /// The env vars set in these tests.
+    const NAMES: &[&str] = &[
+        "TARGET",
+        "HOST",
+        "CARGO_CFG_TARGET_OS",
+        "CARGO_CFG_SANITIZE",
+        "CARGO_FEATURE_STD",
+        "CARGO_PKG_NAME",
+        "PKG_CONFIG_PATH",
+        "CC",
+        "ZLIB_STATIC",
+        "HOME",
+    ];
+
+    impl Expand for Fixed {
+        fn paths(&self, entry: &str) -> Result<Vec<String>, PathError> {
+            Ok(vec![entry.to_string()])
+        }
+
+        fn names(&self, entry: &str) -> Vec<String> {
+            match glob::Pattern::new(entry) {
+                Ok(pattern) if entry.contains('*') => {
+                    NAMES.iter().filter(|n| pattern.matches(n)).map(|n| n.to_string()).collect()
+                }
+                _ => vec![entry.to_string()],
+            }
+        }
+    }
+
+    fn resolve(config: &SandboxConfig, pkg: &PackageContext) -> Permissions {
+        super::resolve(config, pkg, &Fixed).unwrap()
+    }
+
+    fn tighten(
+        permissions: Permissions,
+        declared: &Declared,
+        pkg: &PackageContext,
+        config: &SandboxConfig,
+    ) -> Permissions {
+        super::tighten(permissions, declared, pkg, config, &Fixed).unwrap()
+    }
+
     fn config(toml: &str) -> SandboxConfig {
         toml::from_str(toml).unwrap()
     }
@@ -282,8 +355,10 @@ mod tests {
     #[test]
     fn no_policy_grants_the_defaults_and_implicit_access() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
-        let mut expected: Vec<String> = DEFAULT_ENV.iter().map(|name| name.to_string()).collect();
-        expected.push("OUT_DIR".into());
+        // The default's patterns expand to the names actually set.
+        let expected = ["TARGET", "HOST", "CARGO_CFG_TARGET_OS", "CARGO_CFG_SANITIZE"];
+        let expected: Vec<&str> =
+            expected.into_iter().chain(["CARGO_FEATURE_STD", "OUT_DIR"]).collect();
         assert_eq!(resolved.env, expected);
         assert_eq!(resolved.read, default_read());
         assert_eq!(resolved.write, ["/dev/null"]);
@@ -486,7 +561,7 @@ mod tests {
     }
 
     #[test]
-    fn patterns_intersect_by_prefix() {
+    fn patterns_expand_before_they_intersect() {
         let capped = config(
             r#"
             [limits]
@@ -496,7 +571,10 @@ mod tests {
             env = ["CARGO_CFG_*", "CARGO_PKG_NAME", "HOME"]
             "#,
         );
-        assert_eq!(granted_env(&capped, &external("dep")), ["CARGO_CFG_*", "CARGO_PKG_NAME"]);
+        assert_eq!(
+            granted_env(&capped, &external("dep")),
+            ["CARGO_CFG_TARGET_OS", "CARGO_CFG_SANITIZE", "CARGO_PKG_NAME"]
+        );
 
         let broad = config("[external]\nenv = [\"*\"]\n");
         let declared = Declared { env: vec!["TARGET".into()], ..Declared::default() };
@@ -570,7 +648,7 @@ mod tests {
         // Only pkg-config's tools survive; cc's are dropped.
         assert_eq!(tightened.run, ["pkg-config", "pkgconf"]);
         assert!(tightened.env.contains(&"ZLIB_STATIC".to_string()));
-        assert!(tightened.env.contains(&"PKG_CONFIG_*".to_string()));
+        assert!(tightened.env.contains(&"PKG_CONFIG_PATH".to_string()));
         assert!(!tightened.env.contains(&"CC".to_string()));
     }
 

@@ -26,7 +26,7 @@ env = [
 [package.libsqlite3-sys]
 # Reads its own crate: copies bundled bindings; builds the vendored sqlite3
 # when bundled. Subpaths need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["pkg-config"]
 env = [
     "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_WINDOWS", "DEP_OPENSSL_INCLUDE",
@@ -39,7 +39,7 @@ env = [
 [package.libz-sys]
 # Reads its own crate: compiles its `src/smoke.c` check, and the vendored zlib
 # as a fallback. Subpaths need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "HOST", "TARGET",
@@ -49,7 +49,7 @@ env = [
 [package.lzma-sys]
 # Reads its own crate: builds the vendored xz unless pkg-config finds one.
 # Subpaths need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ENDIAN", "LZMA_API_STATIC", "TARGET",
@@ -62,7 +62,7 @@ env = [
 [package.openssl-sys]
 # Reads its own crate: expands its `build/expando.c`. Subpaths need
 # containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_CFG_UNIX", "DEP_BSSL_CONF",
@@ -79,7 +79,7 @@ env = [
 [package.zstd-sys]
 # Reads its own crate: builds the vendored zstd unless pkg-config finds one.
 # Subpaths need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_WINDOWS",

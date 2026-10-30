@@ -358,3 +358,29 @@ fn a_requests_file_needs_the_test_feature() {
 
     assert!(!build.check("dep", Origin::External, &env, &["env-absent", "ANYTHING"]));
 }
+
+#[test]
+fn variables_expand_in_paths() {
+    let build = Build::new("");
+    let secret = build.secret();
+    let dir = build.dir.path().to_str().unwrap();
+    let sandbox = "[external]\nread = [\":data/secret\"]\n\n[variables]\ndata = { env = \"CRABSHELL_DATA\" }\n";
+    std::fs::write(build.dir.path().join("sandbox.toml"), sandbox).unwrap();
+    let secret = secret.to_str().unwrap();
+
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[("CRABSHELL_DATA", dir)],
+        &["readable", secret]
+    ));
+    // Unset, the variable is undefined and the grant is dropped, not an error.
+    assert!(build.check("dep", Origin::External, &[], &["unreadable", secret]));
+}
+
+#[test]
+fn a_path_with_an_env_var_fails_the_build() {
+    let build = Build::new("[external]\nread = [\"$HOME/.ssh\"]\n");
+
+    assert!(!build.check("dep", Origin::External, &[], &["env-absent", "ANYTHING"]));
+}

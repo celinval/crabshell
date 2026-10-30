@@ -133,8 +133,9 @@ fn private_tmp(out_dir: &Path) -> io::Result<PathBuf> {
     Ok(tmp)
 }
 
+/// Expand a policy entry, whose variables are already expanded, into paths.
 fn expand(entry: &str) -> io::Result<Vec<PathBuf>> {
-    paths::expand(entry, |name| std::env::var_os(name)).map_err(io::Error::other)
+    paths::glob(entry).map_err(io::Error::other)
 }
 
 /// Resolve a `run` entry: a path is expanded, a bare name is searched on `PATH`.

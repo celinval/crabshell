@@ -4,15 +4,15 @@
 # an array replaces that field, `{ inherit = true, value = [...] }` extends it.
 #
 # A grant holds what a *tool* needs; what the crate's own code reads (TARGET,
-# its own knobs) the crate requests itself. Paths use the prototype's syntax
-# until `:variables` land. Library paths list both Fedora-style (/lib64) and
-# Debian-style (/lib/x86_64-linux-gnu) locations; missing ones are skipped.
+# its own knobs) the crate requests itself. Library paths list both
+# Fedora-style (/lib64) and Debian-style (/lib/x86_64-linux-gnu) locations;
+# missing ones are skipped.
 
 # Running `$RUSTC`, as compile probes and version checks do.
 [grant.rustc]
 read = [
-    "$RUSTUP_HOME/toolchains",
-    # rustc's system libraries beyond the floor (from `readelf -d`).
+    ":sysroot",
+    # rustc's system libraries beyond implicit access (from `readelf -d`).
     "/lib64/libm.so.6", "/lib/x86_64-linux-gnu/libm.so.6",
     "/lib64/libz.so.1", "/lib/x86_64-linux-gnu/libz.so.1",
     "/lib64/libdl.so.2", "/lib/x86_64-linux-gnu/libdl.so.2",

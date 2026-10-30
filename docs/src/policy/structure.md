@@ -13,17 +13,22 @@ network = false
 # Packages whose source is on your filesystem: workspace members and path
 # dependencies. Inherits unset fields from the default grant.
 [local]
-read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
+read = [":include_dir", ":lib_dir", ":manifest_dir"]
 
 # Packages Cargo fetched: registry and git dependencies.
 [external]
-read = ["$include_dir", "$lib_dir"]
+read = [":include_dir", ":lib_dir"]
 
 # One named package, local or external. Inherits from its category table, then
 # the default grant.
 [package.openssl-sys]
-read = { inherit = true, value = ["$include_dir/openssl"] }   # append to inherited read paths
+read = { inherit = true, value = [":include_dir/openssl"] }   # append to inherited read paths
 run  = ["cc", "pkg-config"]                                   # override run
+
+# User-defined variables used above; see Paths and variables.
+[variables]
+include_dir = "/usr/include"
+lib_dir = "/usr/lib64"
 ```
 
 A package is local when its manifest directory is outside `CARGO_HOME`, which

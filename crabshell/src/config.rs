@@ -37,6 +37,40 @@ pub struct SandboxConfig {
     /// Named grants, overriding built-ins of the same name per field.
     #[serde(default)]
     pub grant: BTreeMap<String, Fields>,
+    /// User-defined path variables, used in policy paths as `:name`.
+    #[serde(default)]
+    pub variables: BTreeMap<String, VariableDef>,
+}
+
+/// A `[variables]` entry: one source, or an array whose sources all apply.
+///
+/// A variable's value is a list of paths; an array is the union of its
+/// sources' paths.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum VariableDef {
+    One(Source),
+    Many(Vec<Source>),
+}
+
+/// Where some of a variable's paths come from.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum Source {
+    /// An absolute path.
+    Path(String),
+    /// The paths in an environment variable, or a default when it's unset.
+    Env(EnvImport),
+}
+
+/// `{ env = "NAME", default = ... }`: import an environment variable.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnvImport {
+    /// The environment variable to read, as a list of paths like `PATH`.
+    pub env: String,
+    /// The value when `env` is unset or empty, in the same forms as a definition.
+    pub default: Option<Box<VariableDef>>,
 }
 
 /// The fields a policy table may set.
@@ -77,7 +111,10 @@ pub enum ListField {
 
 /// Return the closest `sandbox.toml` at or above `start`.
 pub fn find(start: &Path) -> Option<PathBuf> {
-    start.ancestors().map(|dir| dir.join(FILE_NAME)).find(|candidate| candidate.is_file())
+    start
+        .ancestors()
+        .map(|dir| dir.join(FILE_NAME))
+        .find(|candidate| candidate.is_file())
 }
 
 /// Read, parse, and validate the `sandbox.toml` at `path`.
@@ -99,7 +136,10 @@ pub fn load(path: &Path) -> Result<SandboxConfig, ConfigError> {
 /// Glob patterns are not supported yet, and a `[package.<glob>]` table that is
 /// quietly ignored reads like an applied restriction while granting nothing.
 fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
-    let error = |kind| ConfigError::Grant { path: path.to_path_buf(), kind };
+    let error = |kind| ConfigError::Grant {
+        path: path.to_path_buf(),
+        kind,
+    };
     for key in config.package.keys() {
         if key.contains('*') {
             return Err(ConfigError::GlobKey {
@@ -119,9 +159,21 @@ fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
     if config.limits.grants.is_some() {
         return Err(error(GrantError::InLimits));
     }
+    for (name, def) in &config.variables {
+        validate_variable(name, def).map_err(|kind| ConfigError::Variable {
+            path: path.to_path_buf(),
+            name: name.clone(),
+            kind,
+        })?;
+    }
     let known = crate::grants::effective(config);
-    let tables = [&config.local, &config.external].into_iter().chain(config.package.values());
-    for name in tables.filter_map(|t| t.grants.as_ref()).flat_map(list_entries) {
+    let tables = [&config.local, &config.external]
+        .into_iter()
+        .chain(config.package.values());
+    for name in tables
+        .filter_map(|t| t.grants.as_ref())
+        .flat_map(list_entries)
+    {
         if !crate::grants::is_valid_name(name) {
             return Err(error(GrantError::InvalidName(name.clone())));
         }
@@ -130,6 +182,46 @@ fn validate(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
         }
     }
     Ok(())
+}
+
+fn validate_variable(name: &str, def: &VariableDef) -> Result<(), VariableError> {
+    if !crate::paths::is_valid_name(name) {
+        return Err(VariableError::InvalidName);
+    }
+    if crate::paths::BUILTIN.contains(&name) {
+        return Err(VariableError::Builtin);
+    }
+    validate_sources(def)
+}
+
+fn validate_sources(def: &VariableDef) -> Result<(), VariableError> {
+    for source in def.sources() {
+        match source {
+            Source::Path(path) if !Path::new(path).is_absolute() => {
+                return Err(VariableError::NotAbsolute(path.clone()));
+            }
+            Source::Path(_) => {}
+            Source::Env(import) => {
+                if crate::paths::is_crate_chosen(&import.env) {
+                    return Err(VariableError::CrateChosen(import.env.clone()));
+                }
+                if let Some(default) = &import.default {
+                    validate_sources(default)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+impl VariableDef {
+    /// The sources this definition unions.
+    pub fn sources(&self) -> &[Source] {
+        match self {
+            VariableDef::One(source) => std::slice::from_ref(source),
+            VariableDef::Many(sources) => sources,
+        }
+    }
 }
 
 fn list_entries(field: &ListField) -> &[String] {
@@ -143,13 +235,52 @@ fn list_entries(field: &ListField) -> &[String] {
 #[derive(Debug)]
 pub enum ConfigError {
     /// The file could not be read.
-    Read { path: PathBuf, source: std::io::Error },
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// The file was not valid TOML or violated the schema.
-    Parse { path: PathBuf, source: toml::de::Error },
+    Parse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
     /// A `[package.<name>]` key used an unsupported glob pattern.
     GlobKey { path: PathBuf, key: String },
     /// A named grant is invalid or used where it can't apply.
     Grant { path: PathBuf, kind: GrantError },
+    /// A `[variables]` entry is invalid.
+    Variable {
+        path: PathBuf,
+        name: String,
+        kind: VariableError,
+    },
+}
+
+/// What is wrong with a `[variables]` entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariableError {
+    /// The name isn't `[a-z][a-z0-9_]*`.
+    InvalidName,
+    /// The name is a built-in variable.
+    Builtin,
+    /// A path source isn't absolute.
+    NotAbsolute(String),
+    /// It imports an env var whose value a crate chooses (`DEP_*`, `CARGO_PKG_*`).
+    CrateChosen(String),
+}
+
+impl fmt::Display for VariableError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VariableError::InvalidName => write!(f, "variable names are `[a-z][a-z0-9_]*`"),
+            VariableError::Builtin => write!(f, "built-in variables can't be redefined"),
+            VariableError::NotAbsolute(path) => write!(f, "`{path}` must be an absolute path"),
+            VariableError::CrateChosen(env) => write!(
+                f,
+                "`{env}` is chosen by a crate, not the user, so it can't define a variable"
+            ),
+        }
+    }
 }
 
 /// What is wrong with a named grant in `sandbox.toml`.
@@ -169,7 +300,10 @@ impl fmt::Display for GrantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             GrantError::InvalidName(name) => {
-                write!(f, "`{name}` is not a valid grant name; use `[a-z][a-z0-9_-]*`")
+                write!(
+                    f,
+                    "`{name}` is not a valid grant name; use `[a-z][a-z0-9_-]*`"
+                )
             }
             GrantError::Unknown(name) => {
                 write!(f, "unknown grant `{name}`; define it with `[grant.{name}]`")
@@ -190,6 +324,9 @@ impl fmt::Display for ConfigError {
                 write!(f, "failed to parse {}: {source}", path.display())
             }
             ConfigError::Grant { path, kind } => write!(f, "{}: {kind}", path.display()),
+            ConfigError::Variable { path, name, kind } => {
+                write!(f, "{}: `[variables] {name}`: {kind}", path.display())
+            }
             ConfigError::GlobKey { path, key } => write!(
                 f,
                 "{}: `[package.\"{key}\"]` is not supported; \
@@ -206,7 +343,9 @@ impl std::error::Error for ConfigError {
         match self {
             ConfigError::Read { source, .. } => Some(source),
             ConfigError::Parse { source, .. } => Some(source),
-            ConfigError::GlobKey { .. } | ConfigError::Grant { .. } => None,
+            ConfigError::GlobKey { .. }
+            | ConfigError::Grant { .. }
+            | ConfigError::Variable { .. } => None,
         }
     }
 }
@@ -222,13 +361,13 @@ mod tests {
             network = false
 
             [local]
-            read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
+            read = [":include_dir", ":lib_dir", ":manifest_dir"]
 
             [external]
-            read = ["$include_dir", "$lib_dir"]
+            read = [":include_dir", ":lib_dir"]
 
             [package.openssl-sys]
-            read = { inherit = true, value = ["$include_dir/openssl"] }
+            read = { inherit = true, value = [":include_dir/openssl"] }
             run = ["cc", "pkg-config"]
         "#;
 
@@ -238,20 +377,23 @@ mod tests {
         assert_eq!(
             config.local.read,
             Some(ListField::Override(vec![
-                "$include_dir".into(),
-                "$lib_dir".into(),
-                "$CARGO_MANIFEST_DIR".into(),
+                ":include_dir".into(),
+                ":lib_dir".into(),
+                ":manifest_dir".into(),
             ]))
         );
         assert_eq!(
             config.external.read,
-            Some(ListField::Override(vec!["$include_dir".into(), "$lib_dir".into()]))
+            Some(ListField::Override(vec![
+                ":include_dir".into(),
+                ":lib_dir".into()
+            ]))
         );
         assert_eq!(
             config.package["openssl-sys"].read,
             Some(ListField::Inherit {
                 inherit: true,
-                value: vec!["$include_dir/openssl".into()],
+                value: vec![":include_dir/openssl".into()],
             })
         );
         assert_eq!(
@@ -350,5 +492,42 @@ mod tests {
         assert!(load_err("[grant.Bad]\nrun = []\n").contains("not a valid grant name"));
         assert!(load_err("[grant.x]\ngrants = [\"cc\"]\n").contains("can't set `grants`"));
         assert!(load_err("[limits]\ngrants = [\"cc\"]\n").contains("`[limits]` can't set"));
+    }
+
+    #[test]
+    fn parses_variables() {
+        let (_dir, loaded) = load_text(
+            r#"
+            [variables]
+            openssl_dir = { env = "OPENSSL_DIR", default = "/usr" }
+            pc = [{ env = "PKG_CONFIG_PATH" }, "/usr/lib64/pkgconfig"]
+            fixed = "/opt/x"
+            "#,
+        );
+        let config = loaded.unwrap();
+        assert_eq!(
+            config.variables["openssl_dir"],
+            VariableDef::One(Source::Env(EnvImport {
+                env: "OPENSSL_DIR".into(),
+                default: Some(Box::new(VariableDef::One(Source::Path("/usr".into())))),
+            }))
+        );
+        assert_eq!(config.variables["pc"].sources().len(), 2);
+        assert_eq!(config.variables["fixed"], VariableDef::One(Source::Path("/opt/x".into())));
+    }
+
+    #[test]
+    fn rejects_bad_variables() {
+        assert!(load_err("[variables]\nOpenSSL = \"/usr\"\n").contains("names are"));
+        assert!(load_err("[variables]\nsysroot = \"/usr\"\n").contains("can't be redefined"));
+        assert!(load_err("[variables]\nx = \"usr\"\n").contains("must be an absolute path"));
+        let nested = "[variables]\nx = { env = \"A\", default = { env = \"DEP_X\" } }\n";
+        assert!(load_err(nested).contains("chosen by a crate"));
+        let unknown = "[variables]\nx = { env = \"A\", list = true }\n";
+        assert!(load_err(unknown).contains("failed to parse"));
+        for env in ["DEP_OPENSSL_INCLUDE", "CARGO_PKG_HOMEPAGE"] {
+            let text = format!("[variables]\nx = {{ env = \"{env}\" }}\n");
+            assert!(load_err(&text).contains("chosen by a crate"));
+        }
     }
 }

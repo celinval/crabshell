@@ -1,7 +1,7 @@
 # Paths and variables
 
-> **Status:** decided, not implemented yet. The prototype still expands
-> `$NAME` from the environment; see [Prototype today](#prototype-today).
+> **Status:** implemented, except comparing paths by containment (see
+> [below](#comparing-paths)). Grants can't provide variables of their own yet.
 
 A policy path is an absolute path, or a **variable** plus a subpath:
 `:manifest_dir/build/grammar.lalrpop`. The leading `:` keeps variables apart
@@ -32,23 +32,30 @@ Built-in [grants](grants.md) may also come with variables of their own, such as
 
 ## User-defined variables
 
-User and project config define variables in `[variables]`. A variable is
-either a single path, or a **path list** that expands to several entries:
+User and project config define variables in `[variables]`. A variable's
+value is a **list of paths**, and `:name/rest` expands to `path/rest` for each
+of them:
 
 ```toml
 [variables]
-openssl_dir     = [{ env = "OPENSSL_DIR" }, "/usr"]          # first defined wins
-pkgconfig_paths = [{ env = "PKG_CONFIG_LIBDIR" }, "/usr/lib64/pkgconfig", "/usr/share/pkgconfig"]
+lib_dir     = ["/usr/lib64", "/usr/lib/x86_64-linux-gnu"]              # union
+pc_path     = [{ env = "PKG_CONFIG_PATH" }, "/usr/lib64/pkgconfig"]    # extends
+openssl_dir = { env = "OPENSSL_DIR", default = "/usr" }                # fallback
 ```
 
-- A definition may import an environment variable with `{ env = "NAME" }`.
-  An env value is split on `:` where the variable is a path list. Policy paths
-  themselves never expand the environment, so every env dependency is one
-  `env = "..."` key.
-- An unset env var leaves that alternative undefined. If no alternative is
-  defined, the variable is undefined, and grants that use it are dropped (and
-  reported under `CRABSHELL_LOG`). For optional knobs that's the right outcome:
-  unset means "use the default".
+- A definition is a source or an array of sources, whose paths are unioned.
+  Paths that don't exist on a machine are harmless (Landlock skips them), so
+  one definition can cover several distros' layouts.
+- A source is an absolute path, or `{ env = "NAME" }`, which imports an
+  environment variable. Policy paths themselves never expand the environment,
+  so every env dependency is one `env = "..."` key.
+- An imported value is read as a path list, like `PATH`: a single path is a
+  one-element list. A path that contains `:` can't be imported.
+- `default` applies when the env var is unset or empty, and takes the same
+  forms as a definition.
+- A variable none of whose sources is defined is undefined, and grants that
+  use it are dropped (and reported under `CRABSHELL_LOG`). For optional knobs
+  that's the right outcome: unset means "use the default".
 - **Only user-supplied values may be imported.** Some of crabshell's
   environment is chosen by crates:
   - `DEP_<links>_*` comes from a dependency's build script;
@@ -73,13 +80,9 @@ exists but can't be listed is an error. `env` entries also accept a trailing
 
 Clamping and narrowing compare paths by **containment**: a declared
 `:manifest_dir/build` is inside a granted `:manifest_dir`. That's what lets a
-crate narrow its read access to a few files. (The prototype still compares
-paths as strings, so today `/usr` doesn't cover `/usr/include`.)
+crate narrow its read access to a few files. (Not implemented yet: the
+prototype compares entries as written, so `/usr` doesn't cover `/usr/include`,
+and a crate that reads its own files requests all of `:manifest_dir`.)
 
-## Prototype today
-
-- An absolute path, or `$NAME/sub/path` where `NAME` is one of
-  `CARGO_MANIFEST_DIR`, `OUT_DIR`, `CARGO_HOME`, `HOME` or `RUSTUP_HOME`, read
-  from the build script's environment.
-- Globs and `env` patterns as above. A pattern covers every entry with its
-  prefix when clamping and narrowing.
+Variables expand only after clamping and narrowing, which compare entries as
+written. A trailing `*` pattern covers every entry with its prefix.

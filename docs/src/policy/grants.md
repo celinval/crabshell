@@ -1,7 +1,7 @@
 # Named grants
 
 > **Status:** implemented in the prototype. The built-ins live in
-> `crabshell/src/grants.toml` and still use the prototype's `$ROOT` path syntax.
+> `crabshell/src/grants.toml`.
 
 A named grant is a reusable set of permissions spanning every field. Policies
 assign it to packages by name:

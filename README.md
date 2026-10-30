@@ -1,8 +1,7 @@
 # CrabShell
 
-**A sandbox for Cargo build scripts.** `crabshell` runs untrusted `build.rs`
-code with only the access it actually needs — not the full privileges of
-whoever ran `cargo build`.
+**A sandbox for Cargo build scripts.** `crabshell` runs untrusted code with only,
+the access it actually needs — not the full privileges of whoever ran `cargo build`.
 
 > ⚠️ **Prototype:** Exploratory work; the API, permission format, and
 > confinement mechanism will change. Not for production use.
@@ -62,9 +61,9 @@ A crate author declares needs in `Cargo.toml`:
 
 ```toml
 [package.metadata.build-rs]
-read = ["/usr/include", "/usr/lib"]   # extra read-only paths
-run  = ["cc", "pkg-config"]           # executables it may run
-env  = ["TARGET", "OPT_LEVEL"]        # env vars it may read
+requests = ["pkg-config", "cc"]       # named grants it may use
+read = [":manifest_dir"]              # its own files
+env  = ["OPENSSL_DIR", "OPENSSL_STATIC"]   # knobs it reads
 ```
 
 You set the project policy in `sandbox.toml`:
@@ -73,12 +72,12 @@ You set the project policy in `sandbox.toml`:
 [limits]                              # a hard ceiling nothing can exceed
 network = false
 
-[local]                               # workspace members and path dependencies
-read = ["$include_dir", "$lib_dir", "$CARGO_MANIFEST_DIR"]
-
 [external]                            # registry and git dependencies
-read = ["$include_dir", "$lib_dir"]
+grants = ["rustc", "pkg-config", "cc"]
+env = { inherit = true, value = ["OPENSSL_*"] }
 ```
+
+Paths use crabshell variables such as `:manifest_dir`, never env vars.
 
 You add `crabshell` as a host runner in your Cargo `config.toml`, and point it
 at the policy:

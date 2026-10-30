@@ -36,7 +36,7 @@ env = ["CARGO_CFG_SANITIZE"]
 [package.proc-macro2]
 # Reads its own crate: compile probes from its own `build/` sources. Subpaths
 # need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
@@ -64,6 +64,6 @@ env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 [package.thiserror]
 # Reads its own crate: compile probes from its own `build/probe.rs`. Subpaths
 # need containment-based paths.
-read = ["$CARGO_MANIFEST_DIR"]
+read = [":manifest_dir"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]

@@ -39,7 +39,7 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
 `read`, `run`, and `env` each accept an array or a table, following Cargo's
 array-or-table idiom:
 
-- an **array** — `read = ["$include_dir/openssl"]` — **overrides** the inherited
+- an **array** — `read = [":include_dir/openssl"]` — **overrides** the inherited
   value.
 - a **table** — `read = { inherit = true, value = [...] }` — **appends**:
   `inherit = true` unions `value` on top of less-specific tables. `inherit =

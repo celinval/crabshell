@@ -33,8 +33,8 @@ pub const IMPLICIT_WRITE: &[&str] = &["/dev/null"];
 /// It's what `read` resolves to when no table sets it, so tables can replace
 /// it (an array) or extend it (`inherit = true`), `[limits]` clamps it, and a
 /// request narrows it. Requests compare paths as strings for now, so a crate
-/// that reads its own files requests `$CARGO_MANIFEST_DIR` as a whole.
-pub const DEFAULT_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
+/// that reads its own files requests `:manifest_dir` as a whole.
+pub const DEFAULT_READ: &[&str] = &[":manifest_dir"];
 
 /// The default grant for `env`: the target and host triples, and what Cargo
 /// derives from the target and the enabled features.
@@ -43,8 +43,7 @@ pub const DEFAULT_READ: &[&str] = &["$CARGO_MANIFEST_DIR"];
 /// also leak into the build script's cache key. Like any grant, tables
 /// replace or extend it, and a request narrows it: a crate still requests the
 /// names it reads.
-pub const DEFAULT_ENV: &[&str] =
-    &["TARGET", "HOST", "CARGO_CFG_*", "CARGO_FEATURE_*"];
+pub const DEFAULT_ENV: &[&str] = &["TARGET", "HOST", "CARGO_CFG_*", "CARGO_FEATURE_*"];
 
 /// The dynamic loader and the libraries every std build script links on `host`.
 ///

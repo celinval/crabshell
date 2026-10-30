@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 use crabshell::config::SandboxConfig;
 use crabshell::policy::{PackageContext, Permissions};
-use crabshell::{config, declared, policy, runner};
+use crabshell::{config, declared, paths, policy, runner};
 
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
@@ -25,19 +25,16 @@ fn main() -> ExitCode {
     };
 
     let err = runner::exec(&program, &args, &permissions);
-    eprintln!(
-        "crabshell: failed to run {}: {err}",
-        program.to_string_lossy()
-    );
+    eprintln!("crabshell: failed to run {}: {err}", program.to_string_lossy());
     ExitCode::FAILURE
 }
 
 /// Resolve the permissions for the package Cargo is building.
 ///
 /// Cargo identifies the package through the build script's environment, which
-/// we inherit. Without a `sandbox.toml` only implicit access and the default floor
-/// apply. The
-/// package's own declaration, if any, then tightens the result.
+/// we inherit. Without a `sandbox.toml` only implicit access and the default
+/// grant apply. The package's own declaration, if any, then tightens the
+/// result, and finally `:variables` expand to concrete paths.
 fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
@@ -65,10 +62,16 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         Some(declared) => Some(declared),
         None => declared::load(&manifest_dir)?,
     };
-    Ok(match declared {
+    let permissions = match declared {
         Some(declared) => policy::tighten(permissions, &declared, &pkg, &config),
         None => permissions,
-    })
+    };
+    let variables = paths::Variables::new(&config.variables, |name| std::env::var_os(name));
+    let (permissions, dropped) = variables.apply(permissions)?;
+    if !dropped.is_empty() && std::env::var_os("CRABSHELL_LOG").is_some() {
+        eprintln!("crabshell: dropped entries with undefined variables: {dropped:?}");
+    }
+    Ok(permissions)
 }
 
 /// The package's declaration from the `CRABSHELL_REQUESTS` test file, if any.

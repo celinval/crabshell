@@ -1,0 +1,175 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "EnvImport": {
+      "additionalProperties": false,
+      "description": "`{ env = \"NAME\", default = ... }`: import an environment variable.",
+      "properties": {
+        "default": {
+          "$ref": "#/definitions/VariableDef",
+          "description": "The value when `env` is unset or empty, in the same forms as a definition."
+        },
+        "env": {
+          "description": "The environment variable to read, as a list of paths like `PATH`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "env"
+      ],
+      "type": "object"
+    },
+    "Fields": {
+      "additionalProperties": false,
+      "description": "The fields a policy table may set.\n\nBacks `[limits]`, the category tables, and each `[package.<name>]` entry;\nunset fields fall through during resolution.",
+      "properties": {
+        "env": {
+          "$ref": "#/definitions/ListField",
+          "description": "Environment variables the script may read."
+        },
+        "grants": {
+          "$ref": "#/definitions/ListField",
+          "description": "Named grants to apply, which expand to the fields above."
+        },
+        "network": {
+          "description": "Whether network access is granted.",
+          "type": "boolean"
+        },
+        "read": {
+          "$ref": "#/definitions/ListField",
+          "description": "Read-only paths."
+        },
+        "run": {
+          "$ref": "#/definitions/ListField",
+          "description": "Executables the script may run."
+        },
+        "write": {
+          "$ref": "#/definitions/ListField",
+          "description": "Writable paths, beyond `OUT_DIR`."
+        }
+      },
+      "type": "object"
+    },
+    "ListField": {
+      "anyOf": [
+        {
+          "description": "An array overriding the inherited value.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A table that, with `inherit = true`, appends `value` to the inherited value.",
+          "properties": {
+            "inherit": {
+              "default": false,
+              "type": "boolean"
+            },
+            "value": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "A list field, following Cargo's array-or-table idiom."
+    },
+    "Source": {
+      "anyOf": [
+        {
+          "description": "An absolute path.",
+          "type": "string"
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/definitions/EnvImport"
+            }
+          ],
+          "description": "The paths in an environment variable, or a default when it's unset."
+        }
+      ],
+      "description": "Where some of a variable's paths come from."
+    },
+    "VariableDef": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Source"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/Source"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A `[variables]` entry: one source, or an array whose sources all apply.\n\nA variable's value is a list of paths; an array is the union of its\nsources' paths."
+    }
+  },
+  "description": "A parsed `sandbox.toml`.",
+  "properties": {
+    "external": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Fields"
+        }
+      ],
+      "description": "Policy for registry and git dependencies."
+    },
+    "grant": {
+      "additionalProperties": {
+        "$ref": "#/definitions/Fields"
+      },
+      "description": "Named grants, overriding built-ins of the same name per field.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "type": "object"
+    },
+    "limits": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Fields"
+        }
+      ],
+      "description": "Consumer caps; constrains only the fields it names."
+    },
+    "local": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Fields"
+        }
+      ],
+      "description": "Policy for workspace members and path dependencies."
+    },
+    "package": {
+      "additionalProperties": {
+        "$ref": "#/definitions/Fields"
+      },
+      "description": "Per-package policy, overriding the category tables.",
+      "propertyNames": {
+        "pattern": "^[^*]+$"
+      },
+      "type": "object"
+    },
+    "variables": {
+      "additionalProperties": {
+        "$ref": "#/definitions/VariableDef"
+      },
+      "description": "User-defined path variables, used in policy paths as `:name`.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "type": "object"
+    }
+  },
+  "title": "crabshell sandbox.toml",
+  "type": "object"
+}

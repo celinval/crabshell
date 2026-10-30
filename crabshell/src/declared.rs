@@ -18,10 +18,11 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 /// A package's `[package.metadata.build-rs]` table.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Declared {
     /// Read-only paths.

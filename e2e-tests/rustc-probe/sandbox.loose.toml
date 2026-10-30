@@ -1,3 +1,4 @@
+#:schema ../../crabshell/schema/sandbox.schema.json
 # A loose consumer policy: the category's grant and any environment variable.
 [external]
 grants = ["rustc"]

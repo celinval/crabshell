@@ -1,3 +1,4 @@
+#:schema ../schema/sandbox.schema.json
 # Built-in named grants.
 #
 # User or project config overrides a grant per field with `[grant.<name>]`:

@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "A package's `[package.metadata.build-rs]` table.",
+  "properties": {
+    "env": {
+      "default": [],
+      "description": "Environment variables the script may read.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "network": {
+      "default": false,
+      "description": "Whether the script needs network access.",
+      "type": "boolean"
+    },
+    "read": {
+      "default": [],
+      "description": "Read-only paths.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "requests": {
+      "default": [],
+      "description": "Named grants the script may use, which expand to the fields above.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "run": {
+      "default": [],
+      "description": "Executables the script may run.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "write": {
+      "default": [],
+      "description": "Writable paths, beyond `OUT_DIR`.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "crabshell [package.metadata.build-rs]",
+  "type": "object"
+}

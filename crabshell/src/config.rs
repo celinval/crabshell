@@ -14,12 +14,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 pub const FILE_NAME: &str = "sandbox.toml";
 
 /// A parsed `sandbox.toml`.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SandboxConfig {
     /// Consumer caps; constrains only the fields it names.
@@ -33,12 +34,15 @@ pub struct SandboxConfig {
     pub external: Fields,
     /// Per-package policy, overriding the category tables.
     #[serde(default)]
+    #[schemars(extend("propertyNames" = { "pattern": "^[^*]+$" }))]
     pub package: BTreeMap<String, Fields>,
     /// Named grants, overriding built-ins of the same name per field.
     #[serde(default)]
+    #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_-]*$" }))]
     pub grant: BTreeMap<String, Fields>,
     /// User-defined path variables, used in policy paths as `:name`.
     #[serde(default)]
+    #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
     pub variables: BTreeMap<String, VariableDef>,
 }
 
@@ -46,7 +50,7 @@ pub struct SandboxConfig {
 ///
 /// A variable's value is a list of paths; an array is the union of its
 /// sources' paths.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum VariableDef {
     One(Source),
@@ -54,7 +58,7 @@ pub enum VariableDef {
 }
 
 /// Where some of a variable's paths come from.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Source {
     /// An absolute path.
@@ -64,7 +68,7 @@ pub enum Source {
 }
 
 /// `{ env = "NAME", default = ... }`: import an environment variable.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EnvImport {
     /// The environment variable to read, as a list of paths like `PATH`.
@@ -77,7 +81,7 @@ pub struct EnvImport {
 ///
 /// Backs `[limits]`, the category tables, and each `[package.<name>]` entry;
 /// unset fields fall through during resolution.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Fields {
     /// Read-only paths.
@@ -95,8 +99,8 @@ pub struct Fields {
 }
 
 /// A list field, following Cargo's array-or-table idiom.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum ListField {
     /// An array overriding the inherited value.
     Override(Vec<String>),
@@ -529,5 +533,10 @@ mod tests {
             let text = format!("[variables]\nx = {{ env = \"{env}\" }}\n");
             assert!(load_err(&text).contains("chosen by a crate"));
         }
+    }
+
+    #[test]
+    fn rejects_unknown_keys_in_list_tables() {
+        assert!(load_err("[external]\nread = { inherit = true, valu = [\"/x\"] }\n").contains("failed to parse"));
     }
 }

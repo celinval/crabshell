@@ -1,3 +1,4 @@
+#:schema ../../crabshell/schema/sandbox.schema.json
 # The tightest consumer policy that works without crate requests: the union of
 # requests.toml, granted to every external crate.
 [external]

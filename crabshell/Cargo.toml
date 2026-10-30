@@ -22,6 +22,7 @@ path = "src/main.rs"
 
 [dependencies]
 glob = "0.3"
+schemars = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 
@@ -30,6 +31,8 @@ landlock = "0.4.7"
 rustix = { version = "1.1.5", features = ["process", "thread"] }
 
 [dev-dependencies]
+jsonschema = { version = "0.60.2", default-features = false }
+serde_json = "1.0.154"
 tempfile = "3"
 
 [lints]

@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Root workspace only. The e2e-tests fixtures pin their lockfiles on purpose.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        update-types: [minor, patch]

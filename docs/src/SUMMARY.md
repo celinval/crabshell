@@ -4,14 +4,13 @@
 
 # Design
 
-- [Approach](design/approach.md)
+- [Design overview](design.md)
 - [Policy specification](policy/README.md)
   - [Structure](policy/structure.md)
   - [Resolution](policy/resolution.md)
   - [Paths and variables](policy/paths.md)
   - [Named grants](policy/grants.md)
   - [Open questions](policy/open-questions.md)
-- [Named grants](design/capability-bundles.md)
 
 # Research
 

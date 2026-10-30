@@ -14,7 +14,9 @@ The two tools answer different questions:
   the build on unapproved use. Separately, it sandboxes code that runs during
   the build and tests.
 - **crabshell:** what a build script may *touch* while it runs. The contract
-  is only about runtime access, and only for build scripts.
+  is only about runtime access, and only for build scripts. The same
+  declarations make a script's inputs known, for caching and remote
+  execution; Cackle has no equivalent goal.
 
 ## Contract side by side
 

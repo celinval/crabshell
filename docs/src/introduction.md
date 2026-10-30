@@ -7,13 +7,17 @@ network it has been allowed. Two parties shape that policy: the crate author
 declares what the script needs, and the consumer sets the ceiling. A crate can
 get less than the consumer allows, never more.
 
+The design follows four tenets, in priority order: security, usability,
+efficiency and low overhead; see the
+[design guidelines](design.md#guidelines).
+
 > ⚠️ **Prototype.** The permission format and confinement mechanism will
 > change.
 
 The book has two parts:
 
 - **Design** describes the approach and the `sandbox.toml` policy contract.
-- **Research** surveys what real build scripts do and compares crabshell with
-  related work.
+- **Research** surveys what real build scripts do, to find defaults that keep
+  annotations light, and compares crabshell with related work.
 
 Build the book with `mdbook build docs`. The output goes to `docs/book`.

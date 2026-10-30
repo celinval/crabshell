@@ -1,7 +1,9 @@
 # CrabShell
 
-**A sandbox for Cargo build scripts.** `crabshell` runs untrusted code with only,
-the access it actually needs — not the full privileges of whoever ran `cargo build`.
+**Confined, cacheable Cargo build scripts.** `crabshell` runs each build script
+with only the access it actually needs — not the full privileges of whoever ran
+`cargo build` — and, because that access is declared, knows every input the
+script could have used.
 
 > ⚠️ **Prototype:** Exploratory work; the API, permission format, and
 > confinement mechanism will change. Not for production use.
@@ -20,6 +22,11 @@ read your credentials (`~/.aws`, `~/.ssh`, env vars), tamper with files anywhere
 or reach the network — before you run a single test. Your build is only as
 trustworthy as the least-trustworthy `build.rs` in the tree, with no way to
 contain a bad one.
+
+Build scripts are also opaque to Cargo. It can't tell what a script depends
+on: `rerun-if-*` directives are self-reported and error prone. So Cargo cache
+soundness rely on build script correctness. It also cannot safely reuse a result
+built on another machine or run the script remotely.
 
 ## What it does
 
@@ -40,8 +47,9 @@ The consumer controls the final policy: a crate can get *less* than you allow, n
 A compromised dependency can't grant itself new powers by editing its own
 manifest.
 
-A bonus: once inputs are declared, a build script's result becomes safely
-cacheable and remote-executable — something Cargo can't do reliably today.
+The same policy is the script's input set. A script can only observe what it
+was granted, so the granted paths, programs and env vars form a sound cache
+key, and describe what a remote executor must provide.
 
 ### What it doesn't cover
 
@@ -98,10 +106,6 @@ config for your own crates.
 
 By default a build script gets almost nothing: it can read its own crate and
 write to `OUT_DIR`, and that's it. Everything else is opt-in.
-
-`e2e-tests/` holds workspaces that build real crates under the sandbox; run
-them with `cargo test -- --ignored`. They build with the nightly pinned in
-`e2e-tests/rust-toolchain.toml`.
 
 ## Design
 

@@ -1,8 +1,26 @@
-# Approach
+# Design overview
 
-Three layers, each independently useful, that compose into an enforced sandbox.
+## Guidelines
 
-## 1. Cargo's `host.runner` hook (unstable)
+We follow these tenets to guide our design, in priority order:
+
+1. *Security is non-negotiable.* No convenience or speedup may let a build
+   script reach more than it was granted.
+2. *Usability drives adoption.* Most build scripts should run with minimal
+   annotations, and the policies people do write should survive updates and
+   work across build environments.
+3. *Precise inputs make builds efficient.* A script can only observe what it
+   was granted, so its grants should be precise enough to serve as a sound
+   cache key and a spec for remote execution.
+4. *Confinement is free.* Sandboxing must not noticeably slow the build or
+   need privileged setup.
+
+## Approach
+
+Three layers, each independently useful, that compose into an enforced sandbox
+whose policy also names every input a build script can observe.
+
+### 1. Cargo's `host.runner` hook (unstable)
 
 We build on Cargo's accepted, unstable `host.runner` hook
 ([rust-lang/cargo#16591](https://github.com/rust-lang/cargo/issues/16591)),
@@ -18,7 +36,7 @@ stays policy-free — it decides *that* a script runs through a runner; the runn
 decides *how* it's confined. (The hook covers build scripts only; proc-macros
 can't be wrapped this way, since rustc loads them directly.)
 
-## 2. A sandbox backend
+### 2. A sandbox backend
 
 The runner enforces the resolved permissions through a sandbox backend, for
 example Landlock, namespaces (e.g. bubblewrap), or seccomp. The policy format
@@ -36,7 +54,7 @@ process and then execs the build script, which inherits the restriction:
 - Denied paths are visible but return `EACCES`; they aren't hidden as they
   would be with mount namespaces.
 
-## 3. Declarative permissions
+### 3. Declarative permissions
 
 Two inputs feed the runner's policy.
 
@@ -44,14 +62,13 @@ Two inputs feed the runner's policy.
 
 ```toml
 [package.metadata.build-rs]
-read = ["/usr/include", "/usr/lib"]   # extra read-only paths
-write = ["$HOME/.cache/foo"]          # extra writable paths
-run  = ["cc", "pkg-config"]           # executables it may exec
-env  = ["TARGET", "OPT_LEVEL"]        # env vars it may read
+requests = ["pkg-config", "cc"]            # named grants it may use
+read = [":manifest_dir"]                   # its own files
+env  = ["OPENSSL_DIR", "OPENSSL_STATIC"]   # knobs it reads
 ```
 
 Nothing needs listing for what a build script can't run without: its
-[implicit access](../policy/structure.md) (`OUT_DIR`, `/dev/null`, a private
+[implicit access](policy/structure.md) (`OUT_DIR`, `/dev/null`, a private
 `TMPDIR`, the dynamic loader and libc). When the policy says nothing, a
 package is also granted read access to its own directory, the **default
 grant**, which tables can replace and a request may narrow.
@@ -62,10 +79,10 @@ fields request nothing.
 any build script in the graph is actually allowed. The consumer is the upper
 bound: a package's requests are *restrictive*, not permissive, and the effective
 set is the intersection of the two. The `sandbox.toml` schema is in the
-[policy specification](../policy/README.md), kept separate because the policy
+[policy specification](policy/README.md), kept separate because the policy
 surface can evolve without touching the runner mechanism.
 
-## Flow
+### Flow
 
 ```text
 cargo build

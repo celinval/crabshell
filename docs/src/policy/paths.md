@@ -1,8 +1,5 @@
 # Paths and variables
 
-> **Status:** implemented, except comparing paths by containment (see
-> [below](#comparing-paths)). Grants can't provide variables of their own yet.
-
 A policy path is an absolute path, or a **variable** plus a subpath:
 `:manifest_dir/build/grammar.lalrpop`. The leading `:` keeps variables apart
 from environment variables; policy paths never read the environment
@@ -78,11 +75,12 @@ exists but can't be listed is an error. `env` entries also accept a trailing
 
 ## Comparing paths
 
-Clamping and narrowing compare paths by **containment**: a declared
-`:manifest_dir/build` is inside a granted `:manifest_dir`. That's what lets a
-crate narrow its read access to a few files. (Not implemented yet: the
-prototype compares entries as written, so `/usr` doesn't cover `/usr/include`,
-and a crate that reads its own files requests all of `:manifest_dir`.)
+Clamping and narrowing compare paths by **containment**: a requested
+`:manifest_dir/build/probe.rs` is inside a granted `:manifest_dir`, and
+`/usr/include` inside `/usr`. That's what lets a crate narrow its read access
+to the files it uses. A trailing `*` pattern covers every entry with its
+prefix.
 
-Variables expand only after clamping and narrowing, which compare entries as
-written. A trailing `*` pattern covers every entry with its prefix.
+Entries compare as written, before variables expand. So
+`:manifest_dir/build` is inside `:manifest_dir`, but not inside the absolute
+path `:manifest_dir` expands to.

@@ -3,7 +3,8 @@
 # Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
 # `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
 # Every build script in the fixture is listed; a crate that reads its own
-# files requests its crate root, which is otherwise narrowed away. Running
+# files requests exactly those, since the crate root is otherwise narrowed
+# away. Running
 # `$RUSTC` comes from the
 # `rustc` grant, which also covers RUSTC, its wrappers and
 # CARGO_ENCODED_RUSTFLAGS.
@@ -34,9 +35,8 @@ env = ["CARGO_CFG_TARGET_OS"]
 env = ["CARGO_CFG_SANITIZE"]
 
 [package.proc-macro2]
-# Reads its own crate: compile probes from its own `build/` sources. Subpaths
-# need containment-based paths.
-read = [":manifest_dir"]
+# Reads compile probes from its own sources.
+read = [":manifest_dir/src/probe"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
@@ -62,8 +62,7 @@ requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 
 [package.thiserror]
-# Reads its own crate: compile probes from its own `build/probe.rs`. Subpaths
-# need containment-based paths.
-read = [":manifest_dir"]
+# Reads compile probes from its own sources.
+read = [":manifest_dir/build/probe.rs"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]

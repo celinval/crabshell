@@ -82,8 +82,8 @@ Beneath the tables, two built-ins apply to every build script:
   - other fields: nothing.
 
   Like any grant, an array replaces it, `inherit = true` extends it,
-  `[limits]` clamps it, and a request narrows it. Until paths compare by
-  containment, a crate that reads its own files requests the whole crate root.
+  `[limits]` clamps it, and a request narrows it, e.g. to
+  `:manifest_dir/build/probe.rs`.
 
 A build script gets nothing beyond these unless a table or its own
 declaration grants it.

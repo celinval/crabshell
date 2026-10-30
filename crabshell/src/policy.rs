@@ -5,9 +5,10 @@
 //! their entries, and `[limits]` clamps the result. Pure and filesystem-free, so it is covered by unit tests
 //! rather than end-to-end builds.
 //!
-//! Clamping and tightening intersect lists entry by entry, where an entry
-//! ending in `*` covers every entry with that prefix. Paths are compared as
-//! strings, so `/usr` doesn't yet cover `/usr/include`.
+//! Clamping and tightening intersect lists entry by entry. An entry ending in
+//! `*` covers every entry with that prefix, and a path covers the paths under
+//! it, so a request can narrow a granted directory to a few files. Paths
+//! compare as written, before `:variables` expand.
 
 use crate::config::{Fields, ListField, SandboxConfig};
 use crate::declared::Declared;
@@ -32,8 +33,7 @@ pub const IMPLICIT_WRITE: &[&str] = &["/dev/null"];
 ///
 /// It's what `read` resolves to when no table sets it, so tables can replace
 /// it (an array) or extend it (`inherit = true`), `[limits]` clamps it, and a
-/// request narrows it. Requests compare paths as strings for now, so a crate
-/// that reads its own files requests `:manifest_dir` as a whole.
+/// request narrows it, e.g. to `:manifest_dir/build/probe.rs`.
 pub const DEFAULT_READ: &[&str] = &[":manifest_dir"];
 
 /// The default grant for `env`: the target and host triples, and what Cargo
@@ -192,11 +192,19 @@ fn intersect(a: &[String], b: &[String]) -> Vec<String> {
     dedup(out)
 }
 
-/// Whether `pattern` covers `entry`: equal, or a matching `prefix*`.
+/// Whether `pattern` covers `entry`: equal, a matching `prefix*`, or a path
+/// under `pattern` at a `/` boundary.
+///
+/// Paths compare as written, before variables expand, so `:manifest_dir/build`
+/// is under `:manifest_dir`, but not under the absolute path it expands to.
+/// Env names contain no `/`, so for them this is plain equality.
 fn covers(pattern: &str, entry: &str) -> bool {
-    match pattern.strip_suffix('*') {
-        Some(prefix) => entry.starts_with(prefix),
-        None => pattern == entry,
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        return entry.starts_with(prefix);
+    }
+    match entry.strip_prefix(pattern) {
+        Some(rest) => rest.is_empty() || rest.starts_with('/') || pattern.ends_with('/'),
+        None => false,
     }
 }
 
@@ -579,5 +587,30 @@ mod tests {
         );
 
         assert!(!resolve(&config, &external("dep")).network);
+    }
+
+    #[test]
+    fn paths_cover_the_paths_under_them() {
+        assert!(covers(":manifest_dir", ":manifest_dir/build/probe.rs"));
+        assert!(covers("/usr", "/usr/include"));
+        assert!(covers("/", "/etc"));
+        assert!(!covers("/usr", "/usrlocal"));
+        assert!(!covers("/usr/include", "/usr"));
+        assert!(covers("TARGET", "TARGET"));
+        assert!(!covers("TARGET", "TARGET_CC"));
+    }
+
+    #[test]
+    fn a_request_narrows_the_crate_root_to_files() {
+        let declared = Declared {
+            read: vec![":manifest_dir/build/probe.rs".into(), "/etc".into()],
+            ..Declared::default()
+        };
+        let none = SandboxConfig::default();
+        let tightened =
+            tighten(resolve(&none, &external("dep")), &declared, &external("dep"), &none);
+        let mut expected = vec![":manifest_dir/build/probe.rs".to_string()];
+        expected.extend(implicit());
+        assert_eq!(tightened.read, expected);
     }
 }

@@ -160,8 +160,9 @@ What the requests cost, per build script:
   Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
   Granting those by default would roughly halve the largest requests (`libc`,
   `openssl-sys`); see the open question on the default policy.
-- **8 of 23 build scripts read their own crate,** so they request the crate
-  root, which requests otherwise narrow away. Two of them, proc-macro2 and
+- **8 of 23 build scripts read their own crate,** so they request the files
+  they use, e.g. thiserror's `build/probe.rs` or libz-sys's `src/smoke.c`;
+  requests otherwise narrow the crate root away. Two of them, proc-macro2 and
   thiserror, compile probe sources from their crate: without that request
   they still succeed, but silently lose cfgs.
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob

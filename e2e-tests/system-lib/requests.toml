@@ -3,8 +3,8 @@
 # Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
 # `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
 # Every build script in the fixture is listed; a crate that reads its own
-# files requests its crate root, which is otherwise narrowed away. Tools come
-# from named grants
+# files requests exactly those, since the crate root is otherwise narrowed
+# away. Tools come from named grants
 # (`rustc`, `pkg-config`, `cc`); a crate lists the knobs it reads itself,
 # including the pkg-config crate's per-library `<LIB>_NO_PKG_CONFIG`,
 # `<LIB>_STATIC` and `<LIB>_DYNAMIC`.
@@ -24,9 +24,9 @@ env = [
 ]
 
 [package.libsqlite3-sys]
-# Reads its own crate: copies bundled bindings; builds the vendored sqlite3
-# when bundled. Subpaths need containment-based paths.
-read = [":manifest_dir"]
+# Reads pre-generated bindings for the linked library, and the vendored
+# sqlite3 (with its own bindings) when bundled.
+read = [":manifest_dir/bindgen-bindings", ":manifest_dir/sqlite3"]
 requests = ["pkg-config"]
 env = [
     "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_WINDOWS", "DEP_OPENSSL_INCLUDE",
@@ -37,9 +37,8 @@ env = [
 ]
 
 [package.libz-sys]
-# Reads its own crate: compiles its `src/smoke.c` check, and the vendored zlib
-# as a fallback. Subpaths need containment-based paths.
-read = [":manifest_dir"]
+# Reads its zlib check, and the vendored zlib as a fallback.
+read = [":manifest_dir/src/smoke.c", ":manifest_dir/src/zlib"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "HOST", "TARGET",
@@ -47,9 +46,9 @@ env = [
 ]
 
 [package.lzma-sys]
-# Reads its own crate: builds the vendored xz unless pkg-config finds one.
-# Subpaths need containment-based paths.
-read = [":manifest_dir"]
+# Reads the vendored xz, used unless pkg-config finds one. The glob keeps the
+# request valid when the vendored version changes.
+read = [":manifest_dir/xz-*"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ENDIAN", "LZMA_API_STATIC", "TARGET",
@@ -60,9 +59,8 @@ env = [
 # (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`). A vendor can't name the triple in
 # advance, and patterns only match prefixes, so it's listed for this host.
 [package.openssl-sys]
-# Reads its own crate: expands its `build/expando.c`. Subpaths need
-# containment-based paths.
-read = [":manifest_dir"]
+# Reads the header it expands to detect the OpenSSL version.
+read = [":manifest_dir/build/expando.c"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_CFG_UNIX", "DEP_BSSL_CONF",
@@ -77,9 +75,8 @@ env = [
 ]
 
 [package.zstd-sys]
-# Reads its own crate: builds the vendored zstd unless pkg-config finds one.
-# Subpaths need containment-based paths.
-read = [":manifest_dir"]
+# Reads the vendored zstd, used unless pkg-config finds one.
+read = [":manifest_dir/zstd"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_WINDOWS",

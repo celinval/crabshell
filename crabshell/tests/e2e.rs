@@ -66,6 +66,18 @@ impl Build {
         Self { dir }
     }
 
+    /// An `XDG_CONFIG_HOME`, so the real user config can't affect tests.
+    fn xdg(&self) -> PathBuf {
+        self.dir.path().join("xdg")
+    }
+
+    /// Write the user's own config, which caps the project's policy.
+    fn user_config(&self, text: &str) {
+        let dir = self.xdg().join("crabshell");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.toml"), text).unwrap();
+    }
+
     fn out_dir(&self) -> PathBuf {
         self.dir.path().join("out")
     }
@@ -104,6 +116,7 @@ impl Build {
             .env("CARGO_HOME", self.cargo_home())
             .env("HOST", host())
             .env("OUT_DIR", self.out_dir())
+            .env("XDG_CONFIG_HOME", self.xdg())
             .env("CRABSHELL_CONFIG", self.dir.path().join("sandbox.toml"));
         for (key, value) in env {
             cmd.env(key, value);
@@ -200,6 +213,7 @@ fn without_a_config_nothing_is_granted() {
         .env("CARGO_PKG_NAME", "dep")
         .env("CARGO_MANIFEST_DIR", &manifest)
         .env("HOST", host())
+        .env("XDG_CONFIG_HOME", dir.path().join("xdg"))
         .env_remove("CRABSHELL_CONFIG")
         .env("CRABSHELL_GRANTED", "yes")
         .status()
@@ -208,28 +222,32 @@ fn without_a_config_nothing_is_granted() {
     assert!(status.success());
 }
 
-/// Without `CRABSHELL_CONFIG`, crabshell walks up from the manifest directory.
+/// crabshell never searches near a package for a policy: a dependency could
+/// ship a `sandbox.toml` granting itself anything.
 #[test]
-fn config_is_discovered_by_walking_up() {
+fn a_sandbox_toml_near_the_package_is_ignored() {
     let dir = tempfile::tempdir().unwrap();
     let sandbox = "[local]\nenv = [\"CRABSHELL_GRANTED\"]\n";
-    std::fs::write(dir.path().join("sandbox.toml"), sandbox).unwrap();
     let manifest = dir.path().join("nested/pkg");
     std::fs::create_dir_all(&manifest).unwrap();
+    std::fs::write(manifest.join("sandbox.toml"), sandbox).unwrap();
+    std::fs::write(dir.path().join("sandbox.toml"), sandbox).unwrap();
 
-    let status = Command::new(crabshell())
+    let output = Command::new(crabshell())
         .arg(probe())
-        .args(["env-present", "CRABSHELL_GRANTED"])
+        .args(["env-absent", "CRABSHELL_GRANTED"])
         .env("CARGO_PKG_NAME", "mine")
         .env("CARGO_MANIFEST_DIR", &manifest)
         .env("CARGO_HOME", dir.path().join("cargo-home"))
         .env("HOST", host())
+        .env("XDG_CONFIG_HOME", dir.path().join("xdg"))
         .env_remove("CRABSHELL_CONFIG")
         .env("CRABSHELL_GRANTED", "yes")
-        .status()
+        .output()
         .unwrap();
 
-    assert!(status.success());
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("CRABSHELL_CONFIG is not set"));
 }
 
 #[test]
@@ -334,22 +352,6 @@ fn the_floor_grants_dev_null_and_a_private_tmpdir() {
     assert!(build.check("dep", Origin::External, &[], &["unwritable", "/tmp"]));
 }
 
-/// A requests file stands in for a crate's `[package.metadata.build-rs]`.
-#[cfg(feature = "test-requests")]
-#[test]
-fn injected_requests_tighten_the_grant() {
-    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
-    let requests = build.dir.path().join("requests.toml");
-    std::fs::write(&requests, "[package.dep]\nenv = [\"CRABSHELL_GRANTED\"]\n").unwrap();
-    let mut env = GRANTED.to_vec();
-    env.push(("CRABSHELL_REQUESTS", requests.to_str().unwrap()));
-
-    assert!(build.check("dep", Origin::External, &env, &["env-present", "CRABSHELL_GRANTED"]));
-    assert!(build.check("dep", Origin::External, &env, &["env-absent", "CRABSHELL_UNGRANTED"]));
-    // Packages the file doesn't list keep the consumer's grant.
-    assert!(build.check("other", Origin::External, &env, &["env-present", "CRABSHELL_UNGRANTED"]));
-}
-
 #[test]
 fn out_dir_and_tmpdir_are_write_only() {
     let build = Build::new("[external]\n");
@@ -376,6 +378,22 @@ fn write_grants_no_read_access() {
     let manifest = build.manifest_dir("dep", &Origin::External);
 
     assert!(build.check("dep", Origin::External, &[], &["write-only", manifest.to_str().unwrap()]));
+}
+
+/// A requests file stands in for a crate's `[package.metadata.build-rs]`.
+#[cfg(feature = "test-requests")]
+#[test]
+fn injected_requests_tighten_the_grant() {
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
+    let requests = build.dir.path().join("requests.toml");
+    std::fs::write(&requests, "[package.dep]\nenv = [\"CRABSHELL_GRANTED\"]\n").unwrap();
+    let mut env = GRANTED.to_vec();
+    env.push(("CRABSHELL_REQUESTS", requests.to_str().unwrap()));
+
+    assert!(build.check("dep", Origin::External, &env, &["env-present", "CRABSHELL_GRANTED"]));
+    assert!(build.check("dep", Origin::External, &env, &["env-absent", "CRABSHELL_UNGRANTED"]));
+    // Packages the file doesn't list keep the consumer's grant.
+    assert!(build.check("other", Origin::External, &env, &["env-present", "CRABSHELL_UNGRANTED"]));
 }
 
 #[cfg(not(feature = "test-requests"))]
@@ -433,4 +451,38 @@ fn limits_compare_paths_after_expanding_variables() {
     // A cap elsewhere removes it.
     write_policy("/usr");
     assert!(build.check("dep", Origin::External, &[], &["unreadable", file]));
+}
+
+#[test]
+fn the_user_config_caps_the_project_policy() {
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
+    build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
+
+    let output =
+        build.run("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_UNGRANTED"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("narrows dep's policy: env CRABSHELL_UNGRANTED"), "{stdout}");
+    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
+}
+
+/// Fields the user config doesn't name stay as the project sets them.
+#[test]
+fn the_user_config_leaves_unnamed_fields_alone() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\"]\nnetwork = true\n");
+    build.user_config("[limits]\nnetwork = false\n");
+
+    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
+    assert!(build.check("dep", Origin::External, &GRANTED, &["no-connect", &addr]));
+}
+
+/// The user config can't widen the project's policy.
+#[test]
+fn the_user_config_cannot_widen() {
+    let build = Build::new("[external]\nenv = []\n");
+    build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
+
+    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
 }

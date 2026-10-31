@@ -222,6 +222,115 @@ pub fn tighten(
     })
 }
 
+/// A per-field ceiling, such as the user's own config.
+///
+/// `None` leaves a field unconstrained, so a user config that only sets
+/// `network = false` doesn't also cap `read`.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Caps {
+    pub read: Option<Vec<String>>,
+    pub write: Option<Vec<String>>,
+    pub run: Option<Vec<String>>,
+    pub env: Option<Vec<String>>,
+    pub network: Option<bool>,
+}
+
+/// The ceiling `config` sets for `pkg`: the fields its tables, grants or
+/// `[limits]` name, and nothing else. Defaults don't apply.
+pub fn caps(
+    config: &SandboxConfig,
+    pkg: &PackageContext,
+    x: &impl Expand,
+) -> Result<Caps, PathError> {
+    let chain = chain(config, pkg);
+    let grants = grants::effective(config);
+    let names = set_list(&chain, |f| &f.grants).unwrap_or_default();
+    let field = |get: fn(&Fields) -> &Option<ListField>, kind| -> Result<_, PathError> {
+        let granted = grants::expand(&grants, &names, get);
+        let value = match set_list(&chain, get) {
+            Some(mut value) => {
+                value.extend(granted);
+                Some(value)
+            }
+            None if !granted.is_empty() => Some(granted),
+            None => None,
+        };
+        let value = value.map(|value| expand_all(x, kind, &value)).transpose()?;
+        let limit = get(&config.limits).as_ref().map(|cap| expand_all(x, kind, entries(cap)));
+        Ok(match (value, limit.transpose()?) {
+            (Some(value), Some(limit)) => Some(intersect(&value, &limit)),
+            (value, limit) => value.or(limit),
+        })
+    };
+    let network = chain.iter().find_map(|fields| fields.network);
+    let network = network.or_else(|| grants::expand_network(&grants, &names).then_some(true));
+    let network = match (network, config.limits.network) {
+        (Some(a), Some(b)) => Some(a && b),
+        (a, b) => a.or(b),
+    };
+    Ok(Caps {
+        read: field(|f| &f.read, Kind::Paths)?,
+        write: field(|f| &f.write, Kind::Paths)?,
+        run: field(|f| &f.run, Kind::Paths)?,
+        env: field(|f| &f.env, Kind::Names)?,
+        network,
+    })
+}
+
+/// Clamp `permissions` to `caps`, keeping implicit access.
+///
+/// Also returns the entries the caps removed, to report a ceiling tighter than
+/// the policy it applies to.
+pub fn cap(
+    permissions: Permissions,
+    caps: &Caps,
+    pkg: &PackageContext,
+) -> (Permissions, Vec<String>) {
+    let mut removed = Vec::new();
+    let mut clamp = |field: &str,
+                     granted: Vec<String>,
+                     cap: &Option<Vec<String>>,
+                     keep: &[&str]| {
+        let Some(cap) = cap else { return granted };
+        let mut out = intersect(&granted, cap);
+        out.extend(granted.iter().filter(|entry| keep.contains(&entry.as_str())).cloned());
+        let out = dedup(out);
+        removed.extend(granted.iter().filter(|e| !out.contains(e)).map(|e| format!("{field} {e}")));
+        out
+    };
+    let capped = Permissions {
+        read: clamp("read", permissions.read, &caps.read, &implicit_read(&pkg.host)),
+        write: clamp("write", permissions.write, &caps.write, IMPLICIT_READ_WRITE),
+        run: clamp("run", permissions.run, &caps.run, &[]),
+        env: clamp("env", permissions.env, &caps.env, IMPLICIT_ENV),
+        network: permissions.network && caps.network.unwrap_or(true),
+        list: permissions.list,
+    };
+    if permissions.network && !capped.network {
+        removed.push("network".into());
+    }
+    (capped, removed)
+}
+
+/// The value the most specific table that sets the field gives it, without a
+/// default: `None` when no table sets it.
+fn set_list(
+    chain: &[&Fields],
+    get: impl Fn(&Fields) -> &Option<ListField> + Copy,
+) -> Option<Vec<String>> {
+    let (head, rest) = chain.split_first()?;
+    match get(head) {
+        None => set_list(rest, get),
+        Some(ListField::Override(value)) => Some(dedup(value.clone())),
+        Some(ListField::Inherit { inherit, value }) => {
+            let mut out =
+                if *inherit { set_list(rest, get).unwrap_or_default() } else { Vec::new() };
+            out.extend(value.iter().cloned());
+            Some(dedup(out))
+        }
+    }
+}
+
 /// The tables applying to `pkg`, most specific first.
 fn chain<'a>(config: &'a SandboxConfig, pkg: &PackageContext) -> Vec<&'a Fields> {
     let category = if pkg.is_local { &config.local } else { &config.external };
@@ -699,5 +808,27 @@ mod tests {
         let mut expected = vec![":manifest_dir/build/probe.rs".to_string()];
         expected.extend(implicit());
         assert_eq!(tightened.read, expected);
+    }
+
+    #[test]
+    fn caps_cover_only_the_fields_a_config_names() {
+        let user = config("[limits]\nnetwork = false\n\n[external]\nenv = [\"TARGET\"]\n");
+        let caps = super::caps(&user, &external("dep"), &Fixed).unwrap();
+        assert_eq!(caps.env, Some(vec!["TARGET".to_string()]));
+        assert_eq!(caps.network, Some(false));
+        assert_eq!(caps.read, None);
+        assert_eq!(caps.run, None);
+    }
+
+    #[test]
+    fn capping_keeps_implicit_access_and_reports_removals() {
+        let project = config("[external]\nenv = [\"TARGET\", \"CC\"]\nnetwork = true\n");
+        let user = config("[external]\nenv = [\"TARGET\"]\nread = []\nnetwork = false\n");
+        let caps = super::caps(&user, &external("dep"), &Fixed).unwrap();
+        let (capped, removed) = cap(resolve(&project, &external("dep")), &caps, &external("dep"));
+        assert_eq!(capped.env, ["TARGET", "OUT_DIR"]);
+        assert_eq!(capped.read, implicit());
+        assert!(!capped.network);
+        assert_eq!(removed, ["read :manifest_dir", "env CC", "network"]);
     }
 }

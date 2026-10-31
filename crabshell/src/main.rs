@@ -32,21 +32,33 @@ fn main() -> ExitCode {
 /// Resolve the permissions for the package Cargo is building.
 ///
 /// Cargo identifies the package through the build script's environment, which
-/// we inherit. Without a `sandbox.toml` only implicit access and the default
-/// grant apply. The package's own declaration, if any, then tightens the
-/// result. Entries expand to concrete paths and names before they're compared.
+/// we inherit. The project's policy comes from `CRABSHELL_CONFIG`; without it
+/// only implicit access and the default grant apply. The package's own
+/// declaration, if any, then tightens the result, and the user's config caps
+/// it. Entries expand to concrete paths and names before they're compared.
 fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
 
-    let config = match config_path(&manifest_dir) {
-        Some(path) => config::load(&path)?,
-        None => SandboxConfig::default(),
+    // Cargo shows `cargo::warning` lines from a build script's stdout.
+    let mut config = match std::env::var_os("CRABSHELL_CONFIG") {
+        Some(path) => config::load(Path::new(&path))?,
+        None => {
+            println!("cargo::warning=crabshell: CRABSHELL_CONFIG is not set; using the defaults");
+            SandboxConfig::default()
+        }
     };
+    let user_path = config::user_config_path(|name| std::env::var_os(name));
+    let user = match user_path.as_deref().filter(|path| path.is_file()) {
+        Some(path) => Some((path.to_path_buf(), config::load(path)?)),
+        None => None,
+    };
+    if let Some((_, user)) = &user {
+        config.take_facts(user);
+    }
     if config.external.network == Some(true) {
-        // Cargo shows `cargo::warning` lines from a build script's stdout.
         println!(
             "cargo::warning=crabshell: [external] grants network to every registry and git dependency"
         );
@@ -65,10 +77,25 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         Some(declared) => Some(declared),
         None => declared::load(&manifest_dir)?,
     };
-    let permissions = match declared {
+    let mut permissions = match declared {
         Some(declared) => policy::tighten(permissions, &declared, &pkg, &config, &x)?,
         None => permissions,
     };
+    if let Some((path, mut user)) = user {
+        // The user's tables see the same grants and variables as the project.
+        user.take_facts(&config);
+        let caps = policy::caps(&user, &pkg, &x)?;
+        let removed;
+        (permissions, removed) = policy::cap(permissions, &caps, &pkg);
+        if !removed.is_empty() {
+            println!(
+                "cargo::warning=crabshell: {} narrows {}'s policy: {}",
+                path.display(),
+                pkg.name,
+                removed.join(", ")
+            );
+        }
+    }
     let dropped = x.dropped();
     if !dropped.is_empty() && std::env::var_os("CRABSHELL_LOG").is_some() {
         eprintln!("crabshell: dropped entries with undefined variables: {dropped:?}");
@@ -91,23 +118,6 @@ fn injected(package: &str) -> Result<Option<declared::Declared>, Box<dyn std::er
     {
         let _ = (path, package);
         Err("CRABSHELL_REQUESTS needs a crabshell built with the `test-requests` feature".into())
-    }
-}
-
-/// Locate the `sandbox.toml` governing this build.
-///
-/// A dependency's manifest lives under `CARGO_HOME`, so walking up from it
-/// never reaches the consumer's config. `CRABSHELL_CONFIG` carries the path
-/// instead, which Cargo can supply for every build script at once:
-///
-/// ```toml
-/// [env]
-/// CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
-/// ```
-fn config_path(manifest_dir: &Path) -> Option<PathBuf> {
-    match std::env::var_os("CRABSHELL_CONFIG") {
-        Some(path) => Some(PathBuf::from(path)),
-        None => config::find(manifest_dir),
     }
 }
 

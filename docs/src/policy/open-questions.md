@@ -13,9 +13,14 @@
 - **Policy changes don't rerun build scripts.** The policy isn't part of
   Cargo's fingerprint, so after a policy edit, results cached under the old
   policy remain until a clean build.
-- **User vs project config.** Parked. A Cargo-style optional include is
-  probably enough for now; a project lint (e.g. no absolute machine paths in a
-  checked-in `sandbox.toml`) can come later.
+- **A project lint.** E.g. no absolute machine paths in a checked-in
+  `sandbox.toml`; those belong in the user's config.
+- **Diagnostics need a cargo driver.** crabshell reports problems as
+  `cargo::warning` lines (no `CRABSHELL_CONFIG`, a user config narrowing a
+  project's policy, network granted to `[external]`), but Cargo redirects
+  build-script output and only shows warnings for local packages. A
+  `cargo crabshell` driver could collect and show them, and also own setting
+  `CRABSHELL_CONFIG` and `host.runner`.
 - **Value provenance from Cargo.** crabshell rejects crate-chosen env vars
   (`DEP_*`, `CARGO_PKG_*`) in variable definitions by name only. The
   `host.runner` contract could tell the runner which values Cargo injected,

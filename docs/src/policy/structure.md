@@ -1,5 +1,26 @@
 # Structure
 
+## Policy files
+
+Two files can apply to a build:
+
+- **The project's policy:** the file `CRABSHELL_CONFIG` names, usually set
+  for every build script through Cargo's `[env]`. Without it, only implicit
+  access and the default grant apply, and crabshell warns. crabshell never
+  looks for a `sandbox.toml` near a package: a dependency could ship one, or
+  its repository could, and grant itself anything.
+- **The user's own config:** `$XDG_CONFIG_HOME/crabshell/config.toml`, or
+  `~/.config/crabshell/config.toml`. Same format. It **caps** the project's
+  policy: each field it names (in its tables, grants or `[limits]`) is
+  intersected with the project's result, so a laptop stays safe even in a
+  project with loose permissions. Fields it doesn't name are left alone. Its
+  `[variables]` and `[grant.*]` are machine facts and replace the project's
+  of the same name.
+
+The rest of this page describes the format both files share.
+
+## Tables
+
 `sandbox.toml` is resolved **per field**, in the spirit of Cargo's `[profile]`
 inheritance: a table sets only the fields it cares about; unset fields fall
 through to a less-specific table, ultimately to the built-in default grant. Three kinds

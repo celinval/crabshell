@@ -1,8 +1,9 @@
-//! Discovering and parsing `sandbox.toml` into typed data.
+//! Locating and parsing policy files into typed data.
 //!
-//! Resolving the effective permission set is [`crate::policy`]'s job. [`find`]
-//! walks up from a directory and returns the closest `sandbox.toml`; for
-//! simplicity only that one file is used.
+//! Resolving the effective permission set is [`crate::policy`]'s job. Two
+//! files can apply: the project's, named by `CRABSHELL_CONFIG`, and the user's
+//! own, at [`user_config_path`]. crabshell never searches near a package for
+//! a `sandbox.toml`: a dependency could ship one and grant itself anything.
 //!
 //! A package falls into one of two categories, `[local]` or `[external]`, with
 //! `[package.<name>]` overriding both. Glob keys under `[package]` are rejected
@@ -11,6 +12,7 @@
 //! [named grants](crate::grants).
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -113,12 +115,26 @@ pub enum ListField {
     },
 }
 
-/// Return the closest `sandbox.toml` at or above `start`.
-pub fn find(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .map(|dir| dir.join(FILE_NAME))
-        .find(|candidate| candidate.is_file())
+/// Where the user's own config lives, which caps every project's policy.
+///
+/// `$XDG_CONFIG_HOME/crabshell/config.toml`, or `~/.config/crabshell/config.toml`
+/// when `XDG_CONFIG_HOME` is unset or not absolute, as the XDG spec says.
+pub fn user_config_path(env: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    let xdg = env("XDG_CONFIG_HOME").map(PathBuf::from).filter(|dir| dir.is_absolute());
+    let base = match xdg {
+        Some(dir) => dir,
+        None => PathBuf::from(env("HOME")?).join(".config"),
+    };
+    Some(base.join("crabshell").join("config.toml"))
+}
+
+impl SandboxConfig {
+    /// Take `other`'s machine facts, `[variables]` and `[grant.*]`, over this
+    /// config's own of the same name.
+    pub fn take_facts(&mut self, other: &SandboxConfig) {
+        self.variables.extend(other.variables.clone());
+        self.grant.extend(other.grant.clone());
+    }
 }
 
 /// Read, parse, and validate the `sandbox.toml` at `path`.
@@ -450,31 +466,15 @@ mod tests {
     }
 
     #[test]
-    fn find_walks_up_to_first_config() {
-        let root = tempfile::tempdir().unwrap();
-        let nested = root.path().join("a/b/c");
-        std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(root.path().join(FILE_NAME), "").unwrap();
-
-        assert_eq!(find(&nested), Some(root.path().join(FILE_NAME)));
-    }
-
-    #[test]
-    fn find_prefers_the_closest_config() {
-        let root = tempfile::tempdir().unwrap();
-        let mid = root.path().join("a");
-        let nested = mid.join("b");
-        std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(root.path().join(FILE_NAME), "").unwrap();
-        std::fs::write(mid.join(FILE_NAME), "").unwrap();
-
-        assert_eq!(find(&nested), Some(mid.join(FILE_NAME)));
-    }
-
-    #[test]
-    fn find_returns_none_when_absent() {
-        let root = tempfile::tempdir().unwrap();
-        assert_eq!(find(root.path()), None);
+    fn user_config_follows_xdg() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| OsString::from(v))
+        };
+        let xdg = user_config_path(env(&[("XDG_CONFIG_HOME", "/x"), ("HOME", "/h")]));
+        assert_eq!(xdg, Some(PathBuf::from("/x/crabshell/config.toml")));
+        let relative = user_config_path(env(&[("XDG_CONFIG_HOME", "x"), ("HOME", "/h")]));
+        assert_eq!(relative, Some(PathBuf::from("/h/.config/crabshell/config.toml")));
+        assert_eq!(user_config_path(env(&[])), None);
     }
 
     fn load_err(text: &str) -> String {

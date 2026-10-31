@@ -11,9 +11,17 @@ updates:
       cargo:
         update-types: [minor, patch]
 
-  # Keeps the SHA-pinned actions in .github/workflows up to date.
+  # The CLI tools CI installs; see .github/cli-tools/Cargo.toml.
+  - package-ecosystem: cargo
+    directory: /.github/cli-tools
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # Keeps the SHA-pinned actions in workflows and local actions up to date.
   - package-ecosystem: github-actions
-    directory: /
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: weekly
     cooldown:

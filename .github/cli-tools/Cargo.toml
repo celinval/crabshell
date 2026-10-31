@@ -1,0 +1,20 @@
+# The CLI tools CI installs, with the exact versions it uses.
+#
+# Not a real crate: listing the tools as dependencies lets Dependabot bump
+# them. `.github/actions/install-tool` reads the versions from here, so each
+# must be an exact `=x.y.z` requirement on one line.
+[package]
+name = "cli-tools"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "lib.rs"
+
+# A workspace of its own, so it isn't mistaken for a member of the root one.
+[workspace]
+
+[dependencies]
+cargo-audit = "=0.22.2"
+mdbook = "=0.5.4"

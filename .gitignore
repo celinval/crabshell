@@ -39,3 +39,6 @@ target
 # Scratch policies for manual runs in crabshell/fixtures; the tests point
 # CRABSHELL_CONFIG at the scenario files instead.
 crabshell/fixtures/**/sandbox.toml
+
+# Resolved only by Dependabot; CI reads the exact versions from Cargo.toml.
+.github/cli-tools/Cargo.lock

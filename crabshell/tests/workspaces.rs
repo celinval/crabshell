@@ -176,22 +176,35 @@ impl Scratch {
         self.root.join("cargo-home")
     }
 
-    /// Install this distro's machine facts, if any, as the user config.
+    /// Install this machine's facts as the user config.
     ///
     /// `fixtures/hosts/<ID>.toml`, keyed by `/etc/os-release`'s `ID`, holds
-    /// what built-in grants can't know about a distro, such as Amazon Linux's
-    /// `pkg-config` wrapper. Keeping it out of the fixtures' policies keeps
-    /// those portable.
+    /// what a distro needs beyond what `crabshell-probe` finds, such as Amazon
+    /// Linux's `pkg-config` wrapper chain. Other distros use the probe's
+    /// output. Keeping either out of the fixtures' policies keeps those
+    /// portable.
     fn install_host_facts(&self) {
+        let dir = self.home().join(".config/crabshell");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("config.toml");
         let os_release = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
         let id = os_release.lines().find_map(|line| line.strip_prefix("ID="));
-        let Some(id) = id.map(|id| id.trim_matches('"')) else { return };
-        let facts = e2e_tests().join("hosts").join(format!("{id}.toml"));
-        if facts.is_file() {
-            let dir = self.home().join(".config/crabshell");
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::copy(&facts, dir.join("config.toml")).unwrap();
+        let facts =
+            id.map(|id| e2e_tests().join("hosts").join(format!("{}.toml", id.trim_matches('"'))));
+        if let Some(facts) = facts.filter(|facts| facts.is_file()) {
+            std::fs::copy(&facts, config).unwrap();
+            return;
         }
+        // Not `outer_env()`: it needs this scratch dir, which isn't set up yet.
+        let output = Command::new(env!("CARGO_BIN_EXE_crabshell-probe"))
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .env("RUSTUP_HOME", rustup_home())
+            .env("RUSTC", &Toolchain::get().rustc)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "crabshell-probe failed:\n{}", output_stderr(&output));
+        std::fs::write(config, output.stdout).unwrap();
     }
 
     fn home(&self) -> PathBuf {

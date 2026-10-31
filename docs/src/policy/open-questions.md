@@ -70,7 +70,7 @@
   such output.
 - **Host-conditional configuration.** The policy format can't say "on this kind
   of host, use these grants": the test harness installs a per-distro user
-  config (`crabshell/fixtures/hosts/<ID>.toml`) from outside. Cargo-style
+  config (`crabshell/fixtures/hosts/<ID>-<arch>.toml`) from outside. Cargo-style
   `cfg()` tables can't tell distros apart (Amazon Linux and Ubuntu are both
   `x86_64-unknown-linux-gnu`). Options:
   - built-in grants list every distro's entries, and missing programs are

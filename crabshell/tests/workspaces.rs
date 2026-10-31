@@ -178,19 +178,21 @@ impl Scratch {
 
     /// Install this machine's facts as the user config.
     ///
-    /// `fixtures/hosts/<ID>.toml`, keyed by `/etc/os-release`'s `ID`, holds
-    /// what a distro needs beyond what `crabshell-probe` finds, such as Amazon
-    /// Linux's `pkg-config` wrapper chain. Other distros use the probe's
-    /// output. Keeping either out of the fixtures' policies keeps those
-    /// portable.
+    /// `fixtures/hosts/<ID>-<arch>.toml`, keyed by `/etc/os-release`'s `ID`
+    /// and the host architecture, holds what a host needs beyond what
+    /// `crabshell-probe` finds, such as Amazon Linux's `pkg-config` wrapper
+    /// chain. Other hosts use the probe's output. Keeping either out of the
+    /// fixtures' policies keeps those portable.
     fn install_host_facts(&self) {
         let dir = self.home().join(".config/crabshell");
         std::fs::create_dir_all(&dir).unwrap();
         let config = dir.join("config.toml");
         let os_release = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
         let id = os_release.lines().find_map(|line| line.strip_prefix("ID="));
-        let facts =
-            id.map(|id| e2e_tests().join("hosts").join(format!("{}.toml", id.trim_matches('"'))));
+        let facts = id.map(|id| {
+            let (id, arch) = (id.trim_matches('"'), std::env::consts::ARCH);
+            e2e_tests().join("hosts").join(format!("{id}-{arch}.toml"))
+        });
         if let Some(facts) = facts.filter(|facts| facts.is_file()) {
             std::fs::copy(&facts, config).unwrap();
             return;

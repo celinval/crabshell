@@ -12,7 +12,8 @@
 //! environment it was started with; callers curate it.
 //!
 //! `PATH` entries take the same syntax as policy paths, e.g. `/lib*`. Read
-//! access also allows execution; `--list` only allows listing directories,
+//! access also allows execution, and `--write` is write-only, so a path that
+//! needs both is passed to both. `--list` only allows listing directories,
 //! which a nested crabshell needs to expand globs. Nothing else is granted: no
 //! floor, and no network unless `--network` is given.
 

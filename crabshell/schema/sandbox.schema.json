@@ -46,7 +46,7 @@
         },
         "write": {
           "$ref": "#/definitions/ListField",
-          "description": "Writable paths, beyond `OUT_DIR`."
+          "description": "Write-only paths, beyond `OUT_DIR` and `TMPDIR`."
         }
       },
       "type": "object"

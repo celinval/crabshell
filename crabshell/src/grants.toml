@@ -30,6 +30,8 @@ read = [
     "/usr/include",
     "/usr/libexec/gcc", "/usr/lib/gcc",
     "/lib64", "/usr/lib64", "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+    # gcc opens its temp files read-write.
+    ":tmp_dir",
 ]
 env = [
     # Cargo's inputs the cc crate reads on the crate's behalf.

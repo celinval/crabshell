@@ -28,7 +28,7 @@ pub struct Declared {
     /// Read-only paths.
     #[serde(default)]
     pub read: Vec<String>,
-    /// Writable paths, beyond `OUT_DIR`.
+    /// Write-only paths, beyond `OUT_DIR` and `TMPDIR`.
     #[serde(default)]
     pub write: Vec<String>,
     /// Executables the script may run.

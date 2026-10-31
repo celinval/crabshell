@@ -5,8 +5,10 @@
 //! replaces itself with the build script, so the confinement is inherited:
 //!
 //! - **Filesystem and exec** through Landlock: only granted paths are
-//!   accessible, plus implicit access (see [`crate::policy::IMPLICIT_WRITE`]
-//!   and [`crate::policy::implicit_runtime`]) and a private `TMPDIR`.
+//!   accessible, plus implicit access (see [`crate::policy::implicit_read`]
+//!   and [`crate::policy::IMPLICIT_READ_WRITE`]) and a write-only `OUT_DIR`
+//!   and private `TMPDIR`. `write` grants no read access; a path that needs
+//!   both is listed in both.
 //! - **Network**, unless granted, through an empty network namespace, with
 //!   Landlock's TCP rules as a second layer.
 //!
@@ -83,7 +85,7 @@ struct Grants {
     read: Vec<PathBuf>,
     /// Executable files: `run` entries and the build script itself.
     exec: Vec<PathBuf>,
-    /// Writable trees: `write` entries, `OUT_DIR` and the private temp dir.
+    /// Write-only trees: `write` entries, `OUT_DIR` and the private temp dir.
     write: Vec<PathBuf>,
     /// Trees whose directories may only be listed.
     list: Vec<PathBuf>,
@@ -122,8 +124,8 @@ impl Grants {
 /// afterwards, so the dir lives in Cargo's per-unit build dir: it's emptied on
 /// the next run and removed by `cargo clean`.
 fn private_tmp(out_dir: &Path) -> io::Result<PathBuf> {
-    let parent = out_dir.parent().ok_or_else(|| io::Error::other("OUT_DIR has no parent"))?;
-    let tmp = parent.join("crabshell-tmp");
+    let tmp = crate::paths::tmp_dir(out_dir)
+        .ok_or_else(|| io::Error::other("OUT_DIR has no parent"))?;
     match std::fs::remove_dir_all(&tmp) {
         Err(err) if err.kind() != io::ErrorKind::NotFound => return Err(err),
         _ => {}
@@ -179,7 +181,7 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
         .and_then(|r| {
             r.add_rules(path_beneath_rules(&grants.exec, AccessFs::Execute | AccessFs::ReadFile))
         })
-        .and_then(|r| r.add_rules(path_beneath_rules(&grants.write, AccessFs::from_all(abi))))
+        .and_then(|r| r.add_rules(path_beneath_rules(&grants.write, AccessFs::from_write(abi))))
         .and_then(|r| r.add_rules(path_beneath_rules(&grants.list, AccessFs::ReadDir)))
         .and_then(|r| r.restrict_self())
         .map_err(io::Error::other)?;

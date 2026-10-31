@@ -47,8 +47,9 @@ back to no confinement.
 The prototype's Linux backend uses Landlock. crabshell restricts its own
 process and then execs the build script, which inherits the restriction:
 
-- `read` grants read and execute, `write` grants full access, and `run`
-  grants execute on one resolved program.
+- `read` grants read and execute, `write` grants write-only access, and
+  `run` grants execute on one resolved program. A path that needs reading
+  and writing is listed in both.
 - Unless network is granted, crabshell also enters an empty network namespace
   (through an unprivileged user namespace). Landlock alone only covers TCP.
 - Denied paths are visible but return `EACCES`; they aren't hidden as they

@@ -350,6 +350,34 @@ fn injected_requests_tighten_the_grant() {
     assert!(build.check("other", Origin::External, &env, &["env-present", "CRABSHELL_UNGRANTED"]));
 }
 
+#[test]
+fn out_dir_and_tmpdir_are_write_only() {
+    let build = Build::new("[external]\n");
+    let out_dir = build.out_dir();
+    let tmp = build.dir.path().join("crabshell-tmp");
+
+    assert!(build.check("dep", Origin::External, &[], &["write-only", out_dir.to_str().unwrap()]));
+    assert!(build.check("dep", Origin::External, &[], &["write-only", tmp.to_str().unwrap()]));
+}
+
+#[test]
+fn read_grants_reach_out_dir_and_tmpdir() {
+    let build = Build::new("[external]\nread = [\":out_dir\", \":tmp_dir\"]\n");
+    let out_dir = build.out_dir();
+    let tmp = build.dir.path().join("crabshell-tmp");
+
+    assert!(build.check("dep", Origin::External, &[], &["read-back", out_dir.to_str().unwrap()]));
+    assert!(build.check("dep", Origin::External, &[], &["read-back", tmp.to_str().unwrap()]));
+}
+
+#[test]
+fn write_grants_no_read_access() {
+    let build = Build::new("[external]\nwrite = [\":manifest_dir\"]\nread = []\n");
+    let manifest = build.manifest_dir("dep", &Origin::External);
+
+    assert!(build.check("dep", Origin::External, &[], &["write-only", manifest.to_str().unwrap()]));
+}
+
 #[cfg(not(feature = "test-requests"))]
 #[test]
 fn a_requests_file_needs_the_test_feature() {

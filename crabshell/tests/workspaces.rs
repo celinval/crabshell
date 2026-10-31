@@ -335,8 +335,9 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
     for path in read {
         cmd.arg("--read").arg(path);
     }
+    // `--write` is write-only: cargo also reads back what it writes.
     for path in write {
-        cmd.arg("--write").arg(path);
+        cmd.arg("--read").arg(&path).arg("--write").arg(path);
     }
     cmd.arg("--").arg(&toolchain.cargo);
     cmd

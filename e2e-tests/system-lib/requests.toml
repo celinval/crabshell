@@ -37,8 +37,9 @@ env = [
 ]
 
 [package.libz-sys]
-# Reads its zlib check, and the vendored zlib as a fallback.
-read = [":manifest_dir/src/smoke.c", ":manifest_dir/src/zlib"]
+# Reads its zlib check, and the vendored zlib as a fallback. cc-rs opens its
+# files in OUT_DIR read-write.
+read = [":manifest_dir/src/smoke.c", ":manifest_dir/src/zlib", ":out_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "HOST", "TARGET",
@@ -59,8 +60,9 @@ env = [
 # (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`). A vendor can't name the triple in
 # advance, and patterns only match prefixes, so it's listed for this host.
 [package.openssl-sys]
-# Reads the header it expands to detect the OpenSSL version.
-read = [":manifest_dir/build/expando.c"]
+# Reads the header it expands to detect the OpenSSL version. cc-rs opens its
+# files in OUT_DIR read-write.
+read = [":manifest_dir/build/expando.c", ":out_dir"]
 requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_CFG_UNIX", "DEP_BSSL_CONF",

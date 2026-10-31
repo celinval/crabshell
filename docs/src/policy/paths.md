@@ -18,6 +18,7 @@ crabshell derives these from what Cargo tells the build script:
 | `:manifest_dir` | the crate root (`CARGO_MANIFEST_DIR`) |
 | `:manifest_path` | the crate's `Cargo.toml` (`CARGO_MANIFEST_PATH`) |
 | `:out_dir` | `OUT_DIR` |
+| `:tmp_dir` | the private `TMPDIR` crabshell creates |
 | `:cargo_home` | `CARGO_HOME` |
 | `:sysroot` | the toolchain root, derived from `RUSTC`'s location |
 

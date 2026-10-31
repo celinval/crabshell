@@ -2,6 +2,8 @@
 # The tightest consumer policy that works without crate requests: the union of
 # requests.toml, granted to every external crate.
 [external]
+# OUT_DIR is write-only; compile probes and cc-rs read back what they write.
+read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc", "pkg-config", "cc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.

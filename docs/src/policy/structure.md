@@ -58,14 +58,14 @@ Beneath the tables, two built-ins apply to every build script:
 
 - **Implicit access** is what a build script can't run without. It isn't
   policy: no table grants it, and neither `[limits]` nor a request removes it.
-  - write access to `OUT_DIR` and `/dev/null`;
+  - write-only access to `OUT_DIR`, and read and write access to `/dev/null`;
   - read access to the dynamic loader and the libraries every std build script
     links: on `x86_64-unknown-linux-gnu`, `ld-linux-x86-64.so.2`, `libc.so.6`
     and `libgcc_s.so.1`. A build script is always a host program built with
     std, even for a `no_std` crate. Their locations are per-host defaults for
     now, which will become overridable variables. Statically linked hosts
     (musl) need none;
-  - a private, empty `TMPDIR`;
+  - a private, empty, write-only `TMPDIR`;
   - the `OUT_DIR` and `TMPDIR` values.
 - **The default grant** is the bottom of the grant chain: what a field
   resolves to when no table sets it:

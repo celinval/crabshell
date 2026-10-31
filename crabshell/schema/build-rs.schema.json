@@ -42,7 +42,7 @@
     },
     "write": {
       "default": [],
-      "description": "Writable paths, beyond `OUT_DIR`.",
+      "description": "Write-only paths, beyond `OUT_DIR` and `TMPDIR`.",
       "items": {
         "type": "string"
       },

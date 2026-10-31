@@ -12,6 +12,9 @@
 //! - `writable <DIR>`     — a new file can be created in the directory.
 //! - `unwritable <DIR>`   — a new file cannot be created in the directory.
 //! - `write-file <PATH>`  — the existing file can be opened for writing.
+//! - `read-back <DIR>`    — a file created in the directory can be read back.
+//! - `write-only <DIR>`   — a file can be created in the directory, but not
+//!   read back.
 //! - `private-tmp <DIR>`  — the temp dir is writable and isn't `DIR`.
 //! - `can-exec <PATH>`    — the program can be spawned.
 //! - `cannot-exec <PATH>` — the program cannot be spawned.
@@ -37,6 +40,8 @@ fn main() -> ExitCode {
         "writable" => can_create(Path::new(&arg)),
         "unwritable" => !can_create(Path::new(&arg)),
         "write-file" => std::fs::OpenOptions::new().write(true).open(&arg).is_ok(),
+        "read-back" => read_back(Path::new(&arg)) == Some(true),
+        "write-only" => read_back(Path::new(&arg)) == Some(false),
         "private-tmp" => {
             let tmp = std::env::temp_dir();
             tmp != Path::new(&arg) && can_create(&tmp)
@@ -59,4 +64,14 @@ fn can_create(dir: &Path) -> bool {
     let created = std::fs::write(&path, b"").is_ok();
     let _ = std::fs::remove_file(&path);
     created
+}
+
+/// Create a file in `dir` and report whether it reads back; `None` if it
+/// can't be created.
+fn read_back(dir: &Path) -> Option<bool> {
+    let path = dir.join("probe-read-back");
+    std::fs::write(&path, b"x").ok()?;
+    let readable = std::fs::read(&path).is_ok();
+    let _ = std::fs::remove_file(&path);
+    Some(readable)
 }

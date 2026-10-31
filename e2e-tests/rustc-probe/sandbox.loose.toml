@@ -1,5 +1,7 @@
 #:schema ../../crabshell/schema/sandbox.schema.json
 # A loose consumer policy: the category's grant and any environment variable.
 [external]
+# OUT_DIR is write-only; compile probes and cc-rs read back what they write.
+read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc"]
 env = ["*"]

@@ -86,7 +86,7 @@ pub struct EnvImport {
 pub struct Fields {
     /// Read-only paths.
     pub read: Option<ListField>,
-    /// Writable paths, beyond `OUT_DIR`.
+    /// Write-only paths, beyond `OUT_DIR` and `TMPDIR`.
     pub write: Option<ListField>,
     /// Executables the script may run.
     pub run: Option<ListField>,

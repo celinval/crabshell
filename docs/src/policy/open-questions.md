@@ -32,3 +32,13 @@
   scripts, as an explicit list rather than a `CARGO_*` prefix (which would also
   match secrets like `CARGO_REGISTRY_TOKEN`), and read access to the crate's
   own directory. Whether those paths are exposed as relative paths is open.
+- **Should `OUT_DIR` be readable by default?** It's write-only today; a
+  policy grants read with `:out_dir`. In the
+  [experiments](../build-scripts/experiments.md), 5 of 23 build scripts
+  needed it: compile probes read back rustc's output (proc-macro2,
+  thiserror, rustix), and cc-rs opens its files read-write (libz-sys,
+  openssl-sys). rustix didn't fail without it, but silently dropped cfgs.
+  Unlike `TMPDIR`, `OUT_DIR` keeps files from earlier runs, so reading it
+  makes them inputs. Alternatives to a default are adding it to the `rustc`
+  and `cc` grants, or keeping it per crate. `TMPDIR` is write-only too, and
+  only gcc needed to read it; the `cc` grant includes it.

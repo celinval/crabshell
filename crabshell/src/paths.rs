@@ -29,7 +29,15 @@ use crate::config::{Source, VariableDef};
 use crate::policy::Expand;
 
 /// Variables crabshell defines, from the build script's environment.
-pub const BUILTIN: &[&str] = &["manifest_dir", "manifest_path", "out_dir", "cargo_home", "sysroot"];
+pub const BUILTIN: &[&str] =
+    &["manifest_dir", "manifest_path", "out_dir", "tmp_dir", "cargo_home", "sysroot"];
+
+/// The private `TMPDIR` of the build script whose `OUT_DIR` is `out_dir`.
+///
+/// It sits in Cargo's per-unit build dir, next to `OUT_DIR`.
+pub fn tmp_dir(out_dir: &Path) -> Option<PathBuf> {
+    Some(out_dir.parent()?.join("crabshell-tmp"))
+}
 
 /// Environment variables whose values a crate, not the user, chooses.
 ///
@@ -69,6 +77,8 @@ impl Variables {
         values.insert("manifest_dir".to_string(), path("CARGO_MANIFEST_DIR"));
         values.insert("manifest_path".to_string(), path("CARGO_MANIFEST_PATH"));
         values.insert("out_dir".to_string(), path("OUT_DIR"));
+        let tmp = path("OUT_DIR").and_then(|dirs| tmp_dir(&dirs[0])).map(|dir| vec![dir]);
+        values.insert("tmp_dir".to_string(), tmp);
         values.insert("cargo_home".to_string(), path("CARGO_HOME"));
         values.insert("sysroot".to_string(), sysroot(env("RUSTC"), env("PATH")).map(|p| vec![p]));
         for (name, def) in defs {

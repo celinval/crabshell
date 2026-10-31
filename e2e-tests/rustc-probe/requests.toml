@@ -35,8 +35,8 @@ env = ["CARGO_CFG_TARGET_OS"]
 env = ["CARGO_CFG_SANITIZE"]
 
 [package.proc-macro2]
-# Reads compile probes from its own sources.
-read = [":manifest_dir/src/probe"]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
@@ -44,6 +44,8 @@ env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 requests = ["rustc"]
 
 [package.rustix]
+# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
+read = [":out_dir"]
 requests = ["rustc"]
 env = [
     "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
@@ -62,7 +64,7 @@ requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 
 [package.thiserror]
-# Reads compile probes from its own sources.
-read = [":manifest_dir/build/probe.rs"]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]

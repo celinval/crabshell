@@ -51,13 +51,13 @@ fn expand_all(x: &impl Expand, kind: Kind, entries: &[String]) -> Result<Vec<Str
 /// neither `[limits]` nor requests remove it.
 pub const IMPLICIT_ENV: &[&str] = &["OUT_DIR"];
 
-/// Paths every build script has implicit write access to.
+/// Paths every build script has implicit read and write access to.
 ///
-/// Compile probes silence their output with `Stdio::null()`, which opens
-/// `/dev/null` read-write. It holds no data, so granting it leaks nothing. The
-/// runner adds write access to `OUT_DIR` and a private `TMPDIR`, and execute
-/// access to the build script itself.
-pub const IMPLICIT_WRITE: &[&str] = &["/dev/null"];
+/// Compile probes silence rustc with `Stdio::null()`, which opens `/dev/null`
+/// for reading as stdin and for writing as stdout. It holds no data, so
+/// granting it leaks nothing. The runner adds write-only access to `OUT_DIR`
+/// and a private `TMPDIR`, and execute access to the build script itself.
+pub const IMPLICIT_READ_WRITE: &[&str] = &["/dev/null"];
 
 /// The default grant for `read`: the crate root.
 ///
@@ -99,6 +99,15 @@ pub fn implicit_runtime(host: &str) -> Vec<&'static str> {
     candidates.iter().flat_map(|lib| lib.iter().copied()).collect()
 }
 
+/// Paths every build script on `host` can read implicitly.
+///
+/// The [`implicit_runtime`] libraries plus [`IMPLICIT_READ_WRITE`].
+pub fn implicit_read(host: &str) -> Vec<&'static str> {
+    let mut paths = implicit_runtime(host);
+    paths.extend(IMPLICIT_READ_WRITE);
+    paths
+}
+
 /// The package whose build script is being run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageContext {
@@ -119,7 +128,7 @@ pub struct PackageContext {
 pub struct Permissions {
     /// Read-only paths.
     pub read: Vec<String>,
-    /// Writable paths, beyond `OUT_DIR`.
+    /// Write-only paths, beyond `OUT_DIR` and `TMPDIR`.
     pub write: Vec<String>,
     /// Executables the script may run.
     pub run: Vec<String>,
@@ -155,9 +164,9 @@ pub fn resolve(
     let mut env = field(|f| &f.env, Kind::Names, DEFAULT_ENV)?;
     env.extend(IMPLICIT_ENV.iter().map(|name| name.to_string()));
     let mut read = field(|f| &f.read, Kind::Paths, DEFAULT_READ)?;
-    read.extend(implicit_runtime(&pkg.host).into_iter().map(str::to_string));
+    read.extend(implicit_read(&pkg.host).into_iter().map(str::to_string));
     let mut write = field(|f| &f.write, Kind::Paths, &[])?;
-    write.extend(IMPLICIT_WRITE.iter().map(|path| path.to_string()));
+    write.extend(IMPLICIT_READ_WRITE.iter().map(|path| path.to_string()));
     let network = chain.iter().find_map(|fields| fields.network);
     let network = network.unwrap_or_else(|| grants::expand_network(&grants, &names));
 
@@ -199,12 +208,12 @@ pub fn tighten(
         read: keep(
             permissions.read,
             wanted(&declared.read, |f| &f.read, Kind::Paths)?,
-            &implicit_runtime(&pkg.host),
+            &implicit_read(&pkg.host),
         ),
         write: keep(
             permissions.write,
             wanted(&declared.write, |f| &f.write, Kind::Paths)?,
-            IMPLICIT_WRITE,
+            IMPLICIT_READ_WRITE,
         ),
         run: keep(permissions.run, wanted(&declared.run, |f| &f.run, Kind::Paths)?, &[]),
         env: keep(permissions.env, wanted(&declared.env, |f| &f.env, Kind::Names)?, IMPLICIT_ENV),
@@ -337,7 +346,7 @@ mod tests {
 
     /// Every read path implicit access grants.
     fn implicit() -> Vec<String> {
-        implicit_runtime(HOST).into_iter().map(str::to_string).collect()
+        implicit_read(HOST).into_iter().map(str::to_string).collect()
     }
 
     /// The default read grant followed by implicit access.

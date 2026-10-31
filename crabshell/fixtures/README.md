@@ -1,11 +1,11 @@
-# e2e-tests
+# Workspace fixtures
 
 Real crates built through crabshell, to see whether the policy contract
 works: how much crates would need to request, and how much consumers must
 grant without their help.
 
 Each folder is a standalone workspace with one crate that depends on crates
-of one [category](../docs/src/build-scripts/categories.md). `Cargo.lock` pins
+of one [category](../../docs/src/build-scripts/categories.md). `Cargo.lock` pins
 every version; `rust-toolchain.toml` pins the nightly.
 
 | Fixture | Build scripts that… |
@@ -26,7 +26,7 @@ Every fixture builds in each cell of **requests × grants**:
 - **Requests** stand in for the crates' own `[package.metadata.build-rs]`,
   since we can't edit them. `requests.toml` lists, for every build script,
   exactly what its code uses, from the vendor's point of view: no host paths,
-  tools through [named grants](../docs/src/policy/grants.md). They're
+  tools through [named grants](../../docs/src/policy/grants.md). They're
   injected with `CRABSHELL_REQUESTS`, which only the `test-requests` feature
   honors.
 - **Grants** are the consumer's policy: the default grant alone (no config),
@@ -46,20 +46,20 @@ token the tests plant; every other scenario must not.
 ## Running
 
 ```sh
-cargo test --features test-requests -- --ignored
+cargo test --features test-requests
 ```
 
 Every build runs inside the `jail` helper from `probe`, with a fresh
 `CARGO_HOME` and no network, so untrusted crates can't reach the host. See
-`crabshell/tests/workspaces.rs`.
+`crabshell/fixtures.rs`.
 
 To build a fixture by hand, build crabshell first (`.cargo/config.toml` runs
-`../../target/debug/crabshell`), then copy a scenario file to `sandbox.toml`
+`../../../target/debug/crabshell`), then copy a scenario file to `sandbox.toml`
 (ignored by git):
 
 ```sh
 cargo build -p crabshell --features test-requests
-cd e2e-tests/cfg-only
+cd crabshell/fixtures/cfg-only
 cp sandbox.tight.toml sandbox.toml
 cargo -Zhost-config -Ztarget-applies-to-host build
 # with precise requests:

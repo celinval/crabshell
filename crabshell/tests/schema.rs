@@ -109,7 +109,7 @@ fn fixtures_and_builtins_match_the_schemas() {
     let builtins = root().join("src/grants.toml");
     assert_valid(&sandbox, &builtins, &toml(&builtins));
 
-    let fixtures = root().join("../e2e-tests");
+    let fixtures = root().join("fixtures");
     let mut checked = 0;
     for fixture in std::fs::read_dir(&fixtures).unwrap() {
         let fixture = fixture.unwrap().path();

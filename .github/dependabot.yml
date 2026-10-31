@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Root workspace only. The e2e-tests fixtures pin their lockfiles on purpose.
+  # Root workspace only. The crabshell/fixtures workspaces pin their lockfiles on purpose.
   - package-ecosystem: cargo
     directory: /
     schedule:

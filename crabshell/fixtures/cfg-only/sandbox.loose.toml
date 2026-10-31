@@ -1,4 +1,4 @@
-#:schema ../../crabshell/schema/sandbox.schema.json
+#:schema ../../schema/sandbox.schema.json
 # A loose consumer policy: any environment variable.
 [external]
 env = ["*"]

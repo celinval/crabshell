@@ -1,4 +1,4 @@
-//! Builds each `e2e-tests/` workspace through crabshell.
+//! Builds each workspace under `fixtures/` through crabshell.
 //!
 //! Each fixture runs a matrix of crate requests × consumer grants (see
 //! [`Scenario`]): without requests, or with the precise requests in its
@@ -26,10 +26,10 @@
 //! For trusted fixtures, an unjailed reference build must match the jailed
 //! baseline, showing that the jail itself doesn't change behavior.
 //!
-//! The fixtures build with the nightly pinned in `e2e-tests/rust-toolchain.toml`
-//! and fetch crates, so these tests are ignored by default. Requests are
-//! injected through the `test-requests` feature, so run them with
-//! `cargo test --features test-requests -- --ignored`.
+//! The fixtures build with the nightly pinned in `fixtures/rust-toolchain.toml`
+//! and fetch crates. Requests are injected through the `test-requests`
+//! feature, and these tests are ignored without it: run them with
+//! `cargo test --features test-requests`.
 
 // Without `test-requests`, `check` only explains how to run the tests.
 #![cfg_attr(not(feature = "test-requests"), allow(dead_code))]
@@ -106,7 +106,7 @@ impl Scenario {
     }
 }
 
-/// An `e2e-tests/` workspace.
+/// A workspace under `fixtures/`.
 struct Fixture {
     name: &'static str,
     /// Whether the fixture's pinned crates are reviewed, so they may also be
@@ -126,7 +126,7 @@ impl Fixture {
 }
 
 fn e2e_tests() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../e2e-tests")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures")
 }
 
 /// A fake credential in every build's environment, to detect leaks.
@@ -205,7 +205,7 @@ impl Toolchain {
     }
 }
 
-/// Ask rustup for `tool` in the toolchain pinned for `e2e-tests/`.
+/// Ask rustup for `tool` in the toolchain pinned for `fixtures/`.
 fn which(tool: &str) -> PathBuf {
     let output = Command::new("rustup")
         .env_clear()
@@ -496,14 +496,14 @@ fn output_stderr(output: &Output) -> String {
 }
 
 #[test]
-#[ignore = "needs the pinned nightly and network"]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
 fn cfg_only() {
     // Its scripts only read TARGET and CARGO_CFG_*, which the default covers.
     check(&Fixture { name: "cfg-only", trusted: true, dumps_env: false, default_suffices: true });
 }
 
 #[test]
-#[ignore = "needs the pinned nightly and network"]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
 fn rustc_probe() {
     check(&Fixture {
         name: "rustc-probe",
@@ -514,7 +514,7 @@ fn rustc_probe() {
 }
 
 #[test]
-#[ignore = "needs the pinned nightly and network"]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.

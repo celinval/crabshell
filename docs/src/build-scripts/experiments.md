@@ -5,7 +5,7 @@ Landlock backend, to see what each category actually needs.
 
 ## Setup
 
-Each fixture under `e2e-tests/` is a standalone workspace whose only crate
+Each fixture under `crabshell/fixtures/` is a standalone workspace whose only crate
 depends on crates of one category. Its `Cargo.lock` is committed. Every fixture
 has several `sandbox.*.toml` policy variants:
 
@@ -16,7 +16,7 @@ has several `sandbox.*.toml` policy variants:
 | `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc |
 | `declared` | crossbeam-utils, patched to declare `[package.metadata.build-rs]` |
 
-`cargo test -- --ignored` (`crabshell/tests/workspaces.rs`) first builds each
+`cargo test --features test-requests` (`crabshell/fixtures.rs`) first builds each
 fixture without the sandbox, as a baseline. It then builds the fixture once per
 variant and compares every build script's `cargo:` directives with the
 baseline. **A build that succeeds isn't enough:** many build scripts degrade
@@ -43,7 +43,7 @@ and a fake token. The harness asserts that the `system-lib` baseline leaks the
 fake token (see below), and that no sandboxed build does.
 
 Environment: Amazon Linux 2023, kernel 6.12, `nightly-2026-10-13` (pinned in
-`e2e-tests/rust-toolchain.toml`) with `-Zhost-config -Ztarget-applies-to-host`.
+`crabshell/fixtures/rust-toolchain.toml`) with `-Zhost-config -Ztarget-applies-to-host`.
 No static glibc is installed.
 
 ## Results
@@ -137,7 +137,7 @@ env   = ["PKG_CONFIG*", "HOST_PKG_CONFIG*", "CC*", "CFLAGS*", "HOST_CC", "HOST_C
 
 ## Round 2: requests × grants
 
-The fixtures were reworked into a matrix (see `e2e-tests/README.md`): crates
+The fixtures were reworked into a matrix (see `crabshell/fixtures/README.md`): crates
 with no requests or with precise vendor-view requests (`requests.toml`), under
 the default grant, the union of all requests, or a loose policy. With the
 loader and libc as implicit access and named grants for `rustc`, `cc` and

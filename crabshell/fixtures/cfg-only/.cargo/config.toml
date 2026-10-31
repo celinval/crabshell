@@ -3,7 +3,7 @@
 target-applies-to-host = false
 
 [host]
-runner = ["../../target/debug/crabshell"]
+runner = ["../../../target/debug/crabshell"]
 
 [env]
 CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }

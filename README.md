@@ -150,7 +150,7 @@ CRABSHELL_REQUESTS=$PWD/requests.toml cargo +nightly -Zhost-config -Ztarget-appl
 - The `rerun-if-env-changed` lines a script prints list the env vars it
   reads.
 
-The `e2e-tests/` fixtures use this flow; their `requests.toml` files are
+The `crabshell/fixtures/` fixtures use this flow; their `requests.toml` files are
 worked examples for real crates.
 
 ## Design

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crabshell", "probe"]
-exclude = ["e2e-tests"]
+exclude = ["crabshell/fixtures"]
 
 [workspace.package]
 edition = "2024"

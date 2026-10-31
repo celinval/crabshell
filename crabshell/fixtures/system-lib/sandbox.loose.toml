@@ -1,19 +1,10 @@
-#:schema ../../crabshell/schema/sandbox.schema.json
-# The tightest consumer policy that works without crate requests: the union of
-# requests.toml, granted to every external crate.
+#:schema ../../schema/sandbox.schema.json
+# A loose consumer policy: the category's grants and any environment variable.
 [external]
 # OUT_DIR is write-only; compile probes and cc-rs read back what they write.
 read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc", "pkg-config", "cc"]
-# The default grant already covers TARGET, HOST, CARGO_CFG_* and
-# CARGO_FEATURE_*, so only the rest is added.
-env = { inherit = true, value = [
-    "CARGO_MANIFEST_DIR", "DEP_OPENSSL_INCLUDE",
-    "DEP_BSSL_CONF", "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*",
-    "WIND_RELEASE_ID", "LIBSQLITE3_*", "SQLITE_MAX_*", "SQLITE3_*", "ZLIB_*",
-    "LZMA_API_STATIC", "LIBLZMA_*", "OPENSSL_*",
-    "X86_64_UNKNOWN_LINUX_GNU_OPENSSL_*", "ZSTD_SYS_*", "LIBZSTD_*",
-] }
+env = ["*"]
 
 # On Amazon Linux, `pkg-config` is a shell wrapper that runs `rpm --eval` to
 # find the platform, then a second wrapper that execs `pkgconf`. That is

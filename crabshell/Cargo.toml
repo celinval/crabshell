@@ -9,7 +9,7 @@ rust-version.workspace = true
 
 [features]
 # Honors CRABSHELL_REQUESTS, a file of requests standing in for crates' own
-# declarations. For the e2e-tests matrix only.
+# declarations. For the fixtures matrix only.
 test-requests = []
 
 [lib]

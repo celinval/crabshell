@@ -119,7 +119,8 @@ fn fixtures_and_builtins_match_the_schemas() {
         for file in std::fs::read_dir(&fixture).unwrap() {
             let path = file.unwrap().path();
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if name.starts_with("sandbox.") && name.ends_with(".toml") {
+            let is_host = fixture.file_name().is_some_and(|dir| dir == "hosts");
+            if (is_host || name.starts_with("sandbox.")) && name.ends_with(".toml") {
                 assert_valid(&sandbox, &path, &toml(&path));
                 checked += 1;
             } else if name == "requests.toml" {
@@ -146,5 +147,7 @@ fn the_schemas_reject_unknown_keys_and_bad_names() {
     assert!(reject("[variables]\nBad = \"/usr\"\n"));
     assert!(reject("[package.\"*\"]\nenv = []\n"));
     assert!(reject("[external]\nread = { inherit = true, valu = [\"/x\"] }\n"));
-    assert!(!reject("[external]\ngrants = [\"cc\"]\nread = { inherit = true, value = [\"/x\"] }\n"));
+    assert!(!reject(
+        "[external]\ngrants = [\"cc\"]\nread = { inherit = true, value = [\"/x\"] }\n"
+    ));
 }

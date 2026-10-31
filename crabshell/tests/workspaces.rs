@@ -140,7 +140,8 @@ const FAKE_TOKEN: (&str, &str) = ("CRABSHELL_FAKE_TOKEN", "crabshell-fake-token-
 /// ```text
 /// e2e-run/
 ///   cargo-home/                  CARGO_HOME, filled by `cargo fetch`
-///   home/                        HOME, empty
+///   home/                        HOME, holding only this distro's machine
+///                                facts as the user config, if any
 ///   tmp/                         TMPDIR
 ///   <fixture>/baseline-target/   jailed, without crabshell
 ///   <fixture>/reference-target/  unjailed, without crabshell (trusted only)
@@ -165,12 +166,31 @@ impl Scratch {
             for dir in [scratch.cargo_home(), scratch.home(), scratch.tmp()] {
                 std::fs::create_dir_all(dir).unwrap();
             }
+            scratch.install_host_facts();
             scratch
         })
     }
 
     fn cargo_home(&self) -> PathBuf {
         self.root.join("cargo-home")
+    }
+
+    /// Install this distro's machine facts, if any, as the user config.
+    ///
+    /// `fixtures/hosts/<ID>.toml`, keyed by `/etc/os-release`'s `ID`, holds
+    /// what built-in grants can't know about a distro, such as Amazon Linux's
+    /// `pkg-config` wrapper. Keeping it out of the fixtures' policies keeps
+    /// those portable.
+    fn install_host_facts(&self) {
+        let os_release = std::fs::read_to_string("/etc/os-release").unwrap_or_default();
+        let id = os_release.lines().find_map(|line| line.strip_prefix("ID="));
+        let Some(id) = id.map(|id| id.trim_matches('"')) else { return };
+        let facts = e2e_tests().join("hosts").join(format!("{id}.toml"));
+        if facts.is_file() {
+            let dir = self.home().join(".config/crabshell");
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::copy(&facts, dir.join("config.toml")).unwrap();
+        }
     }
 
     fn home(&self) -> PathBuf {

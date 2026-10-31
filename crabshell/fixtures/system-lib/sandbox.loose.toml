@@ -5,17 +5,3 @@
 read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc", "pkg-config", "cc"]
 env = ["*"]
-
-# On Amazon Linux, `pkg-config` is a shell wrapper that runs `rpm --eval` to
-# find the platform, then a second wrapper that execs `pkgconf`. That is
-# machine knowledge, so the consumer extends the built-in grant.
-[grant.pkg-config]
-run = { inherit = true, value = ["sh", "rpm", "x86_64-amazon-linux-gnu-pkg-config"] }
-read = { inherit = true, value = [
-    "/usr/lib/rpm",
-    "/lib64/libtinfo.so.6",
-    "/lib64/librpm.so.9", "/lib64/librpmio.so.9", "/lib64/libpopt.so.0", "/lib64/libbz2.so.1",
-    "/lib64/libz.so.1", "/lib64/liblzma.so.5", "/lib64/libzstd.so.1", "/lib64/liblua-5.4.so",
-    "/lib64/libm.so.6", "/lib64/libcap.so.2", "/lib64/libacl.so.1", "/lib64/libsqlite3.so.0",
-    "/lib64/libaudit.so.1", "/lib64/libcrypto.so.3", "/lib64/libcap-ng.so.0",
-] }

@@ -47,3 +47,34 @@
   makes them inputs. Alternatives to a default are adding it to the `rustc`
   and `cc` grants, or keeping it per crate. `TMPDIR` is write-only too, and
   only gcc needed to read it; the `cc` grant includes it.
+- **Default variables for tool discovery.** Tools already define how they're
+  found, and grants should follow the same conventions, or `CC=clang` would
+  silently fall outside the `cc` grant. Candidates for built-in variables:
+  `:cc` from `CC` (then `CC_<target>`, `TARGET_CC`, `HOST_CC`, else `cc`, as
+  cc-rs does), `:pkg_config` from `PKG_CONFIG`, and `:pkgconfig_paths` from
+  `PKG_CONFIG_PATH`/`PKG_CONFIG_LIBDIR`. Built-in grants would then use them,
+  e.g. `run = [":cc", "as", "ld"]`. Names like `CC_<target>` depend on the
+  target, so this ties into per-platform values.
+- **Opt-in default grants.** Some named grants are needed by most crates of a
+  kind, e.g. `rustc` for compile probes. A one-line opt-in could add such
+  grants to every package's default, instead of each policy listing them.
+- **Generating machine facts.** crabshell doesn't run host tools during
+  builds, but a separate, user-run command (e.g. `crabshell probe`) could run
+  the tools' own discovery queries once (`gcc -print-prog-name`,
+  `pkg-config --variable pc_path pkg-config`, `ld.so --help`, `readelf` on
+  the tools) and write the results to the user config as variables and grant
+  extensions. The output stays reviewable and fixed until regenerated, so
+  builds stay deterministic. It can go stale after system upgrades (gcc moving
+  `cc1` to a new version dir); granting directories rather than versioned
+  files limits that. The fixtures' `hosts/*.toml` are hand-written examples of
+  such output.
+- **Host-conditional configuration.** The policy format can't say "on this kind
+  of host, use these grants": the test harness installs a per-distro user
+  config (`crabshell/fixtures/hosts/<ID>.toml`) from outside. Cargo-style
+  `cfg()` tables can't tell distros apart (Amazon Linux and Ubuntu are both
+  `x86_64-unknown-linux-gnu`). Options:
+  - built-in grants list every distro's entries, and missing programs are
+    skipped like missing paths are (today a `run` entry not on `PATH` is an
+    error);
+  - conditions on host facts, e.g. `/etc/os-release`'s `ID`, or whether a path
+    exists.

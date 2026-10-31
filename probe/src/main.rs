@@ -20,8 +20,12 @@
 //! - `cannot-exec <PATH>` — the program cannot be spawned.
 //! - `connect <ADDR>`     — a TCP connection to `ADDR` succeeds.
 //! - `no-connect <ADDR>`  — a TCP connection to `ADDR` fails.
+//! - `udp <ADDR>`         — a UDP socket bound to `ADDR` can be created.
+//! - `no-udp <ADDR>`      — a UDP socket bound to `ADDR` can't be created.
+//! - `no-io-uring _`      — `io_uring_setup` is denied (Linux).
+//! - `no-x32-socket _`    — an x32-ABI `socket` syscall is denied (x86-64 Linux).
 
-use std::net::TcpStream;
+use std::net::{TcpStream, UdpSocket};
 use std::path::Path;
 use std::process::{Command, ExitCode};
 
@@ -50,6 +54,10 @@ fn main() -> ExitCode {
         "cannot-exec" => Command::new(&arg).status().is_err(),
         "connect" => TcpStream::connect(&arg).is_ok(),
         "no-connect" => TcpStream::connect(&arg).is_err(),
+        "udp" => UdpSocket::bind(&arg).is_ok(),
+        "no-udp" => UdpSocket::bind(&arg).is_err(),
+        "no-io-uring" => syscall_fails(Syscall::IoUringSetup),
+        "no-x32-socket" => syscall_fails(Syscall::X32Socket),
         _ => {
             eprintln!("probe: unknown check `{check}`");
             return ExitCode::FAILURE;
@@ -74,4 +82,46 @@ fn read_back(dir: &Path) -> Option<bool> {
     let readable = std::fs::read(&path).is_ok();
     let _ = std::fs::remove_file(&path);
     Some(readable)
+}
+
+/// A raw syscall a sandbox should deny.
+enum Syscall {
+    IoUringSetup,
+    X32Socket,
+}
+
+/// Whether a sandbox denied `syscall`, i.e. it failed with `EACCES`. Off Linux,
+/// or for x32 off x86-64, there's no such syscall, so it counts as denied.
+fn syscall_fails(syscall: Syscall) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let rc = match syscall {
+            // SAFETY: a null params pointer makes the kernel fail with EFAULT
+            // unless something rejects the syscall first; nothing is set up.
+            Syscall::IoUringSetup => unsafe {
+                libc::syscall(libc::SYS_io_uring_setup, 1, std::ptr::null_mut::<libc::c_void>())
+            },
+            #[cfg(target_arch = "x86_64")]
+            // SAFETY: `socket` takes no pointers; a created socket is closed below.
+            Syscall::X32Socket => unsafe {
+                libc::syscall(0x4000_0000 | libc::SYS_socket, libc::AF_INET, libc::SOCK_STREAM, 0)
+            },
+            #[cfg(not(target_arch = "x86_64"))]
+            Syscall::X32Socket => return true,
+        };
+        if rc >= 0 {
+            // SAFETY: closing the fd the syscall just returned.
+            unsafe { libc::close(rc as libc::c_int) };
+            return false;
+        }
+        // A sandbox denies with EACCES. Unconfined, io_uring with a null
+        // pointer fails with EFAULT, and x32 on kernels without it with
+        // ENOSYS, so other errors don't count.
+        std::io::Error::last_os_error().raw_os_error() == Some(libc::EACCES)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = syscall;
+        true
+    }
 }

@@ -50,8 +50,12 @@ process and then execs the build script, which inherits the restriction:
 - `read` grants read and execute, `write` grants write-only access, and
   `run` grants execute on one resolved program. A path that needs reading
   and writing is listed in both.
-- Unless network is granted, crabshell also enters an empty network namespace
-  (through an unprivileged user namespace). Landlock alone only covers TCP.
+- Unless network is granted, a seccomp filter denies creating IPv4, IPv6 and
+  raw packet sockets, so there's no TCP, UDP or DNS; Landlock alone only
+  covers TCP. Unlike a network namespace, seccomp needs no user namespace,
+  which Ubuntu's AppArmor (since 23.10) and Docker restrict. The filter also
+  denies io_uring, which can create sockets without the `socket` syscall, and
+  x32-ABI syscalls on x86-64.
 - Denied paths are visible but return `EACCES`; they aren't hidden as they
   would be with mount namespaces.
 

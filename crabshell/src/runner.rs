@@ -9,8 +9,8 @@
 //!   and [`crate::policy::IMPLICIT_READ_WRITE`]) and a write-only `OUT_DIR`
 //!   and private `TMPDIR`. `write` grants no read access; a path that needs
 //!   both is listed in both.
-//! - **Network**, unless granted, through an empty network namespace, with
-//!   Landlock's TCP rules as a second layer.
+//! - **Network**, unless granted, through a seccomp filter denying IP
+//!   sockets, with Landlock's TCP rules as a second layer.
 //!
 //! Other platforms only get environment scrubbing.
 
@@ -124,8 +124,8 @@ impl Grants {
 /// afterwards, so the dir lives in Cargo's per-unit build dir: it's emptied on
 /// the next run and removed by `cargo clean`.
 fn private_tmp(out_dir: &Path) -> io::Result<PathBuf> {
-    let tmp = crate::paths::tmp_dir(out_dir)
-        .ok_or_else(|| io::Error::other("OUT_DIR has no parent"))?;
+    let tmp =
+        crate::paths::tmp_dir(out_dir).ok_or_else(|| io::Error::other("OUT_DIR has no parent"))?;
     match std::fs::remove_dir_all(&tmp) {
         Err(err) if err.kind() != io::ErrorKind::NotFound => return Err(err),
         _ => {}
@@ -163,10 +163,6 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
         path_beneath_rules,
     };
 
-    if !network && has_route() {
-        isolate_network()?;
-    }
-
     let abi = ABI::V6;
     let mut ruleset =
         Ruleset::default().handle_access(AccessFs::from_all(abi)).map_err(io::Error::other)?;
@@ -188,41 +184,71 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
     if status.ruleset == RulesetStatus::NotEnforced {
         return Err(io::Error::other("Landlock is not supported by this kernel"));
     }
+    if !network {
+        deny_network()?;
+    }
     Ok(())
 }
 
-/// Whether the current network namespace can route to the outside world.
+/// Deny creating network sockets, with seccomp: IPv4, IPv6 and raw packets.
 ///
-/// `connect` on a UDP socket only looks up a route; it sends nothing. Without a
-/// route there's nothing to isolate from, which is the case when crabshell
-/// runs nested inside another sandbox's network namespace. That sandbox's
-/// Landlock domain may also deny the `/proc` writes [`isolate_network`] needs.
+/// Without an IP socket there's no TCP, UDP or DNS. Unlike a network
+/// namespace, a seccomp filter needs no privileges beyond `no_new_privs`, so it
+/// also works where unprivileged user namespaces are restricted (Ubuntu's
+/// AppArmor since 23.10, Docker's default seccomp profile). `AF_UNIX` stays
+/// allowed for local IPC such as the jobserver, and `AF_NETLINK` for local
+/// routing queries.
+///
+/// Two gaps are closed explicitly: io_uring is denied, since
+/// `IORING_OP_SOCKET` creates sockets without the `socket` syscall, and on
+/// x86-64 every x32-ABI syscall is denied, since seccompiler's rules don't
+/// match the x32 numbering (`nr | 0x40000000`).
 #[cfg(target_os = "linux")]
-fn has_route() -> bool {
-    let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") else {
-        return false;
+fn deny_network() -> io::Result<()> {
+    use std::collections::BTreeMap;
+
+    use seccompiler::{
+        BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
+        SeccompRule,
     };
-    // A TEST-NET-3 address (RFC 5737): routable syntax, never a real host.
-    socket.connect("203.0.113.1:9").is_ok()
+
+    let denied = SeccompAction::Errno(libc::EACCES as u32);
+    let family = |af: libc::c_int| {
+        SeccompCondition::new(0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, af as u64)
+            .and_then(|condition| SeccompRule::new(vec![condition]))
+    };
+    let sockets = [libc::AF_INET, libc::AF_INET6, libc::AF_PACKET]
+        .into_iter()
+        .map(family)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(io::Error::other)?;
+    // An empty rule list matches the syscall unconditionally.
+    let rules = BTreeMap::from([(libc::SYS_socket, sockets), (libc::SYS_io_uring_setup, vec![])]);
+    let arch = std::env::consts::ARCH.try_into().map_err(io::Error::other)?;
+    let filter =
+        SeccompFilter::new(rules, SeccompAction::Allow, denied, arch).map_err(io::Error::other)?;
+    let program: BpfProgram = filter.try_into().map_err(io::Error::other)?;
+    seccompiler::apply_filter(&program).map_err(io::Error::other)?;
+
+    #[cfg(target_arch = "x86_64")]
+    seccompiler::apply_filter(&deny_x32()).map_err(io::Error::other)?;
+    Ok(())
 }
 
-/// Move into a new user and network namespace, which has only a down loopback.
-///
-/// The user namespace is what lets an unprivileged process create the network
-/// namespace; our own uid and gid map to themselves inside it.
-#[cfg(target_os = "linux")]
-fn isolate_network() -> io::Result<()> {
-    use rustix::thread::{UnshareFlags, unshare_unsafe};
+/// A filter denying every x32-ABI syscall, whose numbers have bit 30 set.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn deny_x32() -> seccompiler::BpfProgram {
+    use seccompiler::sock_filter;
 
-    let uid = rustix::process::getuid().as_raw();
-    let gid = rustix::process::getgid().as_raw();
-    // SAFETY: new user and network namespaces don't unshare file descriptors
-    // or other state Rust's runtime relies on.
-    unsafe { unshare_unsafe(UnshareFlags::NEWUSER | UnshareFlags::NEWNET)? };
-    std::fs::write("/proc/self/setgroups", "deny")?;
-    std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1"))?;
-    std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1"))?;
-    Ok(())
+    const X32_SYSCALL_BIT: u32 = 0x4000_0000;
+    let op = |code: u32, jt: u8, jf: u8, k: u32| sock_filter { code: code as u16, jt, jf, k };
+    vec![
+        // The syscall number is the first field of `seccomp_data`.
+        op(libc::BPF_LD | libc::BPF_W | libc::BPF_ABS, 0, 0, 0),
+        op(libc::BPF_JMP | libc::BPF_JSET | libc::BPF_K, 0, 1, X32_SYSCALL_BIT),
+        op(libc::BPF_RET | libc::BPF_K, 0, 0, libc::SECCOMP_RET_ERRNO | libc::EACCES as u32),
+        op(libc::BPF_RET | libc::BPF_K, 0, 0, libc::SECCOMP_RET_ALLOW),
+    ]
 }
 
 #[cfg(not(target_os = "linux"))]

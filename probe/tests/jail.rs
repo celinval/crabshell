@@ -55,6 +55,8 @@ fn network_is_denied_unless_granted() {
 
     assert!(jailed(&[], &["no-connect", &addr]));
     assert!(jailed(&["--network"], &["connect", &addr]));
+    assert!(jailed(&[], &["no-udp", "127.0.0.1:0"]));
+    assert!(jailed(&["--network"], &["udp", "127.0.0.1:0"]));
 }
 
 #[test]

@@ -315,6 +315,19 @@ fn network_is_denied_unless_granted() {
 
     assert!(build.check("dep", Origin::External, &[], &["no-connect", &addr]));
     assert!(build.check("online", Origin::External, &[], &["connect", &addr]));
+    // UDP too, which Landlock's TCP rules alone don't cover.
+    assert!(build.check("dep", Origin::External, &[], &["no-udp", "127.0.0.1:0"]));
+    assert!(build.check("online", Origin::External, &[], &["udp", "127.0.0.1:0"]));
+}
+
+/// Paths to a socket that bypass a `socket`-only filter are denied too.
+#[cfg(target_os = "linux")]
+#[test]
+fn network_denial_covers_io_uring_and_x32() {
+    let build = Build::new("[external]\n");
+
+    assert!(build.check("dep", Origin::External, &[], &["no-io-uring", "_"]));
+    assert!(build.check("dep", Origin::External, &[], &["no-x32-socket", "_"]));
 }
 
 #[test]

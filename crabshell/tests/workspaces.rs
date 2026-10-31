@@ -26,8 +26,9 @@
 //! For trusted fixtures, an unjailed reference build must match the jailed
 //! baseline, showing that the jail itself doesn't change behavior.
 //!
-//! The fixtures build with the nightly pinned in `fixtures/rust-toolchain.toml`
-//! and fetch crates. Requests are injected through the `test-requests`
+//! The fixtures build with the toolchain rustup selects for `fixtures/`, with
+//! `RUSTC_BOOTSTRAP=1` for Cargo's unstable `host.runner` hook, and fetch
+//! crates. Requests are injected through the `test-requests`
 //! feature, and these tests are ignored without it: run them with
 //! `cargo test --features test-requests`.
 
@@ -206,7 +207,7 @@ impl Scratch {
     }
 }
 
-/// The pinned toolchain's binaries, called directly so rustup stays out of
+/// The fixtures' toolchain binaries, called directly so rustup stays out of
 /// the jail.
 struct Toolchain {
     cargo: PathBuf,
@@ -225,7 +226,7 @@ impl Toolchain {
     }
 }
 
-/// Ask rustup for `tool` in the toolchain pinned for `fixtures/`.
+/// Ask rustup for `tool` in the toolchain it selects for `fixtures/`.
 fn which(tool: &str) -> PathBuf {
     let output = Command::new("rustup")
         .env_clear()
@@ -249,6 +250,8 @@ fn rustup_home() -> OsString {
 ///
 /// `PATH` is kept for the tools build scripts run (`cc`, `pkg-config`), and
 /// `RUSTUP_HOME` for policies that name the toolchain through it.
+/// `RUSTC_BOOTSTRAP` lets a stable Cargo take `-Zhost-config`. Every build
+/// gets it, so build scripts that read it see the same value in the baseline.
 fn outer_env() -> Vec<(&'static str, OsString)> {
     let scratch = Scratch::get();
     vec![
@@ -258,6 +261,7 @@ fn outer_env() -> Vec<(&'static str, OsString)> {
         ("HOME", scratch.home().into()),
         ("TMPDIR", scratch.tmp().into()),
         ("RUSTC", Toolchain::get().rustc.clone().into()),
+        ("RUSTC_BOOTSTRAP", "1".into()),
         (FAKE_TOKEN.0, FAKE_TOKEN.1.into()),
     ]
 }
@@ -381,9 +385,9 @@ fn logs(target_dir: &Path, output: &Output) -> Vec<String> {
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     ];
-    for (_, run) in run_dirs(target_dir) {
-        for log in ["stdout", "stderr"] {
-            logs.extend(std::fs::read_to_string(run.join(log)));
+    for run in script_runs(target_dir) {
+        for log in [run.stdout, run.stderr] {
+            logs.extend(std::fs::read_to_string(log));
         }
     }
     logs
@@ -402,19 +406,42 @@ fn assert_no_secrets(target_dir: &Path, logs: &[String]) {
     }
 }
 
-/// Every build script's `run` dir, with the package it belongs to.
-fn run_dirs(target_dir: &Path) -> Vec<(String, PathBuf)> {
-    let Ok(pkgs) = std::fs::read_dir(target_dir.join("debug/build")) else {
+/// The saved output of one build script run.
+struct ScriptRun {
+    package: String,
+    stdout: PathBuf,
+    stderr: PathBuf,
+}
+
+/// Every build script run under `target_dir`, in either of Cargo's layouts.
+///
+/// Stable Cargo keeps a run's output in `build/<pkg>-<hash>/output`; nightly's
+/// new build-dir layout uses `build/<pkg>/<hash>/run/stdout`.
+fn script_runs(target_dir: &Path) -> Vec<ScriptRun> {
+    let Ok(dirs) = std::fs::read_dir(target_dir.join("debug/build")) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for pkg in pkgs {
-        let pkg = pkg.unwrap().path();
-        let name = pkg.file_name().unwrap().to_string_lossy().into_owned();
-        for unit in std::fs::read_dir(&pkg).unwrap() {
+    for dir in dirs {
+        let dir = dir.unwrap().path();
+        let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+        if dir.join("output").is_file() {
+            let package = name.rsplit_once('-').map_or(name.as_str(), |(pkg, _)| pkg);
+            out.push(ScriptRun {
+                package: package.to_string(),
+                stdout: dir.join("output"),
+                stderr: dir.join("stderr"),
+            });
+            continue;
+        }
+        for unit in std::fs::read_dir(&dir).unwrap() {
             let run = unit.unwrap().path().join("run");
             if run.is_dir() {
-                out.push((name.clone(), run));
+                out.push(ScriptRun {
+                    package: name.clone(),
+                    stdout: run.join("stdout"),
+                    stderr: run.join("stderr"),
+                });
             }
         }
     }
@@ -427,9 +454,9 @@ fn run_dirs(target_dir: &Path) -> Vec<(String, PathBuf)> {
 /// with its full environment, which differs by design under a sandbox.
 fn directives(target_dir: &Path) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    for (name, run) in run_dirs(target_dir) {
-        if let Ok(text) = std::fs::read_to_string(run.join("stdout")) {
-            let lines: &mut String = out.entry(name).or_default();
+    for run in script_runs(target_dir) {
+        if let Ok(text) = std::fs::read_to_string(&run.stdout) {
+            let lines: &mut String = out.entry(run.package).or_default();
             for line in text.lines().filter(|line| line.starts_with("cargo:")) {
                 lines.push_str(line);
                 lines.push('\n');
@@ -460,6 +487,8 @@ fn check(fixture: &Fixture) {
         "{name}: baseline leaks the fake token"
     );
     let expected = directives(&baseline_dir);
+    // An unrecognized build-dir layout would make every comparison vacuous.
+    assert!(!expected.is_empty(), "{name}: found no build script output");
     assert_requests_cover(fixture, &expected);
 
     if fixture.trusted {

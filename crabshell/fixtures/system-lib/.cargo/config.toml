@@ -1,5 +1,5 @@
-# Run every build script through crabshell. Requires nightly Cargo with
-# `-Zhost-config -Ztarget-applies-to-host`.
+# Run every build script through crabshell. Requires
+# `-Zhost-config -Ztarget-applies-to-host`: nightly Cargo, or RUSTC_BOOTSTRAP=1.
 target-applies-to-host = false
 
 [host]

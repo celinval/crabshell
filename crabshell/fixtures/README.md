@@ -6,7 +6,8 @@ grant without their help.
 
 Each folder is a standalone workspace with one crate that depends on crates
 of one [category](../../docs/src/build-scripts/categories.md). `Cargo.lock` pins
-every version; `rust-toolchain.toml` pins the nightly.
+every version. They build with a stable toolchain and `RUSTC_BOOTSTRAP=1`,
+since `host.runner` is unstable.
 
 | Fixture | Build scripts that… |
 |---|---|
@@ -61,9 +62,9 @@ To build a fixture by hand, build crabshell first (`.cargo/config.toml` runs
 cargo build -p crabshell --features test-requests
 cd crabshell/fixtures/cfg-only
 cp sandbox.tight.toml sandbox.toml
-cargo -Zhost-config -Ztarget-applies-to-host build
+RUSTC_BOOTSTRAP=1 cargo -Zhost-config -Ztarget-applies-to-host build
 # with precise requests:
-CRABSHELL_REQUESTS=$PWD/requests.toml cargo -Zhost-config -Ztarget-applies-to-host build
+RUSTC_BOOTSTRAP=1 CRABSHELL_REQUESTS=$PWD/requests.toml cargo -Zhost-config -Ztarget-applies-to-host build
 ```
 
 The `system-lib` policies extend the built-in `pkg-config` grant for Amazon

@@ -153,6 +153,7 @@ What the requests cost, per build script:
 | `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 11 | 0–20 | `rustc` | 0 |
+| `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -170,6 +171,15 @@ What the requests cost, per build script:
   web_atoms read `$CARGO_MANIFEST_DIR/...` rather than paths relative to the
   working dir, so they fail under the default grant: it reads the crate root
   but doesn't pass the variable naming it.
+- **Vendored builds need more tools than linking a system library.** cc-rs
+  archives with `ar`, which the built-in `cc` grant now includes. CMake
+  needs a grant of its own (`cmake`, `make`, `sh`, `ranlib`, its modules
+  under `/usr/share/cmake*`), which the fixture defines since crabshell has no
+  built-in one; the cmake crate also probes `c++` for C projects and reports
+  a failure as a `cargo:warning`.
+- **ring checks its own identity.** It asserts `CARGO_MANIFEST_LINKS` against
+  `CARGO_PKG_NAME` and `CARGO_PKG_VERSION_*`, so it fails outright without
+  them.
 - **autocfg needs `OUT_DIR` read back.** Like proc-macro2's probes, without it
   num-traits succeeds but silently drops `has_total_cmp`.
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob

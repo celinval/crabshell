@@ -15,6 +15,7 @@ since `host.runner` is unstable.
 | `codegen` | generate Rust source into `OUT_DIR` from their own data |
 | `rustc-probe` | also run `$RUSTC` to detect versions or features |
 | `system-lib` | locate system libraries through pkg-config, and use the C toolchain |
+| `cc-toolchain` | compile vendored C and assembly through cc-rs or CMake |
 
 ## Scenarios
 

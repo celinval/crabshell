@@ -1,0 +1,15 @@
+#:schema ../../schema/sandbox.schema.json
+# A loose consumer policy: the category's grants and any environment variable.
+[external]
+# OUT_DIR is write-only; compilers and CMake read back what they write.
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc", "cc", "cmake"]
+env = ["*"]
+
+# Configuring and building with CMake, which crabshell has no built-in grant
+# for. The cmake crate drives it with `make` and the `cc` grant's compilers,
+# and probes `c++` even for C projects.
+[grant.cmake]
+run = ["cmake", "make", "sh", "ranlib", "c++"]
+read = ["/usr/share/cmake*"]
+env = ["CMAKE", "CMAKE_*", "HOST_CMAKE*", "TARGET_CMAKE*", "PROFILE", "NUM_JOBS", "CARGO_MAKEFLAGS", "MAKEFLAGS"]

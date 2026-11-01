@@ -1,0 +1,14 @@
+# Depends on crates whose build scripts compile vendored C and assembly with
+# the system toolchain, directly through cc-rs or through CMake.
+[workspace]
+
+[package]
+name = "cc-toolchain"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+libz-ng-sys = "1"
+ring = "0.17"
+zstd-sys = "2"

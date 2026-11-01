@@ -190,7 +190,7 @@ impl Probe {
             }
             self.program("cc", helper, &path);
         }
-        for tool in ["cc", "as", "ld"] {
+        for tool in ["cc", "as", "ld", "ar"] {
             match which(tool) {
                 Some(program) => self.program("cc", tool, &program),
                 None => self.error("cc", format!("`{tool}` not found on PATH")),

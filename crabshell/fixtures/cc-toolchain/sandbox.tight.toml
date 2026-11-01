@@ -1,0 +1,23 @@
+#:schema ../../schema/sandbox.schema.json
+# The tightest consumer policy that works without crate requests: the union of
+# requests.toml, granted to every external crate.
+[external]
+# OUT_DIR is write-only; compilers and CMake read back what they write.
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc", "cc", "cmake"]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+    "OPT_LEVEL", "RISCV_WITH_RVV",
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION_*",
+    "DEBUG", "RING_PREGENERATE_ASM", "ZSTD_SYS_*",
+] }
+
+# Configuring and building with CMake, which crabshell has no built-in grant
+# for. The cmake crate drives it with `make` and the `cc` grant's compilers,
+# and probes `c++` even for C projects.
+[grant.cmake]
+run = ["cmake", "make", "sh", "ranlib", "c++"]
+read = ["/usr/share/cmake*"]
+env = ["CMAKE", "CMAKE_*", "HOST_CMAKE*", "TARGET_CMAKE*", "PROFILE", "NUM_JOBS", "CARGO_MAKEFLAGS", "MAKEFLAGS"]

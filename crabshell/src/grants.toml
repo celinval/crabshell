@@ -25,7 +25,7 @@ env = ["RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_LINKER", "CAR
 # Compiling and linking C through the cc crate. Linking searches the system
 # library dirs, so those are readable as a whole.
 [grant.cc]
-run = ["cc", "as", "ld"]
+run = ["cc", "as", "ld", "ar"]
 read = [
     "/usr/include",
     "/usr/libexec/gcc", "/usr/lib/gcc",

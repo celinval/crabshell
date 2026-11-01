@@ -599,3 +599,14 @@ fn codegen() {
     // default grant doesn't include.
     check(&Fixture { name: "codegen", trusted: true, dumps_env: false, default_suffices: false });
 }
+
+#[test]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+fn cc_toolchain() {
+    check(&Fixture {
+        name: "cc-toolchain",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: false,
+    });
+}

@@ -1,0 +1,15 @@
+# Depends on crates whose build scripts generate Rust source into `OUT_DIR`
+# from their own data, without running tools.
+[workspace]
+
+[package]
+name = "codegen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The feature makes its build script generate the zone tables.
+chrono-tz = { version = "0.10", features = ["case-insensitive"] }
+mime_guess = "2"
+web_atoms = "0.1"

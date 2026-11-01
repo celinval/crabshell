@@ -152,6 +152,7 @@ What the requests cost, per build script:
 | `cfg-only` | 7 | 0–2 | – | 0 |
 | `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
+| `codegen` | 11 | 0–20 | `rustc` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -165,6 +166,12 @@ What the requests cost, per build script:
   requests otherwise narrow the crate root away. Two of them, proc-macro2 and
   thiserror, compile probe sources from their crate: without that request
   they still succeed, but silently lose cfgs.
+- **Generators find their data through `CARGO_MANIFEST_DIR`.** chrono-tz and
+  web_atoms read `$CARGO_MANIFEST_DIR/...` rather than paths relative to the
+  working dir, so they fail under the default grant: it reads the crate root
+  but doesn't pass the variable naming it.
+- **autocfg needs `OUT_DIR` read back.** Like proc-macro2's probes, without it
+  num-traits succeeds but silently drops `has_total_cmp`.
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob
   also prefixed with the target triple (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`).
   Patterns only match prefixes, so the request has to name the triple.

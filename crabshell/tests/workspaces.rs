@@ -424,6 +424,7 @@ fn assert_no_secrets(target_dir: &Path, logs: &[String]) {
 /// The saved output of one build script run.
 struct ScriptRun {
     package: String,
+    out_dir: PathBuf,
     stdout: PathBuf,
     stderr: PathBuf,
 }
@@ -444,16 +445,19 @@ fn script_runs(target_dir: &Path) -> Vec<ScriptRun> {
             let package = name.rsplit_once('-').map_or(name.as_str(), |(pkg, _)| pkg);
             out.push(ScriptRun {
                 package: package.to_string(),
+                out_dir: dir.join("out"),
                 stdout: dir.join("output"),
                 stderr: dir.join("stderr"),
             });
             continue;
         }
         for unit in std::fs::read_dir(&dir).unwrap() {
-            let run = unit.unwrap().path().join("run");
+            let unit = unit.unwrap().path();
+            let run = unit.join("run");
             if run.is_dir() {
                 out.push(ScriptRun {
                     package: name.clone(),
+                    out_dir: unit.join("out"),
                     stdout: run.join("stdout"),
                     stderr: run.join("stderr"),
                 });
@@ -467,13 +471,16 @@ fn script_runs(target_dir: &Path) -> Vec<ScriptRun> {
 ///
 /// Other output is diagnostics, e.g. cc-rs prints each compiler invocation
 /// with its full environment, which differs by design under a sandbox.
+/// Directives may name files in `OUT_DIR`, whose path differs between builds,
+/// so it reads as `<out-dir>`.
 fn directives(target_dir: &Path) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for run in script_runs(target_dir) {
         if let Ok(text) = std::fs::read_to_string(&run.stdout) {
+            let out_dir = run.out_dir.to_string_lossy();
             let lines: &mut String = out.entry(run.package).or_default();
             for line in text.lines().filter(|line| line.starts_with("cargo:")) {
-                lines.push_str(line);
+                lines.push_str(&line.replace(&*out_dir, "<out-dir>"));
                 lines.push('\n');
             }
         }
@@ -583,4 +590,12 @@ fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.
     check(&Fixture { name: "system-lib", trusted: true, dumps_env: true, default_suffices: false });
+}
+
+#[test]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+fn codegen() {
+    // The generators find their data through CARGO_MANIFEST_DIR, which the
+    // default grant doesn't include.
+    check(&Fixture { name: "codegen", trusted: true, dumps_env: false, default_suffices: false });
 }

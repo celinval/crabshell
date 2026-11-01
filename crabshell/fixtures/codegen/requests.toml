@@ -1,0 +1,63 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed; a crate that reads its own
+# files requests exactly those, since the crate root is otherwise narrowed
+# away.
+
+# The generators: each reads its data through CARGO_MANIFEST_DIR.
+[package.chrono-tz]
+read = [":manifest_dir/tz"]
+env = ["CARGO_MANIFEST_DIR"]
+
+[package.web_atoms]
+read = [":manifest_dir/local_names.txt"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Its data is compiled into the build script, so it only writes OUT_DIR.
+[package.mime_guess]
+
+# Version probes pulled in by the generators' dependencies (see rustc-probe).
+[package.num-traits]
+# autocfg compiles its probes into OUT_DIR; without reading them back, it
+# silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.uncased]
+requests = ["rustc"]
+
+[package.libc]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_LIBC_UNSTABLE_FREEBSD_VERSION", "CARGO_CFG_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "CARGO_CFG_LIBC_UNSTABLE_GNU_TIME_BITS", "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2",
+    "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2_3", "CARGO_CFG_LIBC_UNSTABLE_TIME64",
+    "CARGO_CFG_LIBC_UNSTABLE_UCLIBC_TIME64",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
+]
+
+[package.parking_lot_core]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.quote]
+requests = ["rustc"]
+
+[package.serde]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]

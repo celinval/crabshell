@@ -1,0 +1,12 @@
+# Depends on crates whose build scripts run a language runtime's interpreter
+# to read its configuration.
+[workspace]
+
+[package]
+name = "lang-runtime"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+pyo3 = "0.30"

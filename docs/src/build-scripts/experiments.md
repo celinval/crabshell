@@ -155,6 +155,7 @@ What the requests cost, per build script:
 | `codegen` | 11 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
 | `vcs-metadata` | 1 | 0 | `git` | 0 |
+| `lang-runtime` | 7 | 1–20 | `rustc`, `python` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -183,6 +184,12 @@ What the requests cost, per build script:
   usually above the workspace root, or elsewhere for a worktree. No built-in
   variable names it, so the fixture imports it from an env var the harness
   sets. Without git the script still succeeds, embedding `unknown`.
+- **Build-dependency libraries read env on the crate's behalf.** pyo3,
+  pyo3-ffi and pyo3-macros-backend each call pyo3-build-config, so each
+  requests what that library reads (`TARGET`, `PYO3_*`), and pyo3 reads
+  the interpreter config pyo3-ffi passes on as `DEP_PYTHON_PYO3_CONFIG`.
+  An empty request narrows the default grant away too: target-lexicon needs
+  `TARGET` requested explicitly.
 - **ring checks its own identity.** It asserts `CARGO_MANIFEST_LINKS` against
   `CARGO_PKG_NAME` and `CARGO_PKG_VERSION_*`, so it fails outright without
   them.

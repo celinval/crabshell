@@ -676,3 +676,15 @@ fn vcs_metadata() {
         reads_git: true,
     });
 }
+
+#[test]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+fn lang_runtime() {
+    check(&Fixture {
+        name: "lang-runtime",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: false,
+        reads_git: false,
+    });
+}

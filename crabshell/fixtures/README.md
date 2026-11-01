@@ -17,6 +17,7 @@ since `host.runner` is unstable.
 | `system-lib` | locate system libraries through pkg-config, and use the C toolchain |
 | `cc-toolchain` | compile vendored C and assembly through cc-rs or CMake |
 | `vcs-metadata` | run git to record the commit, in the workspace's own crate |
+| `lang-runtime` | run the Python interpreter to read its configuration (pyo3) |
 
 ## Scenarios
 

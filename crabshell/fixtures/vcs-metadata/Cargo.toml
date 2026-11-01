@@ -1,0 +1,9 @@
+# A workspace member whose build script records the commit it's built from,
+# as many applications do. The repository is the one holding this fixture.
+[workspace]
+
+[package]
+name = "vcs-metadata"
+version = "0.0.0"
+edition = "2024"
+publish = false

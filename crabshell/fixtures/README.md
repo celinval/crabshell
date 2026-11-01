@@ -16,6 +16,7 @@ since `host.runner` is unstable.
 | `rustc-probe` | also run `$RUSTC` to detect versions or features |
 | `system-lib` | locate system libraries through pkg-config, and use the C toolchain |
 | `cc-toolchain` | compile vendored C and assembly through cc-rs or CMake |
+| `vcs-metadata` | run git to record the commit, in the workspace's own crate |
 
 ## Scenarios
 
@@ -23,8 +24,8 @@ Every fixture builds in each cell of **requests × grants**:
 
 | | default | tight | loose |
 |---|---|---|---|
-| **no requests** | fails | same as baseline | same as baseline |
-| **precise requests** | fails | same as baseline | same as baseline |
+| **no requests** | fails or differs | same as baseline | same as baseline |
+| **precise requests** | fails or differs | same as baseline | same as baseline |
 
 - **Requests** stand in for the crates' own `[package.metadata.build-rs]`,
   since we can't edit them. `requests.toml` lists, for every build script,

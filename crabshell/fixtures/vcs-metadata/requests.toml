@@ -1,0 +1,9 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed.
+
+# Runs `git rev-parse`; the repository comes from the `git` grant.
+[package.vcs-metadata]
+requests = ["git"]

@@ -1,0 +1,19 @@
+#:schema ../../schema/sandbox.schema.json
+# The tightest consumer policy that works without crate requests: the union of
+# requests.toml, granted to the workspace member.
+[local]
+grants = ["git"]
+
+# Running git on the workspace's repository, which crabshell has no built-in
+# grant or variable for: the harness passes the repository's git dirs in
+# CRABSHELL_GIT_DIR.
+[variables]
+git_dir = { env = "CRABSHELL_GIT_DIR" }
+
+[grant.git]
+run = ["git"]
+read = [
+    ":git_dir", "/etc/gitconfig",
+    "/lib64/libpcre2-8.so.0", "/lib/x86_64-linux-gnu/libpcre2-8.so.0",
+    "/lib64/libz.so.1", "/lib/x86_64-linux-gnu/libz.so.1",
+]

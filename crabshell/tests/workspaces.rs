@@ -94,8 +94,10 @@ impl Scenario {
         }
     }
 
-    /// Whether the build should work. Requests only narrow, so the default
-    /// column works only for fixtures the default grant covers.
+    /// Whether the build should work, matching the baseline. Requests only
+    /// narrow, so the default column works only for fixtures the default grant
+    /// covers; elsewhere it fails or, as when a script falls back without a
+    /// tool, differs.
     fn succeeds(&self, fixture: &Fixture) -> bool {
         self.grants != Grants::Default || fixture.default_suffices
     }
@@ -118,11 +120,33 @@ struct Fixture {
     dumps_env: bool,
     /// Whether the default grant alone covers every build script's needs.
     default_suffices: bool,
+    /// Whether a build script runs git on the repository holding the fixture,
+    /// which the jail then exposes, read-only, with its path in
+    /// `CRABSHELL_GIT_DIR`.
+    reads_git: bool,
 }
 
 impl Fixture {
     fn dir(&self) -> PathBuf {
         e2e_tests().join(self.name)
+    }
+
+    /// The git dirs of the repository holding `fixtures/`, if the fixture
+    /// reads them: the worktree's and the shared one.
+    fn git_dirs(&self) -> Vec<PathBuf> {
+        if !self.reads_git {
+            return Vec::new();
+        }
+        let output = Command::new("git")
+            .args(["rev-parse", "--absolute-git-dir", "--path-format=absolute", "--git-common-dir"])
+            .current_dir(e2e_tests())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "git rev-parse:\n{}", output_stderr(&output));
+        let mut dirs: Vec<PathBuf> =
+            String::from_utf8(output.stdout).unwrap().lines().map(PathBuf::from).collect();
+        dirs.dedup();
+        dirs
     }
 }
 
@@ -324,6 +348,10 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
         Mode::Baseline | Mode::Sandboxed(_) => jail(fixture, target_dir),
     };
     cmd.env_clear().envs(outer_env());
+    let git_dirs = fixture.git_dirs();
+    if !git_dirs.is_empty() {
+        cmd.env("CRABSHELL_GIT_DIR", std::env::join_paths(&git_dirs).unwrap());
+    }
     if let Mode::Sandboxed(scenario) = mode {
         let runner = format!("host.runner=[{:?}]", env!("CARGO_BIN_EXE_crabshell"));
         cmd.args(["-Zhost-config", "-Ztarget-applies-to-host", "--config", &runner])
@@ -356,7 +384,7 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
     let jail = crabshell.with_file_name("jail");
     assert!(jail.is_file(), "missing {}: run `cargo test` from the workspace root", jail.display());
 
-    let read = [
+    let mut read = vec![
         PathBuf::from("/usr"),
         PathBuf::from("/lib*"),
         toolchain.root().to_path_buf(),
@@ -365,6 +393,11 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
         fixture.dir(),
         crabshell,
     ];
+    let git_dirs = fixture.git_dirs();
+    if !git_dirs.is_empty() {
+        read.push(PathBuf::from("/etc/gitconfig"));
+        read.extend(git_dirs);
+    }
     let write = [target_dir.to_path_buf(), scratch.tmp(), PathBuf::from("/dev/null")];
 
     let mut cmd = Command::new(jail);
@@ -533,7 +566,8 @@ fn check(fixture: &Fixture) {
             assert!(build.output.status.success(), "{label}: failed:\n{}", stderr(&build));
             assert_eq!(directives(&target_dir), expected, "{label}: output differs");
         } else {
-            assert!(!build.output.status.success(), "{label}: expected the build to fail");
+            let works = build.output.status.success() && directives(&target_dir) == expected;
+            assert!(!works, "{label}: expected the build to fail or differ from the baseline");
         }
     }
 }
@@ -570,7 +604,13 @@ fn output_stderr(output: &Output) -> String {
 #[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
 fn cfg_only() {
     // Its scripts only read TARGET and CARGO_CFG_*, which the default covers.
-    check(&Fixture { name: "cfg-only", trusted: true, dumps_env: false, default_suffices: true });
+    check(&Fixture {
+        name: "cfg-only",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: true,
+        reads_git: false,
+    });
 }
 
 #[test]
@@ -581,6 +621,7 @@ fn rustc_probe() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
+        reads_git: false,
     });
 }
 
@@ -589,7 +630,13 @@ fn rustc_probe() {
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.
-    check(&Fixture { name: "system-lib", trusted: true, dumps_env: true, default_suffices: false });
+    check(&Fixture {
+        name: "system-lib",
+        trusted: true,
+        dumps_env: true,
+        default_suffices: false,
+        reads_git: false,
+    });
 }
 
 #[test]
@@ -597,7 +644,13 @@ fn system_lib() {
 fn codegen() {
     // The generators find their data through CARGO_MANIFEST_DIR, which the
     // default grant doesn't include.
-    check(&Fixture { name: "codegen", trusted: true, dumps_env: false, default_suffices: false });
+    check(&Fixture {
+        name: "codegen",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: false,
+        reads_git: false,
+    });
 }
 
 #[test]
@@ -608,5 +661,18 @@ fn cc_toolchain() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
+        reads_git: false,
+    });
+}
+
+#[test]
+#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+fn vcs_metadata() {
+    check(&Fixture {
+        name: "vcs-metadata",
+        trusted: true,
+        dumps_env: false,
+        default_suffices: false,
+        reads_git: true,
     });
 }

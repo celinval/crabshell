@@ -1,0 +1,9 @@
+# Run every build script through crabshell. Requires
+# `-Zhost-config -Ztarget-applies-to-host`: nightly Cargo, or RUSTC_BOOTSTRAP=1.
+target-applies-to-host = false
+
+[host]
+runner = ["../../../target/debug/crabshell"]
+
+[env]
+CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }

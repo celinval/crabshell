@@ -154,6 +154,7 @@ What the requests cost, per build script:
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 11 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
+| `vcs-metadata` | 1 | 0 | `git` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -177,6 +178,11 @@ What the requests cost, per build script:
   under `/usr/share/cmake*`), which the fixture defines since crabshell has no
   built-in one; the cmake crate also probes `c++` for C projects and reports
   a failure as a `cargo:warning`.
+- **The workspace's repository has no name in the policy.** A build script
+  running `git` reads the git dir of whatever repository holds the crate,
+  usually above the workspace root, or elsewhere for a worktree. No built-in
+  variable names it, so the fixture imports it from an env var the harness
+  sets. Without git the script still succeeds, embedding `unknown`.
 - **ring checks its own identity.** It asserts `CARGO_MANIFEST_LINKS` against
   `CARGO_PKG_NAME` and `CARGO_PKG_VERSION_*`, so it fails outright without
   them.

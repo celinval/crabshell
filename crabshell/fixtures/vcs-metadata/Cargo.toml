@@ -1,9 +1,6 @@
-# A workspace member whose build script records the commit it's built from,
-# as many applications do. The repository is the one holding this fixture.
+# A workspace whose member's build script records the commit it's built from,
+# as many applications do. The tests build a copy committed to a fresh git
+# repository, so the git dir sits at the workspace root, above the member.
 [workspace]
-
-[package]
-name = "vcs-metadata"
-version = "0.0.0"
-edition = "2024"
-publish = false
+members = ["app"]
+resolver = "3"

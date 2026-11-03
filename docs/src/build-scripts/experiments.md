@@ -179,11 +179,13 @@ What the requests cost, per build script:
   under `/usr/share/cmake*`), which the fixture defines since crabshell has no
   built-in one; the cmake crate also probes `c++` for C projects and reports
   a failure as a `cargo:warning`.
-- **The workspace's repository has no name in the policy.** A build script
-  running `git` reads the git dir of whatever repository holds the crate,
-  usually above the workspace root, or elsewhere for a worktree. No built-in
-  variable names it, so the fixture imports it from an env var the harness
-  sets. Without git the script still succeeds, embedding `unknown`.
+- **The repository is named relative to the crate.** A build script running
+  `git` reads the git dir of the repository holding the crate, usually above
+  it at the workspace root. For a workspace member the consumer knows the
+  layout and grants `:manifest_dir/../.git`; a built-in `git` grant couldn't,
+  since the depth varies and worktrees keep it elsewhere. Without git the
+  script still succeeds, embedding `unknown`. git itself fails if
+  `/etc/gitconfig` exists but is unreadable, so a `git` grant needs it.
 - **Build-dependency libraries read env on the crate's behalf.** pyo3,
   pyo3-ffi and pyo3-macros-backend each call pyo3-build-config, so each
   requests what that library reads (`TARGET`, `PYO3_*`), and pyo3 reads

@@ -120,33 +120,76 @@ struct Fixture {
     dumps_env: bool,
     /// Whether the default grant alone covers every build script's needs.
     default_suffices: bool,
-    /// Whether a build script runs git on the repository holding the fixture,
-    /// which the jail then exposes, read-only, with its path in
-    /// `CRABSHELL_GIT_DIR`.
-    reads_git: bool,
+    /// Whether a build script runs git on the workspace's repository. The
+    /// fixture then builds from a scratch copy committed to a fresh repository
+    /// (see [`Fixture::init_repo`]).
+    git_repo: bool,
 }
 
 impl Fixture {
+    /// Where the fixture builds from.
     fn dir(&self) -> PathBuf {
+        match self.git_repo {
+            true => Scratch::get().root.join(self.name).join("workspace"),
+            false => self.source(),
+        }
+    }
+
+    /// The fixture under `fixtures/`.
+    fn source(&self) -> PathBuf {
         e2e_tests().join(self.name)
     }
 
-    /// The git dirs of the repository holding `fixtures/`, if the fixture
-    /// reads them: the worktree's and the shared one.
-    fn git_dirs(&self) -> Vec<PathBuf> {
-        if !self.reads_git {
-            return Vec::new();
+    /// Copy the fixture into [`Fixture::dir`] and commit it to a new
+    /// repository there.
+    ///
+    /// The commit's author, committer and dates are fixed, and no user or
+    /// system git config applies, so its hash depends only on the fixture's
+    /// files.
+    fn init_repo(&self) {
+        let dir = self.dir();
+        copy_dir(&self.source(), &dir);
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .env_clear()
+                .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+                .env("HOME", &dir)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .envs(["AUTHOR", "COMMITTER"].into_iter().flat_map(|role| {
+                    [
+                        (format!("GIT_{role}_NAME"), "crabshell"),
+                        (format!("GIT_{role}_EMAIL"), "crabshell@example.com"),
+                        (format!("GIT_{role}_DATE"), "2026-01-01T00:00:00Z"),
+                    ]
+                }))
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "git {args:?}:\n{}", output_stderr(&output));
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "--message", "Fixture"]);
+    }
+}
+
+/// Copy the tree at `from` to `to`, leaving out build output from building the
+/// fixture by hand.
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name() == "target" {
+            continue;
         }
-        let output = Command::new("git")
-            .args(["rev-parse", "--absolute-git-dir", "--path-format=absolute", "--git-common-dir"])
-            .current_dir(e2e_tests())
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "git rev-parse:\n{}", output_stderr(&output));
-        let mut dirs: Vec<PathBuf> =
-            String::from_utf8(output.stdout).unwrap().lines().map(PathBuf::from).collect();
-        dirs.dedup();
-        dirs
+        let to = to.join(entry.file_name());
+        match entry.file_type().unwrap().is_dir() {
+            true => copy_dir(&entry.path(), &to),
+            false => {
+                std::fs::copy(entry.path(), to).unwrap();
+            }
+        }
     }
 }
 
@@ -170,6 +213,8 @@ const FAKE_TOKEN: (&str, &str) = ("CRABSHELL_FAKE_TOKEN", "crabshell-fake-token-
 ///   tmp/                         TMPDIR
 ///   <fixture>/baseline-target/   jailed, without crabshell
 ///   <fixture>/reference-target/  unjailed, without crabshell (trusted only)
+///   <fixture>/workspace/         the fixture committed to a fresh git
+///                                repository, for fixtures that read one
 ///   <fixture>/<variant>-target/  jailed, through crabshell
 /// ```
 ///
@@ -348,10 +393,6 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
         Mode::Baseline | Mode::Sandboxed(_) => jail(fixture, target_dir),
     };
     cmd.env_clear().envs(outer_env());
-    let git_dirs = fixture.git_dirs();
-    if !git_dirs.is_empty() {
-        cmd.env("CRABSHELL_GIT_DIR", std::env::join_paths(&git_dirs).unwrap());
-    }
     if let Mode::Sandboxed(scenario) = mode {
         let runner = format!("host.runner=[{:?}]", env!("CARGO_BIN_EXE_crabshell"));
         cmd.args(["-Zhost-config", "-Ztarget-applies-to-host", "--config", &runner])
@@ -393,10 +434,10 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
         fixture.dir(),
         crabshell,
     ];
-    let git_dirs = fixture.git_dirs();
-    if !git_dirs.is_empty() {
-        read.push(PathBuf::from("/etc/gitconfig"));
-        read.extend(git_dirs);
+    // git fails when the system config exists but is unreadable.
+    let gitconfig = Path::new("/etc/gitconfig");
+    if fixture.git_repo && gitconfig.exists() {
+        read.push(gitconfig.to_path_buf());
     }
     let write = [target_dir.to_path_buf(), scratch.tmp(), PathBuf::from("/dev/null")];
 
@@ -532,6 +573,9 @@ fn check(fixture: &Fixture) {
 fn check(fixture: &Fixture) {
     let name = fixture.name;
     let scratch = Scratch::get();
+    if fixture.git_repo {
+        fixture.init_repo();
+    }
     fetch(fixture);
 
     let baseline_dir = scratch.target(fixture, "baseline");
@@ -609,7 +653,7 @@ fn cfg_only() {
         trusted: true,
         dumps_env: false,
         default_suffices: true,
-        reads_git: false,
+        git_repo: false,
     });
 }
 
@@ -621,7 +665,7 @@ fn rustc_probe() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
-        reads_git: false,
+        git_repo: false,
     });
 }
 
@@ -635,7 +679,7 @@ fn system_lib() {
         trusted: true,
         dumps_env: true,
         default_suffices: false,
-        reads_git: false,
+        git_repo: false,
     });
 }
 
@@ -649,7 +693,7 @@ fn codegen() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
-        reads_git: false,
+        git_repo: false,
     });
 }
 
@@ -661,7 +705,7 @@ fn cc_toolchain() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
-        reads_git: false,
+        git_repo: false,
     });
 }
 
@@ -673,7 +717,7 @@ fn vcs_metadata() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
-        reads_git: true,
+        git_repo: true,
     });
 }
 
@@ -685,6 +729,6 @@ fn lang_runtime() {
         trusted: true,
         dumps_env: false,
         default_suffices: false,
-        reads_git: false,
+        git_repo: false,
     });
 }

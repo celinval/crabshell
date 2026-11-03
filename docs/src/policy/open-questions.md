@@ -78,3 +78,7 @@
     error);
   - conditions on host facts, e.g. `/etc/os-release`'s `ID`, or whether a path
     exists.
+- **An `include` directive for `sandbox.toml`.** Importing other policy files
+  would let a project share grant definitions across policies, and keep
+  per-checkout facts, such as a worktree's git dirs, out of the committed
+  file.

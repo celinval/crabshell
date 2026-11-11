@@ -1,0 +1,49 @@
+#:schema ../../schema/sandbox.schema.json
+# Running bindgen, which crabshell has no built-in grant for. With bindgen's
+# default `runtime` feature, clang-sys's own build script does nothing:
+# bindgen loads libclang inside each consumer's build script, and runs
+# `clang` for its default include paths.
+#
+# Without LIBCLANG_PATH, clang-sys finds libclang by listing `/usr/lib*/*/*`
+# and similar globs, which no grant short of reading all of `/usr` allows.
+# With LIBCLANG_PATH set to libclang's directory, it only checks for
+# `libclang.so` there.
+[variables]
+# libclang's directory, from LIBCLANG_PATH. When unset, the entries using it
+# are dropped and bindgen can't find libclang.
+libclang_dir = { env = "LIBCLANG_PATH" }
+
+[grant.bindgen]
+# Only for its include paths: if `clang` isn't on PATH, bindgen goes on
+# without them, but if it's found and can't run, clang-sys panics.
+run = ["clang"]
+read = [
+    ":libclang_dir/libclang.so",
+    # clang's resource dir, with its own headers such as stddef.h. LLVM keeps
+    # it next to libclang.
+    ":libclang_dir/clang",
+    # What libclang and clang link, Fedora-style and Debian-style.
+    "/lib64/libLLVM*.so*", "/lib64/libclang-cpp.so*",
+    "/lib/x86_64-linux-gnu/libLLVM*.so*", "/lib/x86_64-linux-gnu/libclang-cpp.so*",
+    "/lib64/libstdc++.so.6", "/lib/x86_64-linux-gnu/libstdc++.so.6",
+    "/lib64/libm.so.6", "/lib/x86_64-linux-gnu/libm.so.6",
+    "/lib64/libz.so.1", "/lib/x86_64-linux-gnu/libz.so.1",
+    "/lib64/libzstd.so.1", "/lib/x86_64-linux-gnu/libzstd.so.1",
+    "/lib64/libffi.so.8", "/lib/x86_64-linux-gnu/libffi.so.8",
+    "/lib64/libedit.so.*", "/lib/x86_64-linux-gnu/libedit.so.*",
+    "/lib64/libtinfo.so.6", "/lib/x86_64-linux-gnu/libtinfo.so.6",
+    "/lib/x86_64-linux-gnu/libxml2.so.*", "/lib/x86_64-linux-gnu/libicu*.so.*",
+    "/lib/x86_64-linux-gnu/liblzma.so.5", "/lib/x86_64-linux-gnu/libbsd.so.0",
+    "/lib/x86_64-linux-gnu/libmd.so.0",
+    # The headers libclang parses. clang finds the GCC installation, and with
+    # it C++ headers, by listing /usr/lib/gcc.
+    "/usr/include", "/usr/lib/gcc",
+]
+env = [
+    # clang-sys's knobs.
+    "LIBCLANG_PATH", "LIBCLANG_STATIC_PATH", "LLVM_CONFIG_PATH", "CLANG_PATH",
+    "LD_LIBRARY_PATH", "LIBRARY_PATH", "PATH",
+    # bindgen's own, and the Cargo inputs it reads on the crate's behalf.
+    "BINDGEN_EXTRA_CLANG_ARGS", "BINDGEN_EXTRA_CLANG_ARGS_*", "RUSTFMT",
+    "TARGET", "CARGO_CFG_TARGET_ARCH",
+]

@@ -1,0 +1,9 @@
+#:schema ../../schema/sandbox.schema.json
+# A loose consumer policy: the category's grants and any environment variable.
+include = ["grants.toml"]
+
+[external]
+# OUT_DIR is write-only; compile probes and cc-rs read back what they write.
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc", "cc", "bindgen"]
+env = ["*"]

@@ -24,7 +24,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libssl-dev libsqlite3-dev zlib1g-dev liblzma-dev libzstd-dev
+            pkg-config libssl-dev libsqlite3-dev zlib1g-dev liblzma-dev libzstd-dev \
+            clang libclang-dev libacl1-dev libselinux1-dev
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - run: cargo test --locked --workspace --all-features

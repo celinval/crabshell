@@ -157,6 +157,7 @@ What the requests cost, per build script:
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
 | `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
+| `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -443,6 +444,41 @@ byte.
   the table. metrics-exporter-prometheus pulls zerocopy in through `rand`,
   so it was left out. The metadata key needs a name that doesn't collide,
   or crabshell needs to tolerate foreign keys.
+- **bindgen's needs land on its consumers.** With bindgen's default
+  `runtime` feature, clang-sys's build script does nothing; each crate
+  running bindgen loads libclang into its own build script, so libclang, its
+  libraries, clang's resource dir and the system headers are read by the
+  consumer, through a `bindgen` grant the fixture defines.
+- **Finding libclang needs `LIBCLANG_PATH`.** Unset, clang-sys lists
+  `/usr/lib*/*/*` and similar globs, which no grant short of reading all of
+  `/usr` allows, and bindgen fails with "Unable to find libclang". With
+  `LIBCLANG_PATH` naming libclang's directory, clang-sys only checks for
+  `libclang.so` there, and the grant reads `:libclang_dir/libclang.so` and
+  the resource dir `:libclang_dir/clang` through a variable imported from
+  it. The tests set it from `clang -print-resource-dir`.
+- **Most bindgen denials fail loudly.** Without libclang's libraries
+  (libLLVM), the resource dir (`stdint.h`) or the system headers, bindgen
+  panics. A `clang` that is found but can't run panics in clang-sys. Two
+  degrade silently, with no effect on these crates: without `PATH`, clang
+  isn't found and bindgen goes on without its default include paths; without
+  the `rustc` grant, bindgen 0.72 and later can't run `$RUSTC --version` and
+  target the newest Rust they know. Both could change the generated
+  bindings, which the harness doesn't compare; comparing `OUT_DIR`'s `.rs`
+  files by hand showed no difference in any cell.
+- **rustfmt never runs.** bindgen formats its output with `rustfmt` from
+  `PATH`, which is rustup's proxy in `~/.cargo/bin`, outside every jail; it
+  reports the failure on stderr and writes unformatted bindings, in the
+  baseline too. Granting it would mean granting rustup.
+- **A `run` entry for a missing tool fails the build.** crabshell resolves
+  each `run` name on `PATH` before starting the script, so a grant can't
+  offer optional tools: `llvm-config`, which clang-sys tries first, isn't
+  installed here and isn't granted, and the `bindgen` grant's `clang` makes
+  hosts with libclang but no clang fail.
+- **Headers bindgen can't find without help.** pq-sys (libpq-fe.h is in
+  `/usr/include/postgresql` on Debian) and alsa-sys (`asoundlib.h`, under
+  `alsa/`) need `BINDGEN_EXTRA_CLANG_ARGS` on some distros, input-sys's
+  bundled headers need libudev's, and io-uring's generated bindings don't
+  compile against this host's older kernel headers; they're left out.
 
 ## Methodology TODOs
 

@@ -1,0 +1,18 @@
+#:schema ../../schema/sandbox.schema.json
+# The tightest consumer policy that works without crate requests: the union of
+# requests.toml, granted to every external crate.
+include = ["grants.toml"]
+
+[external]
+# OUT_DIR is write-only; compile probes and cc-rs read back what they write.
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc", "cc", "bindgen"]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "MAKE_GENERIC_BINDINGS", "FDB_CLIENT_LIB_PATH",
+    "SYSROOT", "TARGET_SYSROOT", "SYSROOT_*", "SELINUX_*", "TARGET_SELINUX_*", "LIBRARY_PATH",
+    "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+    "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_*", "CARGO_MANIFEST_LINKS",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+] }

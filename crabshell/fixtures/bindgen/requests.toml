@@ -1,0 +1,104 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed; a crate that reads its own
+# files requests exactly those, since the crate root is otherwise narrowed
+# away. libclang reads the headers in the build script's process, so a
+# crate requests its own headers like any other file. Tools come from named
+# grants: `bindgen` for libclang and clang, and `rustc` for bindgen 0.72 and
+# later, which run `$RUSTC --version` to pick the Rust target they generate
+# code for.
+
+# Writes the target triple to OUT_DIR, and only emits rerun directives for
+# clang-sys's knobs.
+[package.bindgen]
+env = ["TARGET"]
+
+# With the `runtime` feature, its build script does nothing.
+[package.clang-sys]
+
+[package.cryptoki-sys]
+read = [":manifest_dir/vendor"]
+requests = ["bindgen", "rustc"]
+env = ["MAKE_GENERIC_BINDINGS"]
+
+[package.exacl]
+read = [":manifest_dir/bindgen/wrapper.h"]
+requests = ["bindgen", "rustc"]
+
+[package.foundationdb-sys]
+# The vendored headers of the selected API version.
+read = [":manifest_dir/include/730"]
+requests = ["bindgen", "rustc"]
+env = ["FDB_CLIENT_LIB_PATH"]
+
+# Reads SYSROOT, also suffixed with the target triple (dashed and
+# underscored) or prefixed with TARGET_, so it's listed for this host.
+[package.fts-sys]
+read = [":manifest_dir/src/fts-sys.h"]
+requests = ["bindgen", "rustc"]
+env = [
+    "TARGET", "SYSROOT", "TARGET_SYSROOT", "SYSROOT_x86_64-unknown-linux-gnu",
+    "SYSROOT_x86_64_unknown_linux_gnu",
+]
+
+[package.libc]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_LIBC_UNSTABLE_FREEBSD_VERSION", "CARGO_CFG_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "CARGO_CFG_LIBC_UNSTABLE_GNU_TIME_BITS", "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2",
+    "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2_3", "CARGO_CFG_LIBC_UNSTABLE_TIME64",
+    "CARGO_CFG_LIBC_UNSTABLE_UCLIBC_TIME64",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
+]
+
+[package.pkcs11-bindings]
+read = [":manifest_dir/wrapper.h", ":manifest_dir/pkcs11.h", ":manifest_dir/pkcs11f.h", ":manifest_dir/pkcs11t.h"]
+requests = ["bindgen", "rustc"]
+
+# Checks its version and `links` key against its own manifest.
+[package.prettyplease]
+env = ["CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR", "CARGO_MANIFEST_LINKS"]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.quote]
+requests = ["rustc"]
+
+[package.rustix]
+# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
+    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
+]
+
+# Asks the C compiler for its include and library search paths, and finds
+# libselinux there. Reads its knobs like fts-sys reads SYSROOT.
+[package.selinux-sys]
+# cc-rs opens its files in OUT_DIR read-write.
+read = [":manifest_dir/src/selinux-sys.h", ":out_dir"]
+requests = ["cc", "bindgen", "rustc"]
+env = [
+    "TARGET", "LIBRARY_PATH", "SELINUX_*", "TARGET_SELINUX_*",
+    "SYSROOT", "TARGET_SYSROOT", "SYSROOT_x86_64-unknown-linux-gnu",
+    "SYSROOT_x86_64_unknown_linux_gnu",
+]
+
+# bindgen 0.65 doesn't run rustc.
+[package.v4l2-sys-mit]
+read = [":manifest_dir/wrapper.h"]
+requests = ["bindgen"]

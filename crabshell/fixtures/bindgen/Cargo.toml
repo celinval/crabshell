@@ -1,0 +1,19 @@
+# Depends on crates whose build scripts run bindgen over C headers, through
+# libclang. Features are chosen so that each crate generates its bindings at
+# build time instead of using pre-generated ones.
+[workspace]
+
+[package]
+name = "bindgen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cryptoki-sys = { version = "0.5", features = ["generate-bindings"] }
+exacl = { version = "0.13", features = ["buildtime_bindgen"] }
+foundationdb-sys = { version = "0.11", features = ["embedded-fdb-include", "fdb-7_3"] }
+fts-sys = "0.2"
+pkcs11-bindings = "0.1"
+selinux-sys = "0.7"
+v4l2-sys-mit = "0.3"

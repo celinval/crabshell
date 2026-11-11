@@ -385,9 +385,11 @@ fn rustup_home() -> OsString {
 /// `GIT_CEILING_DIRECTORIES` stops git, run by a crate in `CARGO_HOME`, from
 /// finding the repository holding the scratch dir, which only the unjailed
 /// reference build could read.
+/// `LIBCLANG_PATH`, when clang is installed, points bindgen at libclang (see
+/// [`libclang_dir`]).
 fn outer_env() -> Vec<(&'static str, OsString)> {
     let scratch = Scratch::get();
-    vec![
+    let mut env = vec![
         ("PATH", std::env::var_os("PATH").unwrap_or_default()),
         ("GIT_CEILING_DIRECTORIES", scratch.root.clone().into()),
         ("CARGO_HOME", scratch.cargo_home().into()),
@@ -398,7 +400,33 @@ fn outer_env() -> Vec<(&'static str, OsString)> {
         ("RUSTDOC", Toolchain::get().rustdoc.clone().into()),
         ("RUSTC_BOOTSTRAP", "1".into()),
         (FAKE_TOKEN.0, FAKE_TOKEN.1.into()),
-    ]
+    ];
+    if let Some(dir) = libclang_dir() {
+        env.push(("LIBCLANG_PATH", dir.clone().into()));
+    }
+    env
+}
+
+/// The directory holding libclang, as a user would set `LIBCLANG_PATH`.
+///
+/// Without it, clang-sys searches for libclang by listing `/usr/lib*/*/*`
+/// and similar globs, which no policy short of reading all of `/usr` allows.
+/// LLVM keeps clang's resource dir at `<libdir>/clang/<version>`, so that's
+/// two levels above what `clang -print-resource-dir` prints.
+fn libclang_dir() -> Option<&'static PathBuf> {
+    static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let output = Command::new("clang")
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .arg("-print-resource-dir")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())?;
+        let resource_dir = PathBuf::from(String::from_utf8(output.stdout).ok()?.trim());
+        resource_dir.parent()?.parent().map(Path::to_path_buf)
+    })
+    .as_ref()
 }
 
 /// Download `fixture`'s locked dependencies into the scratch `CARGO_HOME`.
@@ -869,6 +897,21 @@ fn protoc() {
     // Its crates aren't reviewed, so they only build in the jail.
     check(&Fixture {
         name: "protoc",
+        trusted: false,
+        dumps_env: false,
+        default_suffices: false,
+        git_repo: false,
+    });
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
+fn bindgen() {
+    check(&Fixture {
+        name: "bindgen",
         trusted: false,
         dumps_env: false,
         default_suffices: false,

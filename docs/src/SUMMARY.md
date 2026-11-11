@@ -19,6 +19,7 @@
   - [Proposed categories](build-scripts/categories.md)
   - [Observations](build-scripts/observations.md)
   - [Category experiments](build-scripts/experiments.md)
+  - [Crate coverage](build-scripts/coverage.md)
 - [Related work](related-work/README.md)
   - [Comparison with Cackle](related-work/cackle.md)
 

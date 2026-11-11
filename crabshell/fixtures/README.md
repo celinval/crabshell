@@ -17,7 +17,7 @@ since `host.runner` is unstable.
 | `system-lib` | locate system libraries through pkg-config or the C compiler, or fall back without them |
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs, CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl` and `shadow-rs`, and in registry crates |
-| `lang-runtime` | run the Python interpreter to read its configuration (pyo3) |
+| `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
 
 ## Scenarios
 

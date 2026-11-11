@@ -1,5 +1,6 @@
-# Depends on crates whose build scripts run a language runtime's interpreter
-# to read its configuration.
+# Depends on crates whose build scripts configure bindings to a language
+# runtime: Python (pyo3 and its users), Node-API, the JVM, Erlang NIFs,
+# Swift and UniFFI.
 [workspace]
 
 [package]
@@ -10,3 +11,12 @@ publish = false
 
 [dependencies]
 pyo3 = "0.30"
+numpy = "0.30"
+jni = "0.22"
+napi = "3"
+oxc_sourcemap = { version = "10", features = ["napi"] }
+neon-build = "0.10"
+rustler = "0.38"
+rustler_sys = "2.4"
+swift-rs = { version = "1", features = ["build"] }
+glean-core = "71"

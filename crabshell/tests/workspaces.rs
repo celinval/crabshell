@@ -853,7 +853,7 @@ fn vcs_metadata() {
 fn lang_runtime() {
     check(&Fixture {
         name: "lang-runtime",
-        trusted: true,
+        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,

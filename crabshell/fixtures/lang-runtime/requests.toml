@@ -48,3 +48,122 @@ env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
 [package.quote]
 requests = ["rustc"]
+
+# A pyo3 user: pyo3-build-config reads the interpreter config that pyo3-ffi
+# or pyo3 pass on, and turns it into cfgs. Nothing runs the interpreter.
+[package.numpy]
+env = ["DEP_PYTHON_PYO3_CONFIG", "DEP_PYO3_PYTHON_PYO3_CONFIG"]
+
+# JNI: picks the thread-attach guard by target OS, with a Windows override.
+[package.jni]
+env = ["CARGO_CFG_TARGET_OS", "_JNI_WINDOWS_FORCE_USE_TLS"]
+
+[package.jni-macros]
+requests = ["rustc"]
+
+# Node-API. napi-build's Windows, WASI and Android setups read more
+# (LIBNODE_PATH, EMNAPI_LINK_DIR, WASI_SDK_PATH, ...); only the Linux path is
+# listed.
+[package.napi]
+env = ["CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "TARGET"]
+
+[package.napi-sys]
+env = ["TARGET"]
+
+[package.oxc_sourcemap]
+env = ["CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_PKG_NAME", "TARGET"]
+
+# A no-op outside Windows.
+[package.neon-build]
+
+# Erlang NIF glue, generated from the enabled NIF version features. No Erlang
+# install is needed.
+[package.rustler]
+env = ["CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_FEATURE_NIF_VERSION_*"]
+
+[package.rustler_sys]
+env = ["CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_FEATURE_NIF_VERSION_*"]
+
+# Links a test Swift package only when TEST_SWIFT_RS=true, on Apple targets.
+[package.swift-rs]
+env = ["TEST_SWIFT_RS"]
+
+# UniFFI scaffolding: reads the UDL and the crate name from Cargo.toml,
+# relative to the working dir.
+[package.glean-core]
+read = [":manifest_dir/src/glean.udl", ":manifest_dir/Cargo.toml"]
+env = ["UNIFFI_FORCE_CONTRACT_VERSION"]
+
+# Build scripts of the bindings' dependencies.
+[package.anyhow]
+# Compiles src/nightly.rs into OUT_DIR, then removes it.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.camino]
+requests = ["rustc"]
+
+[package.crc32fast]
+requests = ["rustc"]
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# autocfg only checks the rustc version here.
+[package.fs-err]
+requests = ["rustc"]
+env = ["HOST", "TARGET"]
+
+[package.matrixmultiply]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_FEATURE_AVX512", "HOST", "TARGET"]
+
+[package.getrandom]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.icu_normalizer_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.num-traits]
+# autocfg compiles its probes into OUT_DIR; without reading them back, it
+# silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["HOST", "TARGET"]
+
+[package.rustix]
+# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
+    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
+]
+
+[package.serde]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+[package.thiserror]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]

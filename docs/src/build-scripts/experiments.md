@@ -155,7 +155,7 @@ What the requests cost, per build script:
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
-| `lang-runtime` | 7 | 1–20 | `rustc`, `python` | 0 |
+| `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -249,6 +249,31 @@ What the requests cost, per build script:
   the interpreter config pyo3-ffi passes on as `DEP_PYTHON_PYO3_CONFIG`.
   An empty request narrows the default grant away too: target-lexicon needs
   `TARGET` requested explicitly.
+- **Interpreter config travels as link metadata.** Only pyo3-ffi runs
+  Python; numpy's build script reads the result as
+  `DEP_PYO3_PYTHON_PYO3_CONFIG` (or `DEP_PYTHON_PYO3_CONFIG`) and panics
+  without it. Most binding crates need no runtime at all: rustler and
+  rustler_sys generate NIF glue from vendored headers, napi and jni only
+  emit cfgs, uniffi parses a UDL file. So missing Erlang, Swift, Go, OCaml
+  or PHP didn't block them.
+- **zerocopy already owns `[package.metadata.build-rs]`.** It keeps the
+  version cfgs its build script emits there (`no-zerocopy-... =
+  "1.89.0"`), so crabshell fails to parse its manifest and the build fails
+  whenever no request is injected for it. ahash, and through it jiter,
+  pull it in, so they're left out of `lang-runtime` until the key is
+  renamed or unknown fields are tolerated.
+- **Fallbacks hide denied variables on cross builds.** rustler and
+  rustler_sys fall back to the host's family when `CARGO_CFG_TARGET_FAMILY`
+  is missing: the same output natively, wrong output cross-compiling to
+  Windows.
+- **`rerun-if-env-changed` misses or overstates what's read.** napi-build
+  declares knobs it never reads (`NAPI_TYPE_DEF_TMP_FOLDER`,
+  `DEBUG_GENERATED_CODE`), as uniffi does `UNIFFI_TESTS_DISABLE_EXTENSIONS`,
+  while uniffi reads `UNIFFI_FORCE_CONTRACT_VERSION` undeclared. The
+  baseline's list is a hint, not a request.
+- **Target-specific needs stay unverified.** napi-build's Windows, WASI and
+  Android setups read `LIBNODE_PATH`, `EMNAPI_LINK_DIR` or `WASI_SDK_PATH`
+  and run more tools; the requests list only what the Linux path reads.
 - **ring checks its own identity.** It asserts `CARGO_MANIFEST_LINKS` against
   `CARGO_PKG_NAME` and `CARGO_PKG_VERSION_*`, so it fails outright without
   them.

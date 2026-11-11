@@ -8,10 +8,89 @@
 # `$RUSTC` comes from the
 # `rustc` grant, which also covers RUSTC, its wrappers and
 # CARGO_ENCODED_RUSTFLAGS.
+#
+# Crates using a build-dependency library request what it reads on their
+# behalf: version_check needs only `rustc`; autocfg also compiles probes into
+# OUT_DIR, reads them back, and passes TARGET to rustc.
+
+[package.anyhow]
+# Compiles a probe from its own sources into OUT_DIR, and removes it after.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# autocfg, for a version check only.
+[package.async-io]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
+[package.camino]
+requests = ["rustc"]
+
+# rustversion's `cfg!` runs when the build script is compiled, not when it
+# runs, so the script itself needs no `rustc`.
+[package.constant_time_eq]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+# version_check.
+[package.cookie]
+requests = ["rustc"]
+
+[package.crc32fast]
+requests = ["rustc"]
+
+# Pulled in by async-io (see cfg-only).
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# Runs `rustc` from PATH rather than `$RUSTC`. A request can't express that
+# portably (under rustup it's a proxy needing its own env), so detection
+# fails silently; it only matters before rustc 1.30.
+[package.doc-comment]
+
+# Only rustversion's `cfg!`, like constant_time_eq.
+[package.encoding_rs]
+
+[package.erased-serde]
+requests = ["rustc"]
+
+[package.eyre]
+# autocfg, plus its own probe written to OUT_DIR. The probe needs a nightly
+# feature, so rustc must inherit RUSTC_BOOTSTRAP, although the script never
+# reads it.
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "TARGET"]
+
+# autocfg, for version checks only.
+[package.fs-err]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
 
 [package.getrandom]
 requests = ["rustc"]
 env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
+
+[package.heapless]
+# Writes a probe to OUT_DIR for rustc to compile.
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
+[package.httparse]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_HTTPARSE_DISABLE_SIMD", "CARGO_CFG_HTTPARSE_DISABLE_SIMD_COMPILETIME",
+    "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_FEATURE", "CARGO_FEATURE_STD",
+]
+
+# Compiles a probe into OUT_DIR, only when targeting WASI.
+[package.io-lifetimes]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_OS", "TARGET"]
 
 [package.libc]
 requests = ["rustc"]
@@ -27,6 +106,18 @@ env = [
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
 
+# autocfg, for version checks only.
+[package.matrixmultiply]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_FEATURE_AVX512", "TARGET"]
+
+# autocfg, for version checks only.
+[package.memoffset]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
 # cfg_aliases reads CARGO_CFG_<cfg> for each alias; nix only uses target_os.
 [package.nix]
 env = ["CARGO_CFG_TARGET_OS"]
@@ -34,14 +125,47 @@ env = ["CARGO_CFG_TARGET_OS"]
 [package.parking_lot_core]
 env = ["CARGO_CFG_SANITIZE"]
 
+[package.paste]
+requests = ["rustc"]
+
+[package.portable-atomic]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH",
+    "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_VENDOR",
+    "PORTABLE_ATOMIC_DENY_WARNINGS", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET",
+]
+
+[package.portable-atomic-util]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_OS", "PORTABLE_ATOMIC_DENY_WARNINGS",
+    "RUSTC_BOOTSTRAP", "TARGET",
+]
+
 [package.proc-macro2]
 # Reads compile probes from its own sources, and rustc's output in OUT_DIR.
 read = [":manifest_dir/src/probe", ":out_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
+# version_check.
+[package.proc-macro-error]
+requests = ["rustc"]
+
+# version_check.
+[package.proc-macro-error-attr]
+requests = ["rustc"]
+
+[package.proc-macro-hack]
+requests = ["rustc"]
+
 [package.quote]
 requests = ["rustc"]
+
+[package.ref-cast]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
 
 [package.rustix]
 # Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
@@ -55,6 +179,10 @@ env = [
     "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
 ]
 
+[package.rustversion]
+requests = ["rustc"]
+env = ["HOST"]
+
 [package.serde]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH"]
@@ -63,8 +191,23 @@ env = ["CARGO_PKG_VERSION_PATCH"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 
+# version_check.
+[package.slotmap]
+requests = ["rustc"]
+
+# syn 1, pulled in by proc-macro-error.
+[package.syn]
+requests = ["rustc"]
+
 [package.thiserror]
 # Reads compile probes from its own sources, and rustc's output in OUT_DIR.
 read = [":manifest_dir/build/probe.rs", ":out_dir"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.typeid]
+requests = ["rustc"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]

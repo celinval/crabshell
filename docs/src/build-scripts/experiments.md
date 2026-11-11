@@ -12,7 +12,7 @@ has several `sandbox.*.toml` policy variants:
 | Fixture | Crates with build scripts |
 |---|---|
 | `cfg-only` | crossbeam-utils, crossbeam-epoch, crossbeam-deque, rayon-core, tiny-keccak, crunchy, icu_properties_data |
-| `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror |
+| `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij |
 | `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc |
 | `declared` | crossbeam-utils, patched to declare `[package.metadata.build-rs]` |
 
@@ -150,7 +150,7 @@ What the requests cost, per build script:
 | Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
 |---|---:|---|---|---:|
 | `cfg-only` | 22 | 0–6 | – | 0 |
-| `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
+| `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
@@ -197,6 +197,32 @@ What the requests cost, per build script:
   them.
 - **autocfg needs `OUT_DIR` read back.** Like proc-macro2's probes, without it
   num-traits succeeds but silently drops `has_total_cmp`.
+- **`[package.metadata.build-rs]` is already taken.** zerocopy (and so
+  ahash) keeps its own version table there, which crabshell rejects as a
+  malformed declaration, failing the build. The key needs a name no crate
+  uses, or crabshell must tolerate tables it can't parse; both are left out
+  of `rustc-probe` until then.
+- **Probes inherit env the script never reads.** eyre's compile probe uses a
+  nightly feature, which on stable works only because rustc inherits
+  `RUSTC_BOOTSTRAP`. Without it in eyre's request, it silently drops
+  `generic_member_access`; without `:out_dir` read, it also drops
+  `track_caller`, since rustc can't read the probe the script wrote there.
+  anyhow instead fails outright without `:out_dir`: it can't list its probe
+  dir to remove it.
+- **Many denials are invisible on the test host.** autocfg's version checks
+  (async-io, fs-err, memoffset, matrixmultiply) only parse `rustc --version`,
+  so without `:out_dir` they just warn that `std` can't be probed. heapless's
+  probe and io-lifetimes's only matter on ARM or WASI targets, zmij's
+  `OPT_LEVEL` only at `s`/`z`, httparse's `CARGO_CFG_TARGET_FEATURE` only with
+  `sse4.2` or `avx2` enabled. The directive comparison can't catch these.
+- **Version checks can run at compile time.** constant_time_eq and
+  encoding_rs use rustversion's `cfg!` macro, evaluated when the build
+  script is compiled, so the script needs no `rustc` grant; rustversion's own
+  build script does.
+- **Running `rustc` from `PATH` can't be requested portably.** doc-comment
+  ignores `$RUSTC`; under rustup, `rustc` on `PATH` is a proxy needing its
+  own env, so the request leaves it denied. Its detection fails silently,
+  which only matters before rustc 1.30.
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob
   also prefixed with the target triple (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`).
   Patterns only match prefixes, so the request has to name the triple.

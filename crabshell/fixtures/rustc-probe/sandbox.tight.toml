@@ -8,7 +8,7 @@ grants = ["rustc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
-    "CARGO_PKG_VERSION_PATCH",
+    "CARGO_PKG_VERSION_PATCH", "OPT_LEVEL",
     "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "LIBC_BUILD_VERBOSE", "LIBC_CI",
-    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID", "PORTABLE_ATOMIC_DENY_WARNINGS",
 ] }

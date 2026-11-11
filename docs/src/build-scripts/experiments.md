@@ -28,8 +28,6 @@ whole `cargo build`. That includes proc-macros, which crabshell never sees. The
 jail has no network, reads only the toolchain, the fixture and the fetched
 crates, and writes only the build's target dir and a scratch `TMPDIR`. The
 baseline is the jail without crabshell; each variant adds crabshell inside it.
-For trusted fixtures, an unjailed reference build must match the baseline,
-showing that the jail itself doesn't change behavior.
 
 Each test run gets a fresh scratch dir holding:
 

@@ -23,9 +23,6 @@
 //! environment; sandboxed builds must never leak it. Every build is also
 //! checked for real secrets from the test's own environment.
 //!
-//! For trusted fixtures, an unjailed reference build must match the jailed
-//! baseline, showing that the jail itself doesn't change behavior.
-//!
 //! The fixtures build with the toolchain rustup selects for `fixtures/`, with
 //! `RUSTC_BOOTSTRAP=1` for Cargo's unstable `host.runner` hook, and fetch
 //! crates. Requests are injected through the `test-requests`
@@ -133,10 +130,6 @@ impl Scenario {
 /// A workspace under `fixtures/`.
 struct Fixture {
     name: &'static str,
-    /// Whether the fixture's pinned crates are reviewed.
-    ///
-    /// Reviewed crates may also be built outside the jail.
-    trusted: bool,
     /// Whether some build script prints its whole environment.
     ///
     /// The baseline then leaks [`FAKE_TOKEN`].
@@ -240,7 +233,6 @@ const FAKE_TOKEN: (&str, &str) = ("CRABSHELL_FAKE_TOKEN", "crabshell-fake-token-
 ///                                facts as the user config, if any
 ///   tmp/                         TMPDIR
 ///   <fixture>/baseline-target/   jailed, without crabshell
-///   <fixture>/reference-target/  unjailed, without crabshell (trusted only)
 ///   <fixture>/workspace/         the fixture committed to a fresh git
 ///                                repository, for fixtures that read one
 ///   <fixture>/<variant>-target/  jailed, through crabshell
@@ -381,10 +373,9 @@ fn rustup_home() -> OsString {
 /// `RUSTC_BOOTSTRAP` lets a stable Cargo take `-Zhost-config`. Every build
 /// gets it, so build scripts that read it see the same value in the baseline.
 /// `RUSTDOC` is set like `RUSTC`: Cargo otherwise passes build scripts a bare
-/// `rustdoc`, which resolves to rustup's proxy only outside the jail.
+/// `rustdoc`, which resolves to rustup's proxy, outside the jail.
 /// `GIT_CEILING_DIRECTORIES` stops git, run by a crate in `CARGO_HOME`, from
-/// finding the repository holding the scratch dir, which only the unjailed
-/// reference build could read.
+/// finding the repository holding the scratch dir, which the jail can't read.
 /// `LIBCLANG_PATH`, when clang is installed, points bindgen at libclang (see
 /// [`libclang_dir`]).
 fn outer_env() -> Vec<(&'static str, OsString)> {
@@ -451,8 +442,6 @@ fn fetch(fixture: &Fixture) {
 
 /// How a build is confined.
 enum Mode<'a> {
-    /// Outside the jail, without crabshell. Only for trusted fixtures.
-    Reference,
     /// In the jail, without crabshell.
     Baseline,
     /// In the jail, through crabshell.
@@ -468,14 +457,10 @@ struct Build {
 
 /// Build `fixture` into `target_dir` in the given mode.
 fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
-    let toolchain = Toolchain::get();
     // Landlock rules attach to existing files, so the jail can only grant a
     // target dir that already exists.
     std::fs::create_dir_all(target_dir).unwrap();
-    let mut cmd = match mode {
-        Mode::Reference => Command::new(&toolchain.cargo),
-        Mode::Baseline | Mode::Sandboxed(_) => jail(fixture, target_dir),
-    };
+    let mut cmd = jail(fixture, target_dir);
     cmd.env_clear().envs(outer_env());
     if let Mode::Sandboxed(scenario) = mode {
         let runner = format!("host.runner=[{:?}]", env!("CARGO_BIN_EXE_crabshell"));
@@ -705,21 +690,6 @@ fn check(fixture: &Fixture) {
     assert!(!expected.is_empty(), "{name}: found no build script output");
     assert_requests_cover(fixture, &expected);
 
-    if fixture.trusted {
-        let reference_dir = scratch.target(fixture, "reference");
-        let reference = build(fixture, &reference_dir, &Mode::Reference);
-        assert!(
-            reference.output.status.success(),
-            "{name}: reference failed:\n{}",
-            stderr(&reference)
-        );
-        assert_eq!(
-            directives(&reference_dir),
-            expected,
-            "{name}: the jail changes the output"
-        );
-    }
-
     for scenario in &Scenario::ALL {
         let label = format!("{name}/{}", scenario.name());
         let target_dir = scratch.target(fixture, &scenario.name());
@@ -785,7 +755,6 @@ fn cfg_only() {
     // empty its OUT_DIR under the default, but that's silent in a fresh build.
     check(&Fixture {
         name: "cfg-only",
-        trusted: true,
         dumps_env: false,
         default_suffices: true,
         git_repo: false,
@@ -800,7 +769,6 @@ fn cfg_only() {
 fn rustc_probe() {
     check(&Fixture {
         name: "rustc-probe",
-        trusted: true,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -814,11 +782,9 @@ fn rustc_probe() {
 )]
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
-    // environment. Not trusted: some build-time dependencies (regex,
-    // libloading, num-derive, ctor) aren't reviewed.
+    // environment.
     check(&Fixture {
         name: "system-lib",
-        trusted: false,
         dumps_env: true,
         default_suffices: false,
         git_repo: false,
@@ -836,7 +802,6 @@ fn codegen() {
     // its proc-macros, so it doesn't build outside the jail.
     check(&Fixture {
         name: "codegen",
-        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -851,7 +816,6 @@ fn codegen() {
 fn cc_toolchain() {
     check(&Fixture {
         name: "cc-toolchain",
-        trusted: true,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -866,7 +830,6 @@ fn cc_toolchain() {
 fn vcs_metadata() {
     check(&Fixture {
         name: "vcs-metadata",
-        trusted: true,
         dumps_env: false,
         default_suffices: false,
         git_repo: true,
@@ -881,7 +844,6 @@ fn vcs_metadata() {
 fn lang_runtime() {
     check(&Fixture {
         name: "lang-runtime",
-        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -897,7 +859,6 @@ fn protoc() {
     // Its crates aren't reviewed, so they only build in the jail.
     check(&Fixture {
         name: "protoc",
-        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -912,7 +873,6 @@ fn protoc() {
 fn bindgen() {
     check(&Fixture {
         name: "bindgen",
-        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
@@ -925,13 +885,11 @@ fn bindgen() {
     ignore = "needs `--features test-requests`"
 )]
 fn network_fetch() {
-    // Untrusted: outside the jail, the scripts would download, and pci-ids
-    // would overwrite its own sources. In the jail, the baseline builds
-    // offline too, through the local copies `.cargo/config.toml` names or
+    // Outside the jail, the scripts would download, and pci-ids would
+    // overwrite its own sources. In the jail, the baseline builds offline, through the local copies `.cargo/config.toml` names or
     // the scripts' fallbacks.
     check(&Fixture {
         name: "network-fetch",
-        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,

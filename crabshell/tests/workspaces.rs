@@ -918,3 +918,22 @@ fn bindgen() {
         git_repo: false,
     });
 }
+
+#[test]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
+fn network_fetch() {
+    // Untrusted: outside the jail, the scripts would download, and pci-ids
+    // would overwrite its own sources. In the jail, the baseline builds
+    // offline too, through the local copies `.cargo/config.toml` names or
+    // the scripts' fallbacks.
+    check(&Fixture {
+        name: "network-fetch",
+        trusted: false,
+        dumps_env: false,
+        default_suffices: false,
+        git_repo: false,
+    });
+}

@@ -1,0 +1,3 @@
+# Stands in for a local copy of the native libraries, so the build
+# scripts find it instead of downloading one. libduckdb.so is empty:
+# libduckdb-sys only copies it into OUT_DIR, and nothing links.

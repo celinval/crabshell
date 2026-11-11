@@ -1,0 +1,13 @@
+#:schema ../../schema/sandbox.schema.json
+# A loose consumer policy: the category's grants, the local copy and any
+# environment variable. Network is never granted.
+[variables]
+# The local copy libduckdb-sys stages from, as the consumer configured it.
+duckdb_lib_dir = { env = "DUCKDB_LIB_DIR" }
+
+[external]
+# OUT_DIR is write-only; compile probes, compilers and the Swagger UI patcher
+# read back what they write.
+read = { inherit = true, value = [":out_dir", ":duckdb_lib_dir"] }
+grants = ["rustc", "cc", "pkg-config"]
+env = ["*"]

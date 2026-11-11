@@ -1,0 +1,24 @@
+#:schema ../../schema/sandbox.schema.json
+# The tightest consumer policy that works without crate requests: the union of
+# requests.toml, granted to every external crate. Network is never granted.
+[variables]
+# The local copy libduckdb-sys stages from, as the consumer configured it.
+duckdb_lib_dir = { env = "DUCKDB_LIB_DIR" }
+
+[external]
+# OUT_DIR is write-only; compile probes, compilers and the Swagger UI patcher
+# read back what they write.
+read = { inherit = true, value = [":out_dir", ":duckdb_lib_dir"] }
+grants = ["rustc", "cc", "pkg-config"]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    # The offline switches and local copies.
+    "DOCS_RS", "CARGO_NET_OFFLINE", "ORT_*", "DUCKDB_*", "PDFIUM_*", "SODIUM_*",
+    "LIBBPF_SYS_LIBRARY_PATH*", "Z3_*", "CXXSTDLIB", "SWAGGER_UI_*", "MKLROOT",
+    # Their dependencies' knobs and Cargo's inputs.
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION_*",
+    "DEBUG", "OPT_LEVEL", "RING_PREGENERATE_ASM", "LZMA_API_STATIC", "ICU4X_DATA_DIR",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+] }

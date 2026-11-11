@@ -20,6 +20,7 @@ since `host.runner` is unstable.
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
 | `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers |
 | `bindgen` | generate FFI bindings from C headers with bindgen, loading libclang |
+| `network-fetch` | download prebuilt binaries or data, built offline through local copies or fallbacks |
 
 ## Scenarios
 
@@ -85,3 +86,6 @@ The `bindgen` fixture needs libclang and `clang`, and finds libclang through
 clang's resource dir (`clang -print-resource-dir`). By hand, set it yourself,
 e.g. `LIBCLANG_PATH=/usr/lib64` on Fedora or `/usr/lib/llvm-<N>/lib` on
 Debian.
+The jail has no network, so `network-fetch` builds offline in every build,
+the baseline included: its `.cargo/config.toml` points the crates at
+`prebuilt/`, which stands in for a local copy of their native libraries.

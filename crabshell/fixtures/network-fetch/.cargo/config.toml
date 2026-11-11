@@ -1,0 +1,23 @@
+# Run every build script through crabshell. Requires
+# `-Zhost-config -Ztarget-applies-to-host`: nightly Cargo, or RUSTC_BOOTSTRAP=1.
+target-applies-to-host = false
+
+[host]
+runner = ["../../../target/debug/crabshell"]
+
+[env]
+CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+
+# The consumer's offline setup: each crate finds its native library in
+# `prebuilt/` instead of downloading it. Only the paths reach the build
+# scripts' output; nothing links, since the fixture is a library.
+DUCKDB_LIB_DIR = { value = "prebuilt", relative = true }
+LIBBPF_SYS_LIBRARY_PATH = { value = "prebuilt", relative = true }
+ORT_LIB_PATH = { value = "prebuilt", relative = true }
+ORT_PREFER_DYNAMIC_LINK = "1"
+PDFIUM_INCLUDE_PATH = { value = "prebuilt", relative = true }
+PDFIUM_LIB_PATH = { value = "prebuilt", relative = true }
+SODIUM_LIB_DIR = { value = "prebuilt", relative = true }
+SODIUM_SHARED = "1"
+Z3_LIBRARY_PATH_OVERRIDE = { value = "prebuilt", relative = true }
+Z3_SYS_Z3_VERSION = "4.15.4"

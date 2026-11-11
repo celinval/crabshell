@@ -1,0 +1,33 @@
+# Depends on crates whose build scripts download prebuilt binaries or data,
+# built offline: through their switches for a local copy or for skipping the
+# download (set in `.cargo/config.toml`), or their offline fallbacks.
+[workspace]
+
+[package]
+name = "network-fetch"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# Point at a local copy of the native library instead of downloading one.
+libduckdb-sys = "1"
+liteparse-pdfium-sys = "1"
+# `download-binaries` compiles the download path in, unused with a local copy.
+ort-sys = { version = "=2.0.0-rc.13", features = ["download-binaries", "tls-rustls"] }
+libsodium-sys-stable = "1"
+# Without features, it links the system libbpf, from an extra search path.
+libbpf-sys = { version = "1", default-features = false }
+# Links the system Z3, at the version the consumer states.
+z3-sys = "0.14"
+# Embeds the Swagger UI zip from a crate instead of downloading it.
+utoipa-swagger-ui = { version = "10", features = ["vendored"] }
+# Skips the LLVM bundle download.
+tracel-llvm-bundler = { version = "=22.1.4-6", features = ["xtask"] }
+# Fall back without network: a bundled copy of pci.ids, no MKL at all.
+pci-ids = "0.2"
+intel-mkl-src = "0.8"
+# Download only for other targets: the WASI SDK, wintun, prebuilt binaries.
+rquickjs-sys = "0.14"
+tun = "0.8"
+system-deps = "9"

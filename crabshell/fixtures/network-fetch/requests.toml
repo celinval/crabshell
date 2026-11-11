@@ -1,0 +1,219 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed; a crate that reads its own
+# files requests exactly those, since the crate root is otherwise narrowed
+# away.
+#
+# The fetching crates request what their offline path uses: the switches
+# they read to pick it, and the local copy. Their download paths would need
+# network and a cache under HOME, which no consumer here grants.
+
+# Point at a local copy through an env var.
+[package.libduckdb-sys]
+# Copies the pregenerated bindings, and stages `libduckdb.so` from the local
+# copy into OUT_DIR. The consumer names that dir as `:duckdb_lib_dir`, a
+# variable the crate can only hope exists.
+read = [":manifest_dir/src/bindgen_bundled_version.rs", ":duckdb_lib_dir"]
+requests = ["pkg-config"]
+env = [
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_WINDOWS", "TARGET", "DUCKDB_DOWNLOAD_LIB", "DUCKDB_INCLUDE_DIR", "DUCKDB_LIB_DIR", "DUCKDB_STATIC",
+    "DUCKDB_NO_PKG_CONFIG", "DUCKDB_DYNAMIC",
+]
+
+[package.liteparse-pdfium-sys]
+# Copies its pregenerated bindings. It only checks that the local copy exists.
+read = [":manifest_dir/bindings.rs"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "PDFIUM_LIB_PATH", "PDFIUM_INCLUDE_PATH"]
+
+[package.ort-sys]
+env = [
+    "TARGET", "DOCS_RS", "ORT_LIB_PATH", "ORT_LIB_LOCATION", "ORT_PREFER_DYNAMIC_LINK",
+    "CARGO_NET_OFFLINE", "ORT_SKIP_DOWNLOAD", "ORT_OFFLINE",
+]
+
+[package.libsodium-sys-stable]
+env = ["SODIUM_LIB_DIR", "SODIUM_SHARED", "SODIUM_USE_PKG_CONFIG", "SODIUM_DISABLE_PIE"]
+
+[package.libbpf-sys]
+# The extra search path may also be suffixed with the target triple.
+env = ["CARGO_MANIFEST_DIR", "TARGET", "LIBBPF_SYS_LIBRARY_PATH", "LIBBPF_SYS_LIBRARY_PATH_*"]
+
+# Probes pkg-config, then takes the version and search path from the consumer.
+# It also runs `z3 --version`, which it can't request: crabshell rejects a
+# `run` entry missing from the host.
+[package.z3-sys]
+requests = ["pkg-config"]
+env = [
+    "CARGO_CFG_TARGET_ENV", "TARGET", "Z3_SYS_Z3_VERSION", "Z3_LIBRARY_PATH_OVERRIDE", "CXXSTDLIB",
+    "Z3_NO_PKG_CONFIG", "Z3_STATIC", "Z3_DYNAMIC",
+]
+
+# Embeds the zip from utoipa-swagger-ui-vendored, then patches what it
+# extracted into OUT_DIR.
+[package.utoipa-swagger-ui]
+read = [":out_dir"]
+env = ["CARGO_FEATURE_VENDORED", "SWAGGER_UI_DOWNLOAD_URL", "SWAGGER_UI_OVERWRITE_FOLDER"]
+
+# Skips the download on its `xtask` feature.
+[package.tracel-llvm-bundler]
+env = ["CARGO_FEATURE_XTASK"]
+
+# Runs `curl` to refresh its bundled pci.ids in place, inside its own sources,
+# and falls back to the bundled copy when that fails.
+[package.pci-ids]
+read = [":manifest_dir/pciids/pci.ids"]
+
+# Probes pkg-config and MKLROOT, then downloads into a cache under HOME; any
+# failure leaves it linking nothing.
+[package.intel-mkl-src]
+requests = ["pkg-config"]
+env = ["MKLROOT"]
+
+# Copies the QuickJS sources into OUT_DIR and compiles them there.
+[package.rquickjs-sys]
+read = [":manifest_dir/quickjs", ":manifest_dir/quickjs.bind.h", ":out_dir"]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS",
+    "CARGO_FEATURE_UPDATE_BINDINGS", "TARGET",
+]
+
+# Only download on other targets or features.
+[package.tun]
+[package.system-deps]
+
+# Compiles the vendored liblzma for tracel-llvm-bundler; with its `static`
+# feature it never probes pkg-config.
+[package.liblzma-sys]
+read = [":manifest_dir/xz", ":manifest_dir/config.h", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_CFG_TARGET_ENDIAN", "TARGET", "LZMA_API_STATIC"]
+
+# Pulled in by the download clients (rustls, reqwest, ureq) and the rest.
+[package.ring]
+# Compiles its vendored C and pregenerated assembly. It checks `links` against
+# its own name and version.
+read = [
+    ":manifest_dir/crypto", ":manifest_dir/include", ":manifest_dir/pregenerated",
+    ":manifest_dir/third_party", ":out_dir",
+]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME",
+    "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR", "CARGO_PKG_VERSION_PATCH",
+    "CARGO_PKG_VERSION_PRE", "DEBUG", "RING_PREGENERATE_ASM",
+]
+
+[package.libc]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_LIBC_UNSTABLE_FREEBSD_VERSION", "CARGO_CFG_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "CARGO_CFG_LIBC_UNSTABLE_GNU_TIME_BITS", "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2",
+    "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2_3", "CARGO_CFG_LIBC_UNSTABLE_TIME64",
+    "CARGO_CFG_LIBC_UNSTABLE_UCLIBC_TIME64",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
+]
+
+[package.anyhow]
+# Compiles a probe from its own sources into OUT_DIR, and reads it back.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.thiserror]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.rustix]
+# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
+    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
+]
+
+[package.num-traits]
+# autocfg compiles its probes into OUT_DIR; without reading them back, it
+# silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.rustversion]
+requests = ["rustc"]
+env = ["HOST"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]
+
+# Version probes through `$RUSTC --version` or version_check.
+[package.quote]
+requests = ["rustc"]
+
+[package.crc32fast]
+requests = ["rustc"]
+
+[package.generic-array]
+requests = ["rustc"]
+
+[package.httparse]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_HTTPARSE_DISABLE_SIMD", "CARGO_CFG_HTTPARSE_DISABLE_SIMD_COMPILETIME", "CARGO_CFG_MIRI",
+    "CARGO_CFG_TARGET_FEATURE", "CARGO_FEATURE_STD",
+]
+
+[package.serde]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.target-lexicon]
+requests = ["rustc"]
+env = ["TARGET"]
+
+[package.getrandom]
+requests = ["rustc"]
+env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
+
+# cfg_aliases reads CARGO_CFG_<cfg> for each alias; nix only uses target_os.
+[package.nix]
+env = ["CARGO_CFG_TARGET_OS"]
+
+[package.icu_normalizer_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.constant_time_eq]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+# Only emit directives and write OUT_DIR, which the floor covers.
+[package.mime_guess]
+[package.rustls]

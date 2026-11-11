@@ -158,6 +158,7 @@ What the requests cost, per build script:
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
 | `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
 | `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
+| `network-fetch` | 38 | 0–20 | `rustc`, `cc`, `pkg-config` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -479,6 +480,35 @@ byte.
   `alsa/`) need `BINDGEN_EXTRA_CLANG_ARGS` on some distros, input-sys's
   bundled headers need libudev's, and io-uring's generated bindings don't
   compile against this host's older kernel headers; they're left out.
+- **Fetching crates build offline through env vars.** In `network-fetch`,
+  the consumer points libduckdb-sys, liteparse-pdfium-sys, ort-sys,
+  libsodium-sys-stable, libbpf-sys and z3-sys at a local copy through
+  `.cargo/config.toml`'s `[env]`, and the tight policy grants those names.
+  Denied, each script takes its download path instead and fails, being
+  offline (liteparse-pdfium-sys and ort-sys panic without `HOME` for their
+  cache; libsodium-sys-stable builds its bundled source and fails without
+  `sh` and `make`), or silently degrades: libbpf-sys and z3-sys drop the
+  search path, and z3-sys reports a different version. Others skip the
+  download on a feature (utoipa-swagger-ui's `vendored`,
+  tracel-llvm-bundler's `xtask`), or fall back on failure: pci-ids to its
+  bundled copy, intel-mkl-src to linking nothing at all.
+- **A local copy the script reads needs a consumer variable.**
+  libduckdb-sys copies the library from `DUCKDB_LIB_DIR` into `OUT_DIR`;
+  denied, it only warns. The consumer defines `duckdb_lib_dir = { env =
+  "DUCKDB_LIB_DIR" }`, but the crate's request must name that variable
+  too, or it narrows the read away. There's no convention for such names,
+  so a vendor can't write the request without knowing the consumer's
+  config.
+- **Some scripts write outside `OUT_DIR`.** pci-ids runs `curl` to rewrite
+  `pciids/pci.ids` inside its own sources, in the registry. With a real
+  local copy, liteparse-pdfium-sys copies `libpdfium.so` into
+  `target/<profile>/deps`, and sherpa-onnx-sys's `shared` mode into
+  `target/<profile>`; no variable names those dirs. sherpa-onnx-sys is left
+  out: its `static` mode needs the archives to exist when rustc builds the
+  rlib.
+- **An optional tool can't be requested.** z3-sys runs `z3 --version` when
+  present, but crabshell rejects a `run` entry that isn't on `PATH`, so a
+  request for it would break builds on hosts without Z3.
 
 ## Methodology TODOs
 

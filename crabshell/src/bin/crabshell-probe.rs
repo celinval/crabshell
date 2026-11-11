@@ -1,7 +1,7 @@
-//! Prints this machine's `run` and `read` for crabshell's built-in grants, as
-//! user-config TOML.
+//! Prints this machine's grants as user-config TOML.
 //!
-//! Run once per machine, e.g.
+//! Covers the `run` and `read` fields of crabshell's built-in grants. Run once
+//! per machine, e.g.
 //! `crabshell-probe > ~/.config/crabshell/config.toml`. Each grant's `run` and
 //! `read` are complete and override the built-in ones: the built-in entries
 //! that exist here, plus what the host's tools report they use. `env` stays
@@ -121,8 +121,9 @@ impl Probe {
         }
     }
 
-    /// Record what running `program` takes: its libraries, or for a script its
-    /// interpreter and a note.
+    /// Record what running `program` takes.
+    ///
+    /// That's its libraries, or for a script its interpreter and a warning.
     fn program(&mut self, grant: &str, name: &str, program: &Path) {
         match interpreter(program) {
             Some(interpreter) => {
@@ -213,8 +214,7 @@ impl Probe {
         }
     }
 
-    /// Whether each grant was added, partial, skipped or failed, then a
-    /// summary.
+    /// The stderr report: each grant's status, then a summary.
     fn report(&self) -> String {
         let (mut added, mut partial, mut skipped, mut failed) = (0, 0, 0, 0);
         let mut out = String::new();
@@ -332,9 +332,10 @@ fn shared_libraries(program: &Path) -> Option<Vec<String>> {
     Some(libraries)
 }
 
-/// `path` without `.` and `..` components, which `ldd` reports for libraries
-/// found through `$ORIGIN` (`bin/../lib`). Symlinks stay as they are, so the
-/// path still matches how grants name it.
+/// `path` without `.` and `..` components.
+///
+/// `ldd` reports them for libraries found through `$ORIGIN` (`bin/../lib`).
+/// Symlinks stay as they are, so the path still matches how grants name it.
 fn normalize(path: &str) -> String {
     let mut out = PathBuf::new();
     for component in Path::new(path).components() {

@@ -1,5 +1,6 @@
-//! Embeds the current commit, falling back to "unknown" outside a git
-//! checkout, like `vergen` or `shadow-rs`.
+//! Embeds the current commit, like `vergen` or `shadow-rs`.
+//!
+//! Falls back to "unknown" outside a git checkout.
 
 use std::process::Command;
 

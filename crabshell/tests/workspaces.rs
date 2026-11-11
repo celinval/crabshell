@@ -94,16 +94,19 @@ impl Scenario {
         }
     }
 
-    /// Whether the build should work, matching the baseline. Requests only
-    /// narrow, so the default column works only for fixtures the default grant
-    /// covers; elsewhere it fails or, as when a script falls back without a
-    /// tool, differs.
+    /// Whether the build should work, matching the baseline.
+    ///
+    /// Requests only narrow, so the default column works only for fixtures the
+    /// default grant covers; elsewhere it fails or, as when a script falls back
+    /// without a tool, differs.
     fn succeeds(&self, fixture: &Fixture) -> bool {
         self.grants != Grants::Default || fixture.default_suffices
     }
 
-    /// Whether `fixture`'s build should leak [`FAKE_TOKEN`]: only where a
-    /// build script dumps its environment and nothing narrows the loose `*`.
+    /// Whether `fixture`'s build should leak [`FAKE_TOKEN`].
+    ///
+    /// Only where a build script dumps its environment and nothing narrows the
+    /// loose `*`.
     fn leaks(&self, fixture: &Fixture) -> bool {
         fixture.dumps_env && self.requests == Requests::None && self.grants == Grants::Loose
     }
@@ -112,17 +115,20 @@ impl Scenario {
 /// A workspace under `fixtures/`.
 struct Fixture {
     name: &'static str,
-    /// Whether the fixture's pinned crates are reviewed, so they may also be
-    /// built outside the jail.
+    /// Whether the fixture's pinned crates are reviewed.
+    ///
+    /// Reviewed crates may also be built outside the jail.
     trusted: bool,
-    /// Whether some build script prints its whole environment, so the
-    /// baseline leaks [`FAKE_TOKEN`].
+    /// Whether some build script prints its whole environment.
+    ///
+    /// The baseline then leaks [`FAKE_TOKEN`].
     dumps_env: bool,
     /// Whether the default grant alone covers every build script's needs.
     default_suffices: bool,
-    /// Whether a build script runs git on the workspace's repository. The
-    /// fixture then builds from a scratch copy committed to a fresh repository
-    /// (see [`Fixture::init_repo`]).
+    /// Whether a build script runs git on the workspace's repository.
+    ///
+    /// The fixture then builds from a scratch copy committed to a fresh
+    /// repository (see [`Fixture::init_repo`]).
     git_repo: bool,
 }
 
@@ -140,8 +146,7 @@ impl Fixture {
         e2e_tests().join(self.name)
     }
 
-    /// Copy the fixture into [`Fixture::dir`] and commit it to a new
-    /// repository there.
+    /// Commit a copy of the fixture to a new repository at [`Fixture::dir`].
     ///
     /// The commit's author, committer and dates are fixed, and no user or
     /// system git config applies, so its hash depends only on the fixture's
@@ -174,8 +179,9 @@ impl Fixture {
     }
 }
 
-/// Copy the tree at `from` to `to`, leaving out build output from building the
-/// fixture by hand.
+/// Copy the tree at `from` to `to`.
+///
+/// Leaves out the `target` dir of a fixture built by hand.
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap() {
@@ -291,8 +297,9 @@ impl Scratch {
     }
 }
 
-/// The fixtures' toolchain binaries, called directly so rustup stays out of
-/// the jail.
+/// The fixtures' toolchain binaries.
+///
+/// They're called directly so rustup stays out of the jail.
 struct Toolchain {
     cargo: PathBuf,
     rustc: PathBuf,
@@ -413,8 +420,9 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
     Build { output, leaks_fake_token }
 }
 
-/// A `jail` command, ready for cargo's arguments, that confines a build of
-/// `fixture` into `target_dir`.
+/// A `jail` command that confines a build of `fixture` into `target_dir`.
+///
+/// It's ready for cargo's arguments.
 ///
 /// The fixture, the fetched crates and `HOME` are read-only, so a build can't
 /// tamper with what later builds in the run use.

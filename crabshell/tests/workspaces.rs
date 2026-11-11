@@ -743,7 +743,9 @@ fn output_stderr(output: &Output) -> String {
     ignore = "needs `--features test-requests`"
 )]
 fn cfg_only() {
-    // Its scripts only read TARGET and CARGO_CFG_*, which the default covers.
+    // Its scripts only read TARGET, HOST, CARGO_CFG_* and CARGO_FEATURE_*,
+    // which the default covers, or knobs that are unset here. scratch can't
+    // empty its OUT_DIR under the default, but that's silent in a fresh build.
     check(&Fixture {
         name: "cfg-only",
         trusted: true,

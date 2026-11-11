@@ -22,3 +22,58 @@ env = ["ICU4X_DATA_DIR"]
 [package.rayon-core]
 [package.tiny-keccak]
 [package.crunchy]
+
+# Match the target triple against tables.
+[package.valuable]
+env = ["TARGET"]
+
+[package.atomic-polyfill]
+env = ["TARGET"]
+
+[package.cortex-m-semihosting]
+env = ["TARGET"]
+
+[package.syscalls]
+env = ["TARGET"]
+
+[package.objc2]
+env = ["TARGET", "CARGO_CFG_TARGET_ABI"]
+
+# Re-exports both triples to the crate.
+[package.current_platform]
+env = ["HOST", "TARGET"]
+
+# Points dependents at its bundled wasm sources, only on wasm targets.
+[package.tree-sitter-language]
+env = ["TARGET", "CARGO_MANIFEST_DIR"]
+
+# Panics if more than one backend feature is enabled.
+[package.blas-src]
+env = [
+    "CARGO_FEATURE_ACCELERATE",
+    "CARGO_FEATURE_BLIS",
+    "CARGO_FEATURE_INTEL_MKL",
+    "CARGO_FEATURE_NETLIB",
+    "CARGO_FEATURE_OPENBLAS",
+    "CARGO_FEATURE_R",
+]
+
+# Optional path to a platform configuration, passed on to the crate.
+[package.iceoryx2-pal-configuration]
+env = ["IOX2_CUSTOM_PLATFORM_CONFIGURATION_PATH"]
+
+# Replays directives a `links = "rb"` dependency would export.
+[package.rb-sys-env]
+env = ["DEP_RB_ENCODED_CARGO_ARGS"]
+
+# Deletes and recreates OUT_DIR. It ignores errors, so without listing
+# OUT_DIR it silently leaves stale contents behind.
+[package.scratch]
+read = [":out_dir"]
+
+# Read nothing: lalrpop-util checks the build host's `std::env::consts::OS`,
+# the others are empty.
+[package.lalrpop-util]
+[package.decancer]
+[package.embassy-time-driver]
+[package.nextest-workspace-hack]

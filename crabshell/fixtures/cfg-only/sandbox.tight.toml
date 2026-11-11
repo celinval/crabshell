@@ -2,8 +2,13 @@
 # The tightest consumer policy that works without crate requests: the union of
 # requests.toml, granted to every external crate.
 [external]
+# OUT_DIR is write-only; scratch lists it to empty it.
+read = { inherit = true, value = [":out_dir"] }
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
     "ICU4X_DATA_DIR",
+    "IOX2_CUSTOM_PLATFORM_CONFIGURATION_PATH",
+    "DEP_RB_ENCODED_CARGO_ARGS",
+    "CARGO_MANIFEST_DIR",
 ] }

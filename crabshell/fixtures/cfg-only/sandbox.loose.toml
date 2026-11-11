@@ -1,4 +1,6 @@
 #:schema ../../schema/sandbox.schema.json
-# A loose consumer policy: any environment variable.
+# A loose consumer policy: OUT_DIR read back, and any environment variable.
 [external]
+# OUT_DIR is write-only; scratch lists it to empty it.
+read = { inherit = true, value = [":out_dir"] }
 env = ["*"]

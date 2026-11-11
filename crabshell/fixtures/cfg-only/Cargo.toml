@@ -9,8 +9,25 @@ edition = "2024"
 publish = false
 
 [dependencies]
+atomic-polyfill = "1"
+blas-src = "0.14"
+cortex-m-semihosting = "0.6"
 crossbeam-epoch = "0.9"
 crossbeam-utils = "0.8"
+current_platform = "0.2"
+decancer = "4"
+embassy-time-driver = "0.2"
+iceoryx2-pal-configuration = "0.10"
 icu_properties_data = "2"
+lalrpop-util = "0.23"
+nextest-workspace-hack = "0.1"
+# objc2 refuses non-Apple targets unless a GNUstep runtime is selected.
+objc2 = { version = "0.6", features = ["gnustep-1-7"] }
 rayon-core = "1"
+rb-sys-env = "0.2"
+scratch = "1"
+# Its default `serde` feature pulls serde, whose build script runs rustc.
+syscalls = { version = "0.8", default-features = false }
 tiny-keccak = { version = "2", features = ["sha3"] }
+tree-sitter-language = "0.1"
+valuable = "0.1"

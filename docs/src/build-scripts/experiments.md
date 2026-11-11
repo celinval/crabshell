@@ -149,7 +149,7 @@ What the requests cost, per build script:
 
 | Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
 |---|---:|---|---|---:|
-| `cfg-only` | 7 | 0–2 | – | 0 |
+| `cfg-only` | 22 | 0–6 | – | 0 |
 | `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 11 | 0–20 | `rustc` | 0 |
@@ -203,6 +203,36 @@ What the requests cost, per build script:
 - **The only machine-specific config is the consumer's.** On Amazon Linux the
   built-in `pkg-config` grant needs extending (`sh`, `rpm` and rpm's
   libraries); no request changes.
+- **A crate's own script being cfg-only doesn't make its build cfg-only.**
+  `cfg-only` keeps working under the default grant alone, but the category's
+  most downloaded crates had to stay out of it. libm's script fails without
+  `OPT_LEVEL` and `CARGO_MANIFEST_DIR`, which it unwraps. serde_json's own
+  script reads only `CARGO_CFG_*`, but it depends on serde_core (`$RUSTC`,
+  `CARGO_PKG_VERSION_PATCH`) and zmij (`$RUSTC`). A version probe somewhere
+  below rules out most of the rest: libc (assert_cmd, quinn-udp, rlimit,
+  kvm-ioctls, wee_alloc), heapless (embassy-time-queue-utils),
+  portable-atomic (atomic-time), bare-metal (cortex-m, panic-probe,
+  nrf-pac), slotmap (ic-cdk-executor) and proc-macro2 (anything using
+  syn).
+- **Denying an `OUT_DIR` listing is silent.** scratch empties its `OUT_DIR`
+  with `remove_dir_all` and ignores errors. `OUT_DIR` is write-only, so
+  opening it fails and stale contents stay. A fresh build looks the same, so
+  only the request (`read = [":out_dir"]`) records the need.
+- **Some knobs forward a host path to rustc.**
+  iceoryx2-pal-configuration passes `IOX2_CUSTOM_PLATFORM_CONFIGURATION_PATH`
+  on with `rustc-env`, and the crate `include!`s that file, so rustc reads it
+  outside the sandbox. Denying the variable silently selects the built-in
+  configuration.
+- **Requests can't depend on the target.** tree-sitter-language reads
+  `CARGO_MANIFEST_DIR` only for `wasm32-unknown-*`. The vendor still
+  requests it, so a tight policy grants it on every target.
+- **`DEP_*` isn't in the default grant.** rb-sys-env replays
+  `DEP_RB_ENCODED_CARGO_ARGS`, which is unset here since nothing it depends
+  on has `links = "rb"`. The `dependency_version_cfg` crates (openssl,
+  native-tls, curl, hyper-openssl) read `DEP_OPENSSL_*` the same way, and
+  would need it requested and granted; they pull `-sys` crates anyway.
+- **Empty build scripts cost nothing.** embassy-time-driver (for its `links`
+  key) and nextest-workspace-hack run `fn main() {}` and request nothing.
 
 ## Methodology TODOs
 

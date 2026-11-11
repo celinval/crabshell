@@ -66,7 +66,7 @@ Two inputs feed the runner's policy.
 **What the package requests** — in `Cargo.toml`:
 
 ```toml
-[package.metadata.build-rs]
+[package.metadata.crabshell]
 requests = ["pkg-config", "cc"]            # named grants it may use
 read = [":manifest_dir"]                   # its own files
 env  = ["OPENSSL_DIR", "OPENSSL_STATIC"]   # knobs it reads

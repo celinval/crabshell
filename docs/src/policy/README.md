@@ -12,7 +12,7 @@
   config.
 - [Open questions](open-questions.md): known gaps and undecided defaults.
 
-JSON Schemas for `sandbox.toml` and for the `[package.metadata.build-rs]`
+JSON Schemas for `sandbox.toml` and for the `[package.metadata.crabshell]`
 table are in `crabshell/schema/`, generated from the types crabshell parses
 with. Editors that use [Taplo](https://taplo.tamasfe.dev/) validate a file
 that starts with a schema comment:

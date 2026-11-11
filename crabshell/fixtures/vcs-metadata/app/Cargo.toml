@@ -14,7 +14,7 @@ hotpath-meta = "0.31"
 lrlex = "0.15"
 mach-sys = "0.5"
 # `names` is left out: through rand it pulls in zerocopy, which uses
-# `[package.metadata.build-rs]` for its own data, and crabshell rejects that
+# `[package.metadata.crabshell]` for its own data, and crabshell rejects that
 # table.
 prettyplease = "0.3"
 protobuf = "3"

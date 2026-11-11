@@ -413,7 +413,7 @@ fn a_declaration_tightens_the_grant() {
     let manifest = build.manifest_dir("dep", &Origin::External);
     std::fs::write(
         manifest.join("Cargo.toml"),
-        "[package]\nname = \"dep\"\n\n[package.metadata.build-rs]\nenv = [\"CRABSHELL_GRANTED\"]\n",
+        "[package]\nname = \"dep\"\n\n[package.metadata.crabshell]\nenv = [\"CRABSHELL_GRANTED\"]\n",
     )
     .unwrap();
 
@@ -493,7 +493,7 @@ fn write_grants_no_read_access() {
     ));
 }
 
-/// A requests file stands in for a crate's `[package.metadata.build-rs]`.
+/// A requests file stands in for a crate's `[package.metadata.crabshell]`.
 #[cfg(feature = "test-requests")]
 #[test]
 fn injected_requests_tighten_the_grant() {

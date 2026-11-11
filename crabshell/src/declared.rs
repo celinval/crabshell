@@ -3,7 +3,7 @@
 //! A package declares its needs in `Cargo.toml`:
 //!
 //! ```toml
-//! [package.metadata.build-rs]
+//! [package.metadata.crabshell]
 //! read = ["/usr/include"]
 //! write = ["/dev/null"]
 //! run  = ["pkg-config"]
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-/// A package's `[package.metadata.build-rs]` table.
+/// A package's `[package.metadata.crabshell]` table.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Declared {
@@ -47,7 +47,7 @@ pub struct Declared {
 
 /// Read the declaration from the manifest in `manifest_dir`.
 ///
-/// Returns `None` when the manifest has no `[package.metadata.build-rs]`
+/// Returns `None` when the manifest has no `[package.metadata.crabshell]`
 /// table, or when there is no manifest.
 pub fn load(manifest_dir: &Path) -> Result<Option<Declared>, DeclaredError> {
     let path = manifest_dir.join("Cargo.toml");
@@ -60,7 +60,7 @@ pub fn load(manifest_dir: &Path) -> Result<Option<Declared>, DeclaredError> {
 /// Read `package`'s declaration from a test file of requests.
 ///
 /// The file maps package names to declarations (`[package.<name>]` tables in
-/// the `[package.metadata.build-rs]` format), standing in for what crates we
+/// the `[package.metadata.crabshell]` format), standing in for what crates we
 /// can't edit would declare. Returns `None` for packages the file doesn't list.
 #[cfg(feature = "test-requests")]
 pub fn injected(path: &Path, package: &str) -> Result<Option<Declared>, DeclaredError> {
@@ -92,15 +92,14 @@ fn parse(text: &str) -> Result<Option<Declared>, toml::de::Error> {
     }
     #[derive(Deserialize)]
     struct Metadata {
-        #[serde(rename = "build-rs")]
-        build_rs: Option<Declared>,
+        crabshell: Option<Declared>,
     }
 
     let manifest: Manifest = toml::from_str(text)?;
     Ok(manifest
         .package
         .and_then(|p| p.metadata)
-        .and_then(|m| m.build_rs))
+        .and_then(|m| m.crabshell))
 }
 
 /// A declaration that can't be read or parsed.
@@ -151,7 +150,7 @@ mod tests {
             [package]
             name = "dep"
 
-            [package.metadata.build-rs]
+            [package.metadata.crabshell]
             run = ["pkg-config"]
             env = ["TARGET"]
             "#,
@@ -176,7 +175,14 @@ mod tests {
     }
 
     #[test]
+    fn other_tools_tables_are_ignored() {
+        // zerocopy keeps its own version table under this key.
+        let text = "[package.metadata.build-rs]\nno-zerocopy-core-error-1-81-0 = \"1.81.0\"\n";
+        assert_eq!(parse(text).unwrap(), None);
+    }
+
+    #[test]
     fn rejects_unknown_fields() {
-        assert!(parse("[package.metadata.build-rs]\nnet = true\n").is_err());
+        assert!(parse("[package.metadata.crabshell]\nnet = true\n").is_err());
     }
 }

@@ -120,7 +120,7 @@ allows.
 
 ### Trying crate declarations
 
-> **Don't publish `[package.metadata.build-rs]`.** The declaration format
+> **Don't publish `[package.metadata.crabshell]`.** The declaration format
 > isn't settled or versioned.
 
 To try the vendor side today, only do it locally. Another possibility is to write

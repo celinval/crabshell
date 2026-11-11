@@ -3,7 +3,7 @@
 //! crabshell ships built-in grants (`grants.toml`); a `[grant.<name>]` table in
 //! `sandbox.toml` overrides a built-in per field, or defines a new grant.
 //! Consumers assign grants with `grants = [...]`, and crates request them with
-//! `requests = [...]` in `[package.metadata.build-rs]`; both expand to plain
+//! `requests = [...]` in `[package.metadata.crabshell]`; both expand to plain
 //! fields before clamping and narrowing.
 
 use std::collections::BTreeMap;

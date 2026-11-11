@@ -1,7 +1,7 @@
 # What each crate's build script would request, precisely, from the vendor's
 # point of view: only what its own code uses, with no knowledge of the host.
 # Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
-# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# `test-requests`) in place of the crates' `[package.metadata.crabshell]`.
 # Every build script in the fixture is listed; a crate that reads its own
 # files requests exactly those, since the crate root is otherwise narrowed
 # away. Running

@@ -1,7 +1,7 @@
 //! Checks the JSON Schemas in `crabshell/schema/` against the code and fixtures.
 //!
 //! The schemas are generated from the serde types that parse `sandbox.toml`
-//! and `[package.metadata.build-rs]`, so they can't drift from what crabshell
+//! and `[package.metadata.crabshell]`, so they can't drift from what crabshell
 //! accepts. Run with `UPDATE_SCHEMA=1` to regenerate them after changing a
 //! type. The e2e fixtures and the built-in grants are validated against them.
 
@@ -15,8 +15,8 @@ use serde_json::Value;
 
 /// The schema for `sandbox.toml`.
 const SANDBOX: &str = "sandbox.schema.json";
-/// The schema for a `[package.metadata.build-rs]` table.
-const BUILD_RS: &str = "build-rs.schema.json";
+/// The schema for a `[package.metadata.crabshell]` table.
+const METADATA: &str = "metadata.schema.json";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
@@ -66,8 +66,8 @@ fn schemas() -> [(&'static str, Value); 2] {
     [
         (SANDBOX, generate::<SandboxConfig>("crabshell sandbox.toml")),
         (
-            BUILD_RS,
-            generate::<Declared>("crabshell [package.metadata.build-rs]"),
+            METADATA,
+            generate::<Declared>("crabshell [package.metadata.crabshell]"),
         ),
     ]
 }
@@ -118,7 +118,7 @@ fn toml(path: &Path) -> Value {
 #[test]
 fn fixtures_and_builtins_match_the_schemas() {
     let sandbox = schema(SANDBOX);
-    let build_rs = schema(BUILD_RS);
+    let metadata = schema(METADATA);
     let builtins = root().join("src/grants.toml");
     assert_valid(&sandbox, &builtins, &toml(&builtins));
 
@@ -141,7 +141,7 @@ fn fixtures_and_builtins_match_the_schemas() {
                 // A requests file maps package names to declarations.
                 let requests = toml(&path);
                 for declared in requests["package"].as_object().unwrap().values() {
-                    assert_valid(&build_rs, &path, declared);
+                    assert_valid(&metadata, &path, declared);
                 }
                 checked += 1;
             }

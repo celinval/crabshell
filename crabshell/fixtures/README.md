@@ -31,7 +31,7 @@ Every fixture builds in each cell of **requests × grants**:
 | **no requests** | fails or differs | same as baseline | same as baseline |
 | **precise requests** | fails or differs | same as baseline | same as baseline |
 
-- **Requests** stand in for the crates' own `[package.metadata.build-rs]`,
+- **Requests** stand in for the crates' own `[package.metadata.crabshell]`,
   since we can't edit them. `requests.toml` lists, for every build script,
   exactly what its code uses, from the vendor's point of view: no host paths,
   tools through [named grants](../../docs/src/policy/grants.md). They're

@@ -25,7 +25,7 @@ grants = ["rustc", "pkg-config"]
   table follows the per-field rules of every other table: an array replaces
   that field of the built-in; `{ inherit = true, value = [...] }` extends it.
 - **A crate requests grants by name, never defines them.** In
-  `[package.metadata.build-rs]`, `requests = ["pkg-config"]` narrows like any
+  `[package.metadata.crabshell]`, `requests = ["pkg-config"]` narrows like any
   other declaration. The different key marks the direction of trust: the
   consumer *grants*, the crate *requests*. A crate that could define a grant's
   contents could grant itself anything.

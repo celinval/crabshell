@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
-  "description": "A package's `[package.metadata.build-rs]` table.",
+  "description": "A package's `[package.metadata.crabshell]` table.",
   "properties": {
     "env": {
       "default": [],
@@ -49,6 +49,6 @@
       "type": "array"
     }
   },
-  "title": "crabshell [package.metadata.build-rs]",
+  "title": "crabshell [package.metadata.crabshell]",
   "type": "object"
 }

@@ -15,9 +15,9 @@ of its requests.
 - **Grants** are the named grants requested.
 
 226 crates, 212 of them among the report's 1,190 with build scripts. 145
-request env and 91 request reads; none requests a write, a program or network
-directly. Grants requested:
-`rustc` (57), `cc` (30), `pkg-config` (16), `protoc` (8), `bindgen` (7), `cxx` (7), `git` (6), `cmake` (4), `autotools` (3), `python` (1), `awk` (1), `grep` (1), `sh` (1).
+request env, 92 reads, 4 writes, 3 programs directly and
+12 network. Grants requested:
+`rustc` (57), `cc` (30), `pkg-config` (16), `protoc` (11), `bindgen` (7), `cxx` (7), `git` (6), `cmake` (4), `autotools` (3), `python` (1), `awk` (1), `grep` (1), `sh` (1).
 
 | Crate | Category | Fixtures | Env | Read | Write | Run | Network | Grants |
 |---|---|---|---:|---|---|---|---|---|
@@ -68,7 +68,7 @@ directly. Grants requested:
 | fs-err | rustc-probe | lang-runtime, rustc-probe | 2 | `:out_dir` | – | – | – | `rustc` |
 | fts-sys | bindgen | bindgen | 5 | `:manifest_dir/src/fts-sys.h` | – | – | – | `bindgen`, `rustc` |
 | generic-array | – | network-fetch, protoc | – | – | – | – | – | `rustc` |
-| geozero | protoc | protoc | – | `:manifest_dir/src/mvt/vector_tile.rs` | – | – | – | – |
+| geozero | protoc | protoc | – | `:manifest_dir/src/mvt` | `:manifest_dir/src/mvt` | – | – | `protoc` |
 | getrandom | cfg-only | cc-toolchain, lang-runtime, network-fetch, protoc, rustc-probe | 2 | – | – | – | – | `rustc` |
 | gherkin | codegen | codegen | – | `:manifest_dir/src/languages.json` | – | – | – | – |
 | gl | codegen | codegen | – | – | – | – | – | – |
@@ -85,7 +85,7 @@ directly. Grants requested:
 | icu_segmenter_data | cfg-only | codegen | 1 | – | – | – | – | – |
 | indexmap | – | protoc, vcs-metadata | 1 | `:out_dir` | – | – | – | `rustc` |
 | inotify-sys | system-lib | system-lib | 1 | – | – | – | – | `pkg-config` |
-| intel-mkl-src | network-fetch | network-fetch | 1 | – | – | – | – | `pkg-config` |
+| intel-mkl-src | network-fetch | network-fetch | 2 | – | – | – | yes | `pkg-config` |
 | io-lifetimes | rustc-probe | rustc-probe | 2 | `:out_dir` | – | – | – | `rustc` |
 | iso_currency | codegen | codegen | – | `:manifest_dir/isodata.tsv` | – | – | – | – |
 | jetscii | codegen | codegen | 2 | – | – | – | – | – |
@@ -96,8 +96,8 @@ directly. Grants requested:
 | lalrpop-util | cfg-only | cfg-only | – | – | – | – | – | – |
 | libbpf-sys | network-fetch | network-fetch | 4 | – | – | – | – | – |
 | libc | rustc-probe | bindgen, cc-toolchain, codegen, lang-runtime, network-fetch, protoc, rustc-probe, system-lib, vcs-metadata | 20 | – | – | – | – | `rustc` |
-| libdd-ddsketch | protoc | protoc | – | – | – | – | – | – |
-| libduckdb-sys | network-fetch | network-fetch | 9 | `:duckdb_lib_dir`, `:manifest_dir/src/bindgen_bundled_version.rs` | – | – | – | `pkg-config` |
+| libdd-ddsketch | protoc | protoc | – | `:manifest_dir/src` | `:manifest_dir/src/pb` | – | – | `protoc` |
+| libduckdb-sys | network-fetch | network-fetch | 9 | `:duckdb_lib_dir`, `:manifest_dir/src/bindgen_bundled_version.rs` | – | – | yes | `pkg-config` |
 | liblzma-sys | cc-toolchain | network-fetch | 3 | `:manifest_dir/config.h`, `:manifest_dir/xz`, `:out_dir` | – | – | – | `cc` |
 | libm | cfg-only | vcs-metadata | 6 | – | – | – | – | – |
 | libmimalloc-sys | cc-toolchain | cc-toolchain | 16 | `:manifest_dir/c_src/mimalloc`, `:out_dir` | – | – | – | `cc` |
@@ -107,14 +107,14 @@ directly. Grants requested:
 | libsamplerate-sys | cc-toolchain | cc-toolchain | 2 | `:manifest_dir/libsamplerate`, `:out_dir` | – | – | – | `cc`, `cmake` |
 | libseccomp | system-lib | system-lib | 6 | – | – | – | – | `pkg-config` |
 | libseccomp-sys | system-lib | system-lib | 2 | – | – | – | – | – |
-| libsodium-sys-stable | network-fetch | network-fetch | 4 | – | – | – | – | – |
+| libsodium-sys-stable | network-fetch | network-fetch | 4 | – | – | – | yes | – |
 | libsqlite3-sys | cc-toolchain | system-lib | 17 | `:manifest_dir/bindgen-bindings`, `:manifest_dir/sqlite3` | – | – | – | `pkg-config` |
 | libz-ng-sys | cc-toolchain | cc-toolchain | 3 | `:manifest_dir/src/zlib-ng`, `:out_dir` | – | – | – | `cc`, `cmake` |
 | libz-sys | cc-toolchain | system-lib | 7 | `:manifest_dir/src/smoke.c`, `:manifest_dir/src/zlib`, `:out_dir` | – | – | – | `cc`, `pkg-config` |
 | link-cplusplus | cc-toolchain | cc-toolchain | 1 | `:manifest_dir/src/dummy.cc`, `:out_dir` | – | – | – | `cc`, `cxx` |
 | linkme | codegen | codegen | 1 | – | – | – | – | – |
 | linkme-impl | rustc-probe | codegen | – | – | – | – | – | `rustc` |
-| liteparse-pdfium-sys | network-fetch | network-fetch | 4 | `:manifest_dir/bindings.rs` | – | – | – | – |
+| liteparse-pdfium-sys | network-fetch | network-fetch | 5 | `:manifest_dir/bindings.rs` | – | – | yes | – |
 | logos-codegen | – | protoc | – | – | – | – | – | `rustc` |
 | lrlex | vcs-metadata | vcs-metadata | 2 | – | – | – | – | – |
 | lrpar | vcs-metadata | vcs-metadata | 2 | – | – | – | – | – |
@@ -141,18 +141,18 @@ directly. Grants requested:
 | oid-registry | codegen | codegen | – | `:manifest_dir/assets/oid_db.txt` | – | – | – | – |
 | openmp-sys | system-lib | system-lib | 5 | `:out_dir` | – | – | – | `cc` |
 | openssl-sys | cc-toolchain | system-lib | 22 | `:manifest_dir/build/expando.c`, `:out_dir` | – | – | – | `cc`, `pkg-config` |
-| ort-sys | network-fetch | network-fetch | 8 | – | – | – | – | – |
+| ort-sys | network-fetch | network-fetch | 9 | – | – | – | yes | – |
 | oxc_sourcemap | lang-runtime | lang-runtime | 4 | – | – | – | – | – |
 | parking_lot_core | cfg-only | codegen, protoc, rustc-probe | 1 | – | – | – | – | – |
 | paste | rustc-probe | rustc-probe | – | – | – | – | – | `rustc` |
 | pbjson-types | protoc | protoc | – | `:manifest_dir/descriptors.bin` | – | – | – | – |
 | pcap | system-lib | system-lib | 6 | – | – | – | – | `pkg-config` |
-| pci-ids | network-fetch | network-fetch | – | `:manifest_dir/pciids/pci.ids` | – | – | – | – |
+| pci-ids | network-fetch | network-fetch | – | `:manifest_dir/pciids/pci.ids` | `:manifest_dir/pciids/pci.ids` | `curl` | yes | – |
 | perfetto_protos | protoc | protoc | – | `:manifest_dir/protos`, `:out_dir` | – | – | – | `protoc` |
 | pkcs11-bindings | bindgen | bindgen | – | `:manifest_dir/pkcs11.h`, `:manifest_dir/pkcs11f.h`, `:manifest_dir/pkcs11t.h`, `:manifest_dir/wrapper.h` | – | – | – | `bindgen`, `rustc` |
 | portable-atomic | rustc-probe | rustc-probe, vcs-metadata | 11 | `:out_dir` | – | – | – | `rustc` |
 | portable-atomic-util | rustc-probe | rustc-probe | 5 | – | – | – | – | `rustc` |
-| pprof | protoc | protoc | – | `:manifest_dir/proto` | – | – | – | – |
+| pprof | protoc | protoc | – | `:manifest_dir/proto` | `:manifest_dir/proto` | – | – | `protoc` |
 | prettyplease | vcs-metadata | bindgen, protoc, vcs-metadata | 4 | – | – | – | – | – |
 | proc-macro-error | rustc-probe | rustc-probe, vcs-metadata | – | – | – | – | – | `rustc` |
 | proc-macro-error-attr | rustc-probe | rustc-probe, vcs-metadata | – | – | – | – | – | `rustc` |
@@ -176,7 +176,7 @@ directly. Grants requested:
 | rb-sys-env | cfg-only | cfg-only | 1 | – | – | – | – | – |
 | ref-cast | rustc-probe | protoc, rustc-probe | 1 | – | – | – | – | `rustc` |
 | ring | cc-toolchain | cc-toolchain, network-fetch | 13 | `:manifest_dir/crypto`, `:manifest_dir/include`, `:manifest_dir/pregenerated`, `:manifest_dir/third_party`, `:out_dir` | – | – | – | `cc` |
-| rquickjs-sys | network-fetch | network-fetch | 6 | `:manifest_dir/quickjs`, `:manifest_dir/quickjs.bind.h`, `:out_dir` | – | – | – | `cc` |
+| rquickjs-sys | network-fetch | network-fetch | 6 | `:manifest_dir/quickjs`, `:manifest_dir/quickjs.bind.h`, `:out_dir` | – | `curl` | yes | `cc` |
 | rustc_version_runtime | vcs-metadata | vcs-metadata | – | – | – | – | – | `rustc` |
 | rustix | rustc-probe | bindgen, lang-runtime, network-fetch, protoc, rustc-probe | 14 | `:manifest_dir/src/backend/linux_raw/arch`, `:out_dir` | – | – | – | `rustc` |
 | rustler | lang-runtime | lang-runtime | 3 | – | – | – | – | – |
@@ -205,7 +205,7 @@ directly. Grants requested:
 | symbolic-demangle | cc-toolchain | protoc | – | – | – | – | – | – |
 | syn | – | codegen, protoc, rustc-probe, vcs-metadata | – | – | – | – | – | `rustc` |
 | syscalls | cfg-only | cfg-only | 1 | – | – | – | – | – |
-| system-deps | network-fetch | network-fetch | – | – | – | – | – | – |
+| system-deps | network-fetch | network-fetch | – | – | – | – | yes | – |
 | target-lexicon | rustc-probe | codegen, lang-runtime, network-fetch | 1 | – | – | – | – | `rustc` |
 | target-spec | codegen | codegen | 2 | – | – | – | – | – |
 | terminfo | codegen | codegen | – | – | – | – | – | – |
@@ -214,19 +214,19 @@ directly. Grants requested:
 | tiny-keccak | cfg-only | cfg-only, codegen | – | – | – | – | – | – |
 | tiny-xlib | system-lib | system-lib | 7 | – | – | – | – | `pkg-config` |
 | tls-parser | codegen | codegen | 1 | `:manifest_dir/scripts/tls-ciphersuites.txt` | – | – | – | – |
-| tracel-llvm-bundler | network-fetch | network-fetch | 1 | – | – | – | – | – |
+| tracel-llvm-bundler | network-fetch | network-fetch | 1 | – | – | – | yes | – |
 | tracing-perfetto-sdk-schema | protoc | protoc | 1 | `:manifest_dir/protos` | – | – | – | `protoc` |
 | tree-sitter | cc-toolchain | cc-toolchain | 5 | `:manifest_dir/include`, `:manifest_dir/src`, `:out_dir` | – | – | – | `cc` |
 | tree-sitter-language | cfg-only | cc-toolchain, cfg-only | 2 | – | – | – | – | – |
 | tree-sitter-rust | cc-toolchain | cc-toolchain | – | `:manifest_dir/src`, `:out_dir` | – | – | – | `cc` |
 | ttrpc | protoc | protoc | – | `:manifest_dir/src/ttrpc.proto` | – | – | – | – |
-| tun | network-fetch | network-fetch | – | – | – | – | – | – |
+| tun | network-fetch | network-fetch | – | – | – | – | yes | – |
 | typeid | rustc-probe | codegen, protoc, rustc-probe | – | – | – | – | – | `rustc` |
 | typetag | codegen | codegen, protoc | 1 | – | – | – | – | – |
 | typst-utils | vcs-metadata | vcs-metadata | – | – | – | – | – | `git` |
 | uncased | rustc-probe | codegen | – | – | – | – | – | `rustc` |
 | unicode_names2 | codegen | codegen | – | – | – | – | – | – |
-| utoipa-swagger-ui | network-fetch | network-fetch | 3 | `:out_dir` | – | – | – | – |
+| utoipa-swagger-ui | network-fetch | network-fetch | 4 | `:out_dir` | – | – | yes | – |
 | v4l2-sys-mit | bindgen | bindgen | – | `:manifest_dir/wrapper.h` | – | – | – | `bindgen` |
 | valuable | cfg-only | cfg-only | 1 | – | – | – | – | – |
 | vcs-metadata | – | vcs-metadata | – | – | – | – | – | `git` |
@@ -243,7 +243,7 @@ directly. Grants requested:
 | x11-dl | system-lib | system-lib | 33 | – | – | – | – | `pkg-config` |
 | yara-x-proto | protoc | protoc | – | `:manifest_dir/src` | – | – | – | – |
 | yeslogic-fontconfig-sys | system-lib | system-lib | 4 | – | – | – | – | `pkg-config` |
-| z3-sys | network-fetch | network-fetch | 8 | – | – | – | – | `pkg-config` |
+| z3-sys | network-fetch | network-fetch | 8 | – | – | `z3` | yes | `pkg-config` |
 | zerocopy | rustc-probe | codegen, lang-runtime, protoc, rustc-probe, vcs-metadata | – | `:manifest_dir/Cargo.toml` | – | – | – | `rustc` |
 | zmij | rustc-probe | cc-toolchain, codegen, lang-runtime, network-fetch, protoc, rustc-probe, vcs-metadata | 1 | – | – | – | – | `rustc` |
 | zstd-sys | cc-toolchain | cc-toolchain, system-lib | 11 | `:manifest_dir/zstd`, `:out_dir` | – | – | – | `cc`, `pkg-config` |

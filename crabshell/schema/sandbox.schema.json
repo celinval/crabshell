@@ -51,6 +51,36 @@
       },
       "type": "object"
     },
+    "Include": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/IncludeTable"
+        }
+      ],
+      "description": "An `include` entry: a path, or a table that may mark it optional.\n\nA relative path is relative to the including file's directory."
+    },
+    "IncludeTable": {
+      "additionalProperties": false,
+      "description": "`{ path = \"...\", optional = true }`: an include that may be missing.",
+      "properties": {
+        "optional": {
+          "default": false,
+          "description": "Whether to skip the file when it doesn't exist.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The file to include.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
     "ListField": {
       "anyOf": [
         {
@@ -132,6 +162,13 @@
         "pattern": "^[a-z][a-z0-9_-]*$"
       },
       "type": "object"
+    },
+    "include": {
+      "description": "Files whose `[grant.*]` and `[variables]` apply below this file's own.",
+      "items": {
+        "$ref": "#/definitions/Include"
+      },
+      "type": "array"
     },
     "limits": {
       "allOf": [

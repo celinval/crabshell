@@ -19,6 +19,23 @@ Two files can apply to a build:
 
 The rest of this page describes the format both files share.
 
+## Includes
+
+Either file can pull `[grant.*]` and `[variables]` definitions from others,
+like Cargo's config `include`:
+
+```toml
+include = ["grants.toml", { path = ".crabshell/local.toml", optional = true }]
+```
+
+- A relative path is relative to the including file. An `optional` include
+  is skipped when the file doesn't exist; any other problem is an error.
+- An included file may only define `[grant.*]` and `[variables]`, and can't
+  include further files. Who gets what stays in the including file.
+- Includes apply in order, each over the previous ones, and the including
+  file over all of them: a variable replaces one of the same name, and a
+  grant's fields layer as they do over a built-in grant.
+
 ## Tables
 
 `sandbox.toml` is resolved **per field**, in the spirit of Cargo's `[profile]`

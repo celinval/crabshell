@@ -10,6 +10,9 @@
 //! rather than ignored, so a table that would silently grant nothing cannot be
 //! mistaken for an applied policy. `[grant.<name>]` tables define or override
 //! [named grants](crate::grants).
+//!
+//! Either file may `include` others, which contribute only `[grant.*]` and
+//! `[variables]`, below the including file's own.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -25,6 +28,9 @@ pub const FILE_NAME: &str = "sandbox.toml";
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SandboxConfig {
+    /// Files whose `[grant.*]` and `[variables]` apply below this file's own.
+    #[serde(default)]
+    pub include: Vec<Include>,
     /// Consumer caps; constrains only the fields it names.
     #[serde(default)]
     pub limits: Fields,
@@ -46,6 +52,27 @@ pub struct SandboxConfig {
     #[serde(default)]
     #[schemars(extend("propertyNames" = { "pattern": "^[a-z][a-z0-9_]*$" }))]
     pub variables: BTreeMap<String, VariableDef>,
+}
+
+/// An `include` entry: a path, or a table that may mark it optional.
+///
+/// A relative path is relative to the including file's directory.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Include {
+    Path(String),
+    Table(IncludeTable),
+}
+
+/// `{ path = "...", optional = true }`: an include that may be missing.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct IncludeTable {
+    /// The file to include.
+    pub path: String,
+    /// Whether to skip the file when it doesn't exist.
+    #[serde(default)]
+    pub optional: bool,
 }
 
 /// A `[variables]` entry: one source, or an array whose sources all apply.
@@ -129,26 +156,124 @@ pub fn user_config_path(env: impl Fn(&str) -> Option<OsString>) -> Option<PathBu
 }
 
 impl SandboxConfig {
-    /// Take `other`'s machine facts, `[variables]` and `[grant.*]`, over this
-    /// config's own of the same name.
+    /// Take `other`'s machine facts over this config's own.
+    ///
+    /// Facts are `[variables]` and `[grant.*]`; each replaces one of the same
+    /// name.
     pub fn take_facts(&mut self, other: &SandboxConfig) {
         self.variables.extend(other.variables.clone());
         self.grant.extend(other.grant.clone());
     }
 }
 
-/// Read, parse, and validate the `sandbox.toml` at `path`.
+/// Read, parse, and validate the `sandbox.toml` at `path`, with its includes.
+///
+/// Included files apply in order, each over the previous ones, and `path`'s own
+/// `[grant.*]` and `[variables]` over all of them: a variable replaces one of
+/// the same name, and a grant's fields layer as over a built-in.
 pub fn load(path: &Path) -> Result<SandboxConfig, ConfigError> {
+    let mut config = parse(path)?;
+    let dir = path.parent().unwrap_or(Path::new(""));
+    let mut grants = BTreeMap::new();
+    let mut variables = BTreeMap::new();
+    for include in std::mem::take(&mut config.include) {
+        let (file, optional) = match include {
+            Include::Path(file) => (dir.join(file), false),
+            Include::Table(table) => (dir.join(table.path), table.optional),
+        };
+        if optional && !file.exists() {
+            continue;
+        }
+        let included = parse(&file)?;
+        check_included(&included, &file)?;
+        validate(&included, &file)?;
+        layer_grants(&mut grants, included.grant);
+        variables.extend(included.variables);
+    }
+    layer_grants(&mut grants, std::mem::take(&mut config.grant));
+    variables.extend(std::mem::take(&mut config.variables));
+    config.grant = grants;
+    config.variables = variables;
+    validate(&config, path)?;
+    Ok(config)
+}
+
+/// Read and parse the file at `path`, without its includes.
+fn parse(path: &Path) -> Result<SandboxConfig, ConfigError> {
     let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
         path: path.to_path_buf(),
         source,
     })?;
-    let config: SandboxConfig = toml::from_str(&text).map_err(|source| ConfigError::Parse {
+    toml::from_str(&text).map_err(|source| ConfigError::Parse {
         path: path.to_path_buf(),
         source,
-    })?;
-    validate(&config, path)?;
-    Ok(config)
+    })
+}
+
+/// Reject what an included file can't set.
+///
+/// An included file may only define `[grant.*]` and `[variables]`.
+fn check_included(config: &SandboxConfig, path: &Path) -> Result<(), ConfigError> {
+    let set = [
+        ("include", !config.include.is_empty()),
+        ("[limits]", config.limits != Fields::default()),
+        ("[local]", config.local != Fields::default()),
+        ("[external]", config.external != Fields::default()),
+        ("[package]", !config.package.is_empty()),
+    ];
+    match set.into_iter().find(|(_, set)| *set) {
+        Some((key, _)) => Err(ConfigError::Included {
+            path: path.to_path_buf(),
+            key,
+        }),
+        None => Ok(()),
+    }
+}
+
+/// Layer `upper`'s grants over `lower`'s, field by field.
+fn layer_grants(lower: &mut BTreeMap<String, Fields>, upper: BTreeMap<String, Fields>) {
+    for (name, upper) in upper {
+        let base = lower.remove(&name).unwrap_or_default();
+        lower.insert(name, base.layer(upper));
+    }
+}
+
+impl Fields {
+    /// These fields with `upper`'s set over them.
+    ///
+    /// An `inherit = true` extension stays one, relative to what lies below
+    /// both.
+    fn layer(self, upper: Fields) -> Fields {
+        Fields {
+            read: ListField::layer(self.read, upper.read),
+            write: ListField::layer(self.write, upper.write),
+            run: ListField::layer(self.run, upper.run),
+            env: ListField::layer(self.env, upper.env),
+            network: upper.network.or(self.network),
+            grants: ListField::layer(self.grants, upper.grants),
+        }
+    }
+}
+
+impl ListField {
+    fn layer(lower: Option<ListField>, upper: Option<ListField>) -> Option<ListField> {
+        match (lower, upper) {
+            (lower, None) => lower,
+            (None, upper) => upper,
+            (Some(lower), Some(ListField::Inherit { inherit: true, value })) => {
+                let mut merged = list_entries(&lower).to_vec();
+                merged.extend(value);
+                Some(match lower {
+                    ListField::Inherit { inherit: true, .. } => ListField::Inherit {
+                        inherit: true,
+                        value: merged,
+                    },
+                    _ => ListField::Override(merged),
+                })
+            }
+            (_, Some(upper)) => Some(ListField::Override(list_entries(&upper).to_vec())),
+        }
+    }
 }
 
 /// Reject tables that would never apply, and grant names that don't resolve.
@@ -274,6 +399,8 @@ pub enum ConfigError {
         name: String,
         kind: VariableError,
     },
+    /// An included file sets `key`, which only the including file may.
+    Included { path: PathBuf, key: &'static str },
 }
 
 /// What is wrong with a `[variables]` entry.
@@ -347,6 +474,11 @@ impl fmt::Display for ConfigError {
             ConfigError::Variable { path, name, kind } => {
                 write!(f, "{}: `[variables] {name}`: {kind}", path.display())
             }
+            ConfigError::Included { path, key } => write!(
+                f,
+                "{}: an included file can only set `[grant.*]` and `[variables]`, not `{key}`",
+                path.display()
+            ),
             ConfigError::GlobKey { path, key } => write!(
                 f,
                 "{}: `[package.\"{key}\"]` is not supported; \
@@ -364,6 +496,7 @@ impl std::error::Error for ConfigError {
             ConfigError::Read { source, .. } => Some(source),
             ConfigError::Parse { source, .. } => Some(source),
             ConfigError::GlobKey { .. }
+            | ConfigError::Included { .. }
             | ConfigError::Grant { .. }
             | ConfigError::Variable { .. } => None,
         }
@@ -533,6 +666,63 @@ mod tests {
             let text = format!("[variables]\nx = {{ env = \"{env}\" }}\n");
             assert!(load_err(&text).contains("chosen by a crate"));
         }
+    }
+
+    #[test]
+    fn includes_layer_below_the_including_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let write = |name: &str, text: &str| std::fs::write(dir.path().join(name), text).unwrap();
+        write("a.toml", "[grant.git]\nrun = [\"git\"]\nread = [\"/a\"]\n[variables]\nx = \"/a\"\n");
+        write("b.toml", "[grant.git]\nread = { inherit = true, value = [\"/b\"] }\n");
+        write(
+            FILE_NAME,
+            r#"
+            include = ["a.toml", "b.toml", { path = "missing.toml", optional = true }]
+            [local]
+            grants = ["git"]
+            [grant.git]
+            read = { inherit = true, value = ["/c"] }
+            [variables]
+            x = "/c"
+            "#,
+        );
+        let config = load(&dir.path().join(FILE_NAME)).unwrap();
+
+        let git = &config.grant["git"];
+        assert_eq!(git.run, Some(ListField::Override(vec!["git".into()])));
+        let read = vec!["/a".into(), "/b".into(), "/c".into()];
+        assert_eq!(git.read, Some(ListField::Override(read)));
+        assert_eq!(config.variables["x"], VariableDef::One(Source::Path("/c".into())));
+        assert!(config.include.is_empty());
+    }
+
+    #[test]
+    fn included_extensions_still_extend_builtins() {
+        let dir = tempfile::tempdir().unwrap();
+        let ext = "[grant.cc]\nrun = { inherit = true, value = [\"ar\"] }\n";
+        std::fs::write(dir.path().join("a.toml"), ext).unwrap();
+        std::fs::write(dir.path().join(FILE_NAME), "include = [\"a.toml\"]\n").unwrap();
+        let config = load(&dir.path().join(FILE_NAME)).unwrap();
+
+        let value = vec!["ar".into()];
+        assert_eq!(config.grant["cc"].run, Some(ListField::Inherit { inherit: true, value }));
+    }
+
+    #[test]
+    fn rejects_bad_includes() {
+        let dir = tempfile::tempdir().unwrap();
+        let load_with = |included: &str| {
+            std::fs::write(dir.path().join("a.toml"), included).unwrap();
+            std::fs::write(dir.path().join(FILE_NAME), "include = [\"a.toml\"]\n").unwrap();
+            load(&dir.path().join(FILE_NAME)).unwrap_err().to_string()
+        };
+        assert!(load_with("[external]\nnetwork = true\n").contains("not `[external]`"));
+        assert!(load_with("include = [\"b.toml\"]\n").contains("not `include`"));
+        assert!(load_with("[variables]\nx = \"rel\"\n").contains("must be an absolute path"));
+
+        std::fs::write(dir.path().join(FILE_NAME), "include = [\"missing.toml\"]\n").unwrap();
+        let err = load(&dir.path().join(FILE_NAME)).unwrap_err();
+        assert!(matches!(err, ConfigError::Read { .. }), "{err}");
     }
 
     #[test]

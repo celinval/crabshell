@@ -120,7 +120,8 @@ fn fixtures_and_builtins_match_the_schemas() {
             let path = file.unwrap().path();
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
             let is_host = fixture.file_name().is_some_and(|dir| dir == "hosts");
-            if (is_host || name.starts_with("sandbox.")) && name.ends_with(".toml") {
+            let is_policy = name.starts_with("sandbox.") || name == "grants.toml";
+            if (is_host || is_policy) && name.ends_with(".toml") {
                 assert_valid(&sandbox, &path, &toml(&path));
                 checked += 1;
             } else if name == "requests.toml" {

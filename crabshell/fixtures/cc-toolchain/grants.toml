@@ -6,3 +6,27 @@
 run = ["cmake", "make", "sh", "ranlib", "c++"]
 read = ["/usr/share/cmake*"]
 env = ["CMAKE", "CMAKE_*", "HOST_CMAKE*", "TARGET_CMAKE*", "PROFILE", "NUM_JOBS", "CARGO_MAKEFLAGS", "MAKEFLAGS"]
+
+# Compiling C++ through the cc crate, on top of the `cc` grant, which already
+# passes the C++ compiler's variables.
+[grant.cxx]
+run = ["c++"]
+
+# Running configure scripts and make, on top of the `cc` grant. Configure
+# scripts and the makefiles they write run a shell and many coreutils.
+# libtool's checks fall back silently without `file` (and its magic
+# database), `dd`, `getconf` and `objdump`, writing a different libtool.
+[grant.autotools]
+run = [
+    "sh", "make",
+    "sed", "grep", "awk", "cat", "cp", "mv", "rm", "ln", "mkdir", "rmdir", "chmod", "touch",
+    "tr", "expr", "sort", "uniq", "uname", "ls", "dirname", "basename", "head", "tail", "wc",
+    "cmp", "diff", "env", "test", "true", "false", "printf", "echo", "date", "sleep", "mktemp",
+    "install", "ranlib", "nm", "strip", "cpp", "find", "xargs", "od", "tee", "cut",
+    "file", "dd", "getconf", "objdump",
+]
+read = ["/usr/share/misc/magic*", "/usr/share/file"]
+env = [
+    "CONFIG_SHELL", "CONFIG_SITE", "CPP", "CPPFLAGS", "LDFLAGS", "LIBS", "MAKE", "MAKEFLAGS",
+    "CARGO_MAKEFLAGS", "NUM_JOBS",
+]

@@ -1,5 +1,6 @@
-# Depends on crates whose build scripts compile vendored C and assembly with
-# the system toolchain, directly through cc-rs or through CMake.
+# Depends on crates whose build scripts compile vendored C, C++ and assembly
+# with the system toolchain: directly through cc-rs, through CMake, or through
+# configure scripts and make.
 [workspace]
 
 [package]
@@ -9,6 +10,30 @@ edition = "2024"
 publish = false
 
 [dependencies]
-libz-ng-sys = "1"
+# cc-rs, C and assembly.
+blake3 = "1"
+blst = "0.3"
+libmimalloc-sys = "0.1"
+libnghttp2-sys = "0.1"
+lz4-sys = "1"
+psm = "0.1"
 ring = "0.17"
+secp256k1-sys = "0.14"
+sha2-asm = "0.6"
+tree-sitter = "0.27"
+tree-sitter-rust = "0.24"
 zstd-sys = "2"
+# cc-rs, C++.
+cxx = "1"
+esaxx-rs = "0.1"
+link-cplusplus = "1"
+snappy_src = "0.2"
+# CMake.
+libsamplerate-sys = "0.1"
+libz-ng-sys = "1"
+protobuf-src = "2"
+snmalloc-sys = { version = "0.7", features = ["build_cmake"] }
+# configure scripts and make.
+mp3lame-sys = "0.1"
+sasl2-sys = { version = "0.1", features = ["vendored"] }
+tikv-jemalloc-sys = "0.7"

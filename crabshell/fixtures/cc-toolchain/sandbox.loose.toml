@@ -3,7 +3,8 @@
 include = ["grants.toml"]
 
 [external]
-# OUT_DIR is write-only; compilers and CMake read back what they write.
+# OUT_DIR is write-only; compilers, CMake and configure scripts read back what
+# they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc", "cc", "cmake"]
+grants = ["rustc", "cc", "cxx", "cmake", "autotools"]
 env = ["*"]

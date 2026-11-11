@@ -4,8 +4,45 @@
 # `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
 # Every build script in the fixture is listed; a crate that reads its own
 # files requests exactly those, since the crate root is otherwise narrowed
-# away. The compilers' and CMake's own knobs come with the `cc` and `cmake`
-# grants. cc-rs and CMake open their files in OUT_DIR read-write.
+# away. The compilers', CMake's and make's own knobs come with the `cc`,
+# `cxx`, `cmake` and `autotools` grants. cc-rs, CMake and configure scripts
+# open their files in OUT_DIR read-write.
+
+[package.blake3]
+# Compiles its assembly, after probing the compiler for AVX-512 flags.
+read = [":manifest_dir/c", ":out_dir"]
+requests = ["cc"]
+env = [
+    "BLAKE3_CI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_VENDOR", "CARGO_FEATURE_NEON",
+    "CARGO_FEATURE_NO_NEON", "CARGO_FEATURE_PREFER_INTRINSICS", "CARGO_FEATURE_PURE",
+    "CARGO_FEATURE_WASM32_SIMD", "HOST", "TARGET",
+]
+
+[package.blst]
+# Compiles its C and assembly.
+read = [":manifest_dir/blst", ":out_dir"]
+requests = ["cc"]
+env = [
+    "BLST_TEST_NO_STD", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_FEATURE", "CARGO_CFG_TARGET_OS",
+    "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_ENCODED_RUSTFLAGS", "CARGO_FEATURE_SERDE_SECRET",
+    "CARGO_MANIFEST_DIR",
+]
+
+[package.cxx]
+# Compiles its C++ runtime. It checks `links` against its major version.
+read = [":manifest_dir/src/cxx.cc", ":manifest_dir/include", ":out_dir"]
+requests = ["rustc", "cc", "cxx"]
+env = ["CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION_MAJOR"]
+
+[package.esaxx-rs]
+# Compiles its C++.
+read = [":manifest_dir/src", ":out_dir"]
+requests = ["cc", "cxx"]
+
+[package.getrandom]
+env = ["CARGO_CFG_SANITIZE"]
 
 [package.libc]
 requests = ["rustc"]
@@ -21,11 +58,81 @@ env = [
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
 
+[package.libmimalloc-sys]
+# Compiles the vendored mimalloc.
+read = [":manifest_dir/c_src/mimalloc", ":out_dir"]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_FAMILY",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_VENDOR", "CARGO_FEATURE_DEBUG",
+    "CARGO_FEATURE_DEBUG_IN_DEBUG", "CARGO_FEATURE_LOCAL_DYNAMIC_TLS", "CARGO_FEATURE_NO_THP",
+    "CARGO_FEATURE_OVERRIDE", "CARGO_FEATURE_SECURE", "CARGO_FEATURE_V2",
+    "CARGO_FEATURE_WIN_DIRECT_TLS", "CARGO_MANIFEST_DIR", "DEBUG", "DEP_ATOMIC",
+]
+
+[package.libnghttp2-sys]
+# Compiles the vendored nghttp2 and writes its headers and pkg-config file.
+read = [":manifest_dir/nghttp2", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_PKG_VERSION", "TARGET"]
+
+[package.libsamplerate-sys]
+# Configures the vendored libsamplerate with CMake.
+read = [":manifest_dir/libsamplerate", ":out_dir"]
+requests = ["cc", "cmake"]
+env = ["TARGET", "OPT_LEVEL"]
+
 [package.libz-ng-sys]
 # Configures the vendored zlib-ng with CMake.
 read = [":manifest_dir/src/zlib-ng", ":out_dir"]
 requests = ["cc", "cmake"]
 env = ["TARGET", "OPT_LEVEL", "RISCV_WITH_RVV"]
+
+[package.link-cplusplus]
+# Compiles an empty C++ file to link the default C++ runtime.
+read = [":manifest_dir/src/dummy.cc", ":out_dir"]
+requests = ["cc", "cxx"]
+env = ["CARGO_MANIFEST_DIR"]
+
+[package.lz4-sys]
+# Compiles the vendored lz4 and copies its headers.
+read = [":manifest_dir/liblz4", ":out_dir"]
+requests = ["cc"]
+env = ["CRT_STATIC", "TARGET"]
+
+[package.mp3lame-sys]
+# Configures and builds the vendored LAME through the autotools crate, which
+# also looks up the C++ compiler.
+read = [":manifest_dir/lame-3.100", ":out_dir"]
+requests = ["cc", "cxx", "autotools"]
+env = ["DOCS_RS", "HOST", "MP3LAME_SYS_OVERRIDE_HOST", "TARGET"]
+
+[package.object]
+requests = ["rustc"]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.protobuf-src]
+# Configures and builds the vendored protobuf with CMake.
+read = [":manifest_dir/protobuf", ":out_dir"]
+requests = ["cc", "cxx", "cmake"]
+env = ["OPT_LEVEL"]
+
+[package.psm]
+# Assembles its stack-switching routines.
+read = [":manifest_dir/src/arch", ":out_dir"]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "HOST",
+]
+
+[package.quote]
+requests = ["rustc"]
 
 [package.ring]
 # Compiles its vendored C and pregenerated assembly. It checks `links` against
@@ -41,6 +148,80 @@ env = [
     "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR", "CARGO_PKG_VERSION_PATCH",
     "CARGO_PKG_VERSION_PRE", "DEBUG", "RING_PREGENERATE_ASM",
 ]
+
+[package.sasl2-sys]
+# Copies the vendored Cyrus SASL to OUT_DIR, configures and builds it, then
+# preprocesses its own `version.c` against the installed headers.
+read = [":manifest_dir/sasl2", ":manifest_dir/version.c", ":out_dir"]
+requests = ["cc", "autotools"]
+env = ["HOST", "SASL2_STATIC", "TARGET"]
+
+[package.secp256k1-sys]
+# Compiles the vendored libsecp256k1.
+read = [":manifest_dir/depend/secp256k1", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+[package.sha2-asm]
+# Assembles its SHA-2 routines.
+read = [":manifest_dir/src", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_VENDOR"]
+
+[package.signal-hook]
+env = ["CARGO_CFG_WINDOWS"]
+
+[package.snappy_src]
+# Compiles the vendored snappy and writes its generated header.
+read = [":manifest_dir/snappy", ":out_dir"]
+requests = ["cc", "cxx"]
+env = ["CARGO_CFG_TARGET_FAMILY"]
+
+[package.snmalloc-sys]
+# Configures and builds the vendored snmalloc with CMake.
+read = [":manifest_dir/upstream", ":out_dir"]
+requests = ["cc", "cxx", "cmake"]
+env = [
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_OS",
+    "CARGO_MANIFEST_DIR", "DEBUG", "MSYSTEM", "OPT_LEVEL", "TARGET",
+]
+
+[package.tikv-jemalloc-sys]
+# Copies the vendored jemalloc to OUT_DIR, then configures and builds it.
+read = [":manifest_dir/jemalloc", ":manifest_dir/configure", ":out_dir"]
+requests = ["cc", "autotools"]
+env = [
+    "CARGO_FEATURE_*", "CARGO_PKG_VERSION", "CI", "HOST", "JEMALLOC_OVERRIDE",
+    "JEMALLOC_SYS_*", "TARGET",
+]
+
+[package.tree-sitter]
+# Compiles the tree-sitter runtime.
+read = [":manifest_dir/src", ":manifest_dir/include", ":out_dir"]
+requests = ["cc"]
+env = [
+    "CARGO_FEATURE_WASM", "CARGO_MANIFEST_DIR", "DEP_TREE_SITTER_LANGUAGE_WASM_HEADERS",
+    "DEP_WASMTIME_C_API_INCLUDE", "TARGET",
+]
+
+[package.tree-sitter-language]
+env = ["CARGO_MANIFEST_DIR", "TARGET"]
+
+[package.tree-sitter-rust]
+# Compiles the grammar's generated parser and scanner.
+read = [":manifest_dir/src", ":out_dir"]
+requests = ["cc"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]
 
 [package.zstd-sys]
 # Compiles the vendored zstd.

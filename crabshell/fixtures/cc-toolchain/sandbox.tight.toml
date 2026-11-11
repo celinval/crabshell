@@ -4,14 +4,19 @@
 include = ["grants.toml"]
 
 [external]
-# OUT_DIR is write-only; compilers and CMake read back what they write.
+# OUT_DIR is write-only; compilers, CMake and configure scripts read back what
+# they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc", "cc", "cmake"]
+grants = ["rustc", "cc", "cxx", "cmake", "autotools"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
     "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
-    "OPT_LEVEL", "RISCV_WITH_RVV",
-    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION_*",
-    "DEBUG", "RING_PREGENERATE_ASM", "ZSTD_SYS_*",
+    "OPT_LEVEL", "RISCV_WITH_RVV", "DEBUG",
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION",
+    "CARGO_PKG_VERSION_*", "RING_PREGENERATE_ASM", "ZSTD_SYS_*",
+    "BLAKE3_CI", "BLST_TEST_NO_STD", "CARGO_ENCODED_RUSTFLAGS", "CI", "CRT_STATIC", "DEP_ATOMIC",
+    "DEP_TREE_SITTER_LANGUAGE_WASM_HEADERS", "DEP_WASMTIME_C_API_INCLUDE", "DOCS_RS",
+    "JEMALLOC_OVERRIDE", "JEMALLOC_SYS_*", "MP3LAME_SYS_OVERRIDE_HOST", "MSYSTEM",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "SASL2_STATIC",
 ] }

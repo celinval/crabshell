@@ -153,7 +153,7 @@ What the requests cost, per build script:
 | `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
 | `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
-| `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
+| `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
 | `vcs-metadata` | 1 | 0 | `git` | 0 |
 | `lang-runtime` | 7 | 1–20 | `rustc`, `python` | 0 |
 
@@ -179,6 +179,24 @@ What the requests cost, per build script:
   under `/usr/share/cmake*`), which the fixture defines since crabshell has no
   built-in one; the cmake crate also probes `c++` for C projects and reports
   a failure as a `cargo:warning`.
+- **C++ needs `c++` beyond the `cc` grant.** cc-rs runs `c++` for
+  `.cpp(true)` builds (cxx, link-cplusplus, snappy_src, esaxx-rs), and the
+  autotools crate looks up the C++ compiler even for C projects. The `cc`
+  grant already passes `CXX*`; the fixture adds a one-line `cxx` grant.
+- **Configure scripts degrade silently where cargo can't see it.** jemalloc,
+  Cyrus SASL and LAME build through `sh`, about 50 coreutils and `make`
+  (the fixture's `autotools` grant). Without `file` and its magic database,
+  `dd`, `getconf` and `objdump`, configure still succeeds and every `cargo:`
+  directive matches, but libtool is configured differently (`LD` without
+  `-m elf_x86_64`, a 32 KiB command-line limit, `shlibpath_overrides_runpath`
+  flipped). Only comparing `config.status` against the baseline showed it;
+  directive comparison can't. A missing `run` entry also fails the whole
+  script (`not found on PATH`), so a long tool list is less portable than a
+  long read list, whose missing paths are skipped.
+- **Target-prefixed knobs recur.** tikv-jemalloc-sys reads
+  `<TARGET>_LDFLAGS`, `<TARGET>_JEMALLOC_SYS_*` and so on before the plain
+  names; prefix patterns can't express them, so requests list only the plain
+  names.
 - **The repository is named relative to the crate.** A build script running
   `git` reads the git dir of the repository holding the crate, usually above
   it at the workspace root. For a workspace member the consumer knows the

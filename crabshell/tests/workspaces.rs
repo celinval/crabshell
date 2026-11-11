@@ -859,3 +859,19 @@ fn lang_runtime() {
         git_repo: false,
     });
 }
+
+#[test]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
+fn protoc() {
+    // Its crates aren't reviewed, so they only build in the jail.
+    check(&Fixture {
+        name: "protoc",
+        trusted: false,
+        dumps_env: false,
+        default_suffices: false,
+        git_repo: false,
+    });
+}

@@ -156,6 +156,7 @@ What the requests cost, per build script:
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
+| `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
@@ -405,6 +406,43 @@ byte.
 - **Compile probes can be blind to denial.** heapless compiles an ARM
   `clrex` probe from `OUT_DIR`; on x86 it fails whether or not rustc can
   read it.
+- **A tool vendored in a crate can only be granted by path.**
+  protoc-bin-vendored ships protoc inside its crate, and perfetto_protos
+  runs it through a path compiled into that dependency. A bare `run =
+  ["protoc"]` is looked up on `PATH`, and no variable names a dependency's
+  source dir, so the fixture's `protoc` grant globs
+  `:cargo_home/registry/src/*/protoc-bin-vendored-linux-x86_64-*/bin/protoc`
+  and the include dir next to it. Only the consumer can write that: it
+  changes with `cargo vendor`, git sources and the host arch. The crate
+  just requests `protoc`. According to the runner code, a bare name missing
+  from `PATH` fails every build script it's granted to, even scripts that
+  never run it, while a missing path is skipped.
+- **`PROTOC` is consumer config that changes other scripts' behavior.**
+  prost-build runs the protoc `PROTOC` names (cedar-policy, etcd-client,
+  containerd-client, prost-validate-types, tracing-perfetto-sdk-schema), so
+  the fixture sets it in `.cargo/config.toml`. When `PROTOC` is set,
+  tink-proto regenerates its code into its own `src/`, which fails on
+  read-only sources even in the baseline, so it's left out. prost-build 0.8's
+  build script records `PROTOC` for later. If `PROTOC` is denied, it silently
+  falls back to the protoc bundled in its own crate.
+- **Checked-in code is gated on the crate's own files.** pprof regenerates
+  only when its proto's hash changes, geozero only when its generated file
+  is missing, and pbjson-types reads checked-in descriptors. Each request
+  has to name those exact files. If geozero's file is denied, the crate
+  tries to regenerate into its own sources.
+- **Generators read their output back.** containerd-client,
+  containerd-shim-protos, prost-wkt-types, prost-validate-types and
+  perfetto_protos reread what they wrote to `OUT_DIR`. prost-build reads
+  protoc's descriptors back from a temp file, so the `protoc` grant reads
+  `:tmp_dir`, as `cc` does. Pure-Rust parsers (protox, protobuf-codegen's
+  `pure()`) need nothing beyond the crate's own `.proto` files.
+- **zerocopy already uses `[package.metadata.build-rs]`.** zerocopy keeps
+  its own version table there (`no-zerocopy-core-error-1-81-0 = "1.81.0"`).
+  crabshell parses the table with unknown fields denied, so by the code,
+  zerocopy's build script fails under crabshell unless a request replaces
+  the table. metrics-exporter-prometheus pulls zerocopy in through `rand`,
+  so it was left out. The metadata key needs a name that doesn't collide,
+  or crabshell needs to tolerate foreign keys.
 
 ## Methodology TODOs
 

@@ -1,0 +1,10 @@
+#:schema ../../schema/sandbox.schema.json
+# Running protoc, which crabshell has no built-in grant for. No protoc is
+# installed, so this is protoc-bin-vendored's, which `PROTOC` also names (see
+# .cargo/config.toml): a binary inside CARGO_HOME, reachable only by path. It
+# finds the well-known types in the include dir next to it. prost-build has
+# protoc write descriptors to a temp file and reads them back.
+[grant.protoc]
+run = [":cargo_home/registry/src/*/protoc-bin-vendored-linux-x86_64-*/bin/protoc"]
+read = [":cargo_home/registry/src/*/protoc-bin-vendored-linux-x86_64-*/include", ":tmp_dir"]
+env = ["PROTOC", "PROTOC_INCLUDE"]

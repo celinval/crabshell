@@ -1,0 +1,13 @@
+# Run every build script through crabshell. Requires
+# `-Zhost-config -Ztarget-applies-to-host`: nightly Cargo, or RUSTC_BOOTSTRAP=1.
+target-applies-to-host = false
+
+[host]
+runner = ["../../../target/debug/crabshell"]
+
+[env]
+CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+# prost-build runs the protoc `PROTOC` names. None is installed, so this names
+# the vendored one in the tests' `CARGO_HOME` (see `Scratch`); building by
+# hand needs it set to a protoc of your own.
+PROTOC = { value = "../../../target/tmp/e2e-run/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/protoc-bin-vendored-linux-x86_64-3.3.0/bin/protoc", relative = true }

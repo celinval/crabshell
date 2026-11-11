@@ -18,6 +18,7 @@ since `host.runner` is unstable.
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs, CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl` and `shadow-rs`, and in registry crates |
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
+| `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers |
 
 ## Scenarios
 
@@ -74,3 +75,7 @@ RUSTC_BOOTSTRAP=1 CRABSHELL_REQUESTS=$PWD/requests.toml cargo -Zhost-config -Zta
 The `system-lib` policies extend the built-in `pkg-config` grant for Amazon
 Linux, where `pkg-config` is a wrapper that runs `rpm`; other distros may need
 different overrides.
+
+The `protoc` fixture sets `PROTOC` to the vendored protoc in the tests'
+`CARGO_HOME` (x86_64 Linux only); building it by hand needs `PROTOC` set to
+a protoc of your own.

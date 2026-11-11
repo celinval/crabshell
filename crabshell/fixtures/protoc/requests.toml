@@ -1,0 +1,249 @@
+# What each crate's build script would request, precisely, from the vendor's
+# point of view: only what its own code uses, with no knowledge of the host.
+# Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
+# `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
+# Every build script in the fixture is listed; a crate that reads its own
+# files requests exactly those, since the crate root is otherwise narrowed
+# away. Running protoc comes from the `protoc` grant, whether the crate finds
+# it through protoc-bin-vendored or `PROTOC`.
+
+# This crate: compiles `proto/` with the vendored protoc.
+[package.protoc]
+read = [":manifest_dir/proto"]
+requests = ["protoc"]
+
+# Runs the vendored protoc to list its imports, then has protobuf-codegen run
+# it again. It reads the dependency file back from OUT_DIR.
+[package.perfetto_protos]
+read = [":manifest_dir/protos", ":out_dir"]
+requests = ["protoc"]
+
+# prost-build runs the protoc `PROTOC` names.
+[package.cedar-policy]
+read = [":manifest_dir/protobuf_schema"]
+requests = ["protoc"]
+
+[package.etcd-client]
+read = [":manifest_dir/proto"]
+requests = ["protoc"]
+
+# Rewrites the generated files in OUT_DIR.
+[package.containerd-client]
+read = [":manifest_dir/vendor", ":out_dir"]
+requests = ["protoc"]
+
+# prost-reflect-build reads the descriptors back from OUT_DIR.
+[package.prost-validate-types]
+read = [":manifest_dir/proto/validate", ":out_dir"]
+requests = ["protoc"]
+
+[package.tracing-perfetto-sdk-schema]
+read = [":manifest_dir/protos"]
+requests = ["protoc"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# prost-build 0.8 records which protoc its users run: `PROTOC`, or else the
+# one bundled in its own crate. It runs nothing itself.
+[package.prost-build]
+env = ["PROTOC", "PROTOC_INCLUDE"]
+
+# Pure-Rust parsers, no protoc: protobuf-codegen's, or protox.
+# containerd-shim-protos rewrites the generated files in OUT_DIR.
+[package.containerd-shim-protos]
+read = [":manifest_dir/vendor", ":out_dir"]
+
+[package.ttrpc]
+read = [":manifest_dir/src/ttrpc.proto"]
+
+[package.yara-x-proto]
+read = [":manifest_dir/src"]
+
+[package.sentencepiece-model]
+read = [":manifest_dir/src/sentencepiece.proto", ":manifest_dir/src/sentencepiece_model.proto"]
+
+[package.prometheus-client]
+read = [":manifest_dir/src/encoding/proto"]
+
+# protox writes the descriptors to OUT_DIR, which prost-wkt-build reads back.
+[package.prost-wkt-types]
+read = [":manifest_dir/proto", ":out_dir"]
+
+# Checked-in code, unless the crate's own files say otherwise: pbjson-types
+# generates from checked-in descriptors, pprof regenerates only when the
+# proto's hash changes, and geozero only when its generated file is missing.
+[package.pbjson-types]
+read = [":manifest_dir/descriptors.bin"]
+
+[package.pprof]
+read = [":manifest_dir/proto"]
+
+[package.geozero]
+read = [":manifest_dir/src/mvt/vector_tile.rs"]
+
+# Generates only with a feature that writes to its own sources.
+[package.libdd-ddsketch]
+
+# Generates its parsers with lalrpop, which reads every CARGO_FEATURE_*.
+[package.cedar-policy-core]
+read = [":manifest_dir/src/parser", ":manifest_dir/src/validator/cedar_schema"]
+env = ["CARGO_FEATURE_*", "LALRPOP_LANE_TABLE"]
+
+# Compiles its stack-switching assembly through cc-rs, which opens its files in
+# OUT_DIR read-write.
+[package.psm]
+read = [":manifest_dir/src/arch", ":out_dir"]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "HOST",
+]
+
+[package.stacker]
+env = ["TARGET"]
+
+# Version probes and cfgs pulled in by the generators' dependencies (see
+# rustc-probe and cfg-only).
+[package.anyhow]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.thiserror]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# autocfg compiles its probes into OUT_DIR and reads them back.
+[package.indexmap]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_FEATURE_STD"]
+
+[package.memoffset]
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.num-traits]
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.rustix]
+# Checks for its own inline assembly, and reads rustc's output in OUT_DIR.
+read = [":manifest_dir/src/backend/linux_raw/arch", ":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
+    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
+]
+
+[package.libc]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_LIBC_UNSTABLE_FREEBSD_VERSION", "CARGO_CFG_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "CARGO_CFG_LIBC_UNSTABLE_GNU_TIME_BITS", "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2",
+    "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2_3", "CARGO_CFG_LIBC_UNSTABLE_TIME64",
+    "CARGO_CFG_LIBC_UNSTABLE_UCLIBC_TIME64",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
+]
+
+[package.getrandom]
+requests = ["rustc"]
+env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
+
+[package.httparse]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_HTTPARSE_DISABLE_SIMD", "CARGO_CFG_HTTPARSE_DISABLE_SIMD_COMPILETIME",
+    "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "CARGO_FEATURE_STD",
+]
+
+[package.rustversion]
+requests = ["rustc"]
+env = ["HOST"]
+
+[package.serde]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.ref-cast]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]
+
+[package.erased-serde]
+requests = ["rustc"]
+
+[package.generic-array]
+requests = ["rustc"]
+
+[package.logos-codegen]
+requests = ["rustc"]
+
+[package.object]
+requests = ["rustc"]
+
+[package.quote]
+requests = ["rustc"]
+
+[package.syn]
+requests = ["rustc"]
+
+[package.typeid]
+requests = ["rustc"]
+
+# prettyplease checks its `links` key against its own version.
+[package.prettyplease]
+env = [
+    "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR",
+    "CARGO_PKG_VERSION_MINOR",
+]
+
+[package.protobuf]
+env = ["CARGO_FEATURE_WITH_SERDE", "CARGO_PKG_VERSION"]
+
+[package.typetag]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+[package.findshlibs]
+env = ["CARGO_CFG_TARGET_OS"]
+
+[package.parking_lot_core]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-epoch]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-deque]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# Only emit directives and write OUT_DIR, which the floor covers.
+[package.pulldown-cmark]
+[package.symbolic-demangle]

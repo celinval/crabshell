@@ -7,3 +7,6 @@ runner = ["../../../target/debug/crabshell"]
 
 [env]
 CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+# Reproducible build times for vergen, built and shadow-rs: the fixture
+# commit's date, 2026-01-01T00:00:00Z.
+SOURCE_DATE_EPOCH = "1767225600"

@@ -3,3 +3,23 @@ name = "vcs-metadata"
 version = "0.0.0"
 edition = "2024"
 publish = false
+
+# Crates whose build scripts embed build metadata: their commit, versions,
+# Cargo's profile, a timestamp.
+[dependencies]
+# Leaves out git-version, a proc-macro that runs git, and sysinfo.
+bugreport = { version = "0.6", default-features = false, features = ["format_markdown"] }
+hotpath-meta = "0.31"
+# Pulls in lrpar, whose build script also uses vergen.
+lrlex = "0.15"
+mach-sys = "0.5"
+# `names` is left out: through rand it pulls in zerocopy, which uses
+# `[package.metadata.build-rs]` for its own data, and crabshell rejects that
+# table.
+prettyplease = "0.3"
+protobuf = "3"
+rustc_version_runtime = "0.3"
+# Through crate-git-revision.
+stellar-strkey = "1"
+typst-utils = "0.15"
+wasm-bindgen-shared = "0.2"

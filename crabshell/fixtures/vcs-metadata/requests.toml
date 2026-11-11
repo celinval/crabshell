@@ -2,8 +2,213 @@
 # point of view: only what its own code uses, with no knowledge of the host.
 # Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
 # `test-requests`) in place of the crates' `[package.metadata.build-rs]`.
-# Every build script in the fixture is listed.
+# Every build script in the fixture is listed. `git`, `sh`, `grep` and `awk`
+# come from the fixture's grants.toml, `rustc` is built in.
+
+# The workspace members.
 
 # Runs `git rev-parse`; the repository comes from the `git` grant.
 [package.vcs-metadata]
 requests = ["git"]
+
+# `built` runs `$RUSTC -V` and `$RUSTDOC -V`, reads the workspace's Cargo.lock
+# above the crate, and Cargo's and CI's variables; the script reads back what
+# it generated.
+[package.with-built]
+read = [":manifest_dir/../Cargo.lock", ":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_MANIFEST_DIR", "CARGO_PKG_*", "TARGET", "HOST", "PROFILE", "OPT_LEVEL", "DEBUG",
+    "NUM_JOBS", "CARGO_CFG_FEATURE", "CARGO_CFG_TARGET_*", "CARGO_FEATURE_*", "RUSTDOC",
+    "SOURCE_DATE_EPOCH", "BUILT_OVERRIDE_*",
+    "CI", "CONTINUOUS_INTEGRATION", "BUILD_NUMBER", "CI_NAME", "TASK_ID", "RUN_ID",
+    "TRAVIS", "CIRCLECI", "GITLAB_CI", "APPVEYOR", "DRONE", "MAGNUM", "SEMAPHORE",
+    "JENKINS_URL", "bamboo_planKey", "TF_BUILD", "TEAMCITY_VERSION", "BUILDKITE",
+    "HUDSON_URL", "GO_PIPELINE_LABEL", "BITBUCKET_COMMIT", "GITHUB_ACTIONS",
+]
+
+# shadow-rs runs git, and pipes `git status` through grep and awk; the script
+# reads back what it generated. It also runs `rustc -V` and `cargo -V` from
+# PATH, but the script denies those constants.
+[package.with-shadow]
+read = [":out_dir"]
+requests = ["git", "grep", "awk"]
+env = [
+    "CARGO_MANIFEST_DIR", "CARGO_PKG_NAME", "CARGO_PKG_VERSION*", "CARGO_PKG_DESCRIPTION",
+    "CARGO_FEATURE_*", "TARGET", "CARGO_CFG_TARGET_ARCH", "SOURCE_DATE_EPOCH",
+    "RUSTUP_TOOLCHAIN", "GITLAB_CI", "GITHUB_ACTIONS", "CI_COMMIT_TAG", "CI_COMMIT_REF_NAME",
+    "GITHUB_REF",
+]
+
+# vergen-gitcl runs each git command through `$SHELL -c`, falling back to
+# `sh`; vergen runs `$RUSTC -vV`. Every `VERGEN_*` key can be overridden by
+# a variable of the same name.
+[package.with-vergen]
+requests = ["git", "sh", "rustc"]
+env = [
+    "SHELL", "SOURCE_DATE_EPOCH", "VERGEN_*", "DEBUG", "OPT_LEVEL", "TARGET", "CARGO_FEATURE_*",
+]
+
+# Registry crates embedding build metadata.
+
+[package.bugreport]
+env = [
+    "PROFILE", "TARGET", "HOST", "CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_OS",
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_FEATURE",
+]
+
+# Runs `$RUSTC --version`; derives the profile from OUT_DIR's path.
+[package.hotpath-meta]
+requests = ["rustc"]
+env = ["RUSTUP_TOOLCHAIN", "HOTPATH_META_ALLOC_MAX_DEPTH", "PROFILE"]
+
+# Both use vergen 8 for a build timestamp.
+[package.lrlex]
+env = ["SOURCE_DATE_EPOCH", "VERGEN_*"]
+
+[package.lrpar]
+env = ["SOURCE_DATE_EPOCH", "VERGEN_*"]
+
+# Hashes its whole environment and the time into a nonce; it needs none of it.
+[package.mach-sys]
+
+# Checks its `links` key against its version (0.3); 0.2 only exports it.
+[package.prettyplease]
+env = [
+    "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR",
+    "CARGO_MANIFEST_LINKS",
+]
+
+[package.protobuf]
+env = ["CARGO_PKG_VERSION", "CARGO_FEATURE_WITH_SERDE"]
+
+# Through the rustc_version crate.
+[package.rustc_version_runtime]
+requests = ["rustc"]
+
+# crate-git-revision reads the commit from the `.cargo_vcs_info.json` Cargo
+# publishes, falling back to git.
+[package.stellar-strkey]
+read = [":manifest_dir/.cargo_vcs_info.json"]
+requests = ["git"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Runs `git rev-parse HEAD`. Its TYPST_* knobs are read with `option_env!`,
+# when the build script compiles, not when it runs.
+[package.typst-utils]
+requests = ["git"]
+
+# Hashes two of its sources, and runs `git rev-parse HEAD`.
+[package.wasm-bindgen-shared]
+read = [":manifest_dir/src/lib.rs", ":manifest_dir/src/tys.rs"]
+requests = ["git"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Their dependencies.
+
+[package.anyhow]
+# Compiles a probe from its own sources, and reads rustc's output in OUT_DIR.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-epoch]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-deque]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# Compiles a probe it writes to OUT_DIR.
+[package.heapless]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
+# Through cargo-lock's url.
+[package.icu_normalizer_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.libc]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_LIBC_UNSTABLE_FREEBSD_VERSION", "CARGO_CFG_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "CARGO_CFG_LIBC_UNSTABLE_GNU_TIME_BITS", "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2",
+    "CARGO_CFG_LIBC_UNSTABLE_MUSL_V1_2_3", "CARGO_CFG_LIBC_UNSTABLE_TIME64",
+    "CARGO_CFG_LIBC_UNSTABLE_UCLIBC_TIME64",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
+    "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
+]
+
+[package.libm]
+env = [
+    "CARGO_MANIFEST_DIR", "OPT_LEVEL", "TARGET", "ENSURE_NO_PANIC", "CARGO_CFG_TARGET_*",
+    "CARGO_FEATURE_*",
+]
+
+[package.num-traits]
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.portable-atomic]
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "TARGET", "CARGO_CFG_TARGET_*", "CARGO_CFG_SANITIZE", "PORTABLE_ATOMIC_DENY_WARNINGS",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.quote]
+requests = ["rustc"]
+
+[package.rayon-core]
+
+# Writes the version it detects to OUT_DIR.
+[package.rustversion]
+requests = ["rustc"]
+env = ["HOST"]
+
+[package.serde]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.serde_core]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+[package.thiserror]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.vergen]
+
+[package.vergen-gitcl]
+
+[package.vergen-lib]
+
+# Generates tuple impls into OUT_DIR.
+[package.wincode]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]

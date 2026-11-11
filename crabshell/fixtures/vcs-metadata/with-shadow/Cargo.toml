@@ -1,0 +1,9 @@
+[package]
+name = "with-shadow"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+# Without the default `git2`, it runs the git CLI.
+shadow-rs = { version = "2", default-features = false, features = ["build"] }

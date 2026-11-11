@@ -1,0 +1,9 @@
+[package]
+name = "with-built"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+# Records the workspace's dependencies from its Cargo.lock, and the build time.
+built = { version = "0.8", features = ["cargo-lock", "chrono"] }

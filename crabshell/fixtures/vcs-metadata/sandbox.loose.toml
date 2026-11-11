@@ -1,7 +1,16 @@
 #:schema ../../schema/sandbox.schema.json
-# A loose consumer policy: the category's grant and any environment variable.
+# A loose consumer policy: the category's grants and any environment variable.
 include = ["grants.toml"]
 
 [local]
-grants = ["git"]
+# The members may read the whole workspace, and what they generate.
+read = { inherit = true, value = [":manifest_dir/..", ":out_dir"] }
+grants = ["git", "sh", "grep", "awk", "rustc"]
+env = ["*"]
+
+# Registry crates that run git find no repository, so they get no `git`,
+# which would let them read the whole registry.
+[external]
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc"]
 env = ["*"]

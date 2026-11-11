@@ -329,6 +329,7 @@ impl Scratch {
 struct Toolchain {
     cargo: PathBuf,
     rustc: PathBuf,
+    rustdoc: PathBuf,
 }
 
 impl Toolchain {
@@ -337,6 +338,7 @@ impl Toolchain {
         TOOLCHAIN.get_or_init(|| Toolchain {
             cargo: which("cargo"),
             rustc: which("rustc"),
+            rustdoc: which("rustdoc"),
         })
     }
 
@@ -378,15 +380,22 @@ fn rustup_home() -> OsString {
 /// `RUSTUP_HOME` for policies that name the toolchain through it.
 /// `RUSTC_BOOTSTRAP` lets a stable Cargo take `-Zhost-config`. Every build
 /// gets it, so build scripts that read it see the same value in the baseline.
+/// `RUSTDOC` is set like `RUSTC`: Cargo otherwise passes build scripts a bare
+/// `rustdoc`, which resolves to rustup's proxy only outside the jail.
+/// `GIT_CEILING_DIRECTORIES` stops git, run by a crate in `CARGO_HOME`, from
+/// finding the repository holding the scratch dir, which only the unjailed
+/// reference build could read.
 fn outer_env() -> Vec<(&'static str, OsString)> {
     let scratch = Scratch::get();
     vec![
         ("PATH", std::env::var_os("PATH").unwrap_or_default()),
+        ("GIT_CEILING_DIRECTORIES", scratch.root.clone().into()),
         ("CARGO_HOME", scratch.cargo_home().into()),
         ("RUSTUP_HOME", rustup_home()),
         ("HOME", scratch.home().into()),
         ("TMPDIR", scratch.tmp().into()),
         ("RUSTC", Toolchain::get().rustc.clone().into()),
+        ("RUSTDOC", Toolchain::get().rustdoc.clone().into()),
         ("RUSTC_BOOTSTRAP", "1".into()),
         (FAKE_TOKEN.0, FAKE_TOKEN.1.into()),
     ]

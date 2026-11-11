@@ -38,8 +38,8 @@ Each test run gets a fresh scratch dir holding:
 - an empty `HOME`;
 - one target dir per build.
 
-Builds see only `PATH`, `CARGO_HOME`, `RUSTUP_HOME`, `HOME`, `TMPDIR`, `RUSTC`
-and a fake token. The harness asserts that the `system-lib` baseline leaks the
+Builds see only `PATH`, `CARGO_HOME`, `RUSTUP_HOME`, `HOME`, `TMPDIR`, `RUSTC`,
+`RUSTDOC`, `GIT_CEILING_DIRECTORIES` and a fake token. The harness asserts that the `system-lib` baseline leaks the
 fake token (see below), and that no sandboxed build does.
 
 Environment: Amazon Linux 2023, kernel 6.12, `nightly-2026-10-13` (pinned in
@@ -154,7 +154,7 @@ What the requests cost, per build script:
 | `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
-| `vcs-metadata` | 1 | 0 | `git` | 0 |
+| `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 7 | 1–20 | `rustc`, `python` | 0 |
 
 - **No request names a path or a program.** The floor and named grants
@@ -200,10 +200,49 @@ What the requests cost, per build script:
 - **The repository is named relative to the crate.** A build script running
   `git` reads the git dir of the repository holding the crate, usually above
   it at the workspace root. For a workspace member the consumer knows the
-  layout and grants `:manifest_dir/../.git`; a built-in `git` grant couldn't,
+  layout and grants `:manifest_dir/..`; a built-in `git` grant couldn't,
   since the depth varies and worktrees keep it elsewhere. Without git the
   script still succeeds, embedding `unknown`. git itself fails if
   `/etc/gitconfig` exists but is unreadable, so a `git` grant needs it.
+- **Dirty checks read the whole work tree.** `git status` rereads files whose
+  index entries can't prove them unchanged (e.g. written in the same second
+  as the index). With only the git dir readable, vergen-gitcl reports
+  `VERGEN_GIT_DIRTY=true` and shadow-rs lists every file outside its crate as
+  dirty, so the `git` grant reads the workspace, not just `.git`.
+- **Metadata libraries run more than git.** vergen-gitcl runs every git
+  command through `$SHELL -c`, falling back to `sh`; without `sh` it warns
+  "no suitable 'git' command found" and sets no `VERGEN_GIT_*`. shadow-rs
+  pipes `git status` through `grep` and `awk`, and runs `rustc` and `cargo`
+  (even `cargo tree`) by name from `PATH`, not `$RUSTC`/`$CARGO`. Under
+  rustup that's the proxy in `~/.cargo/bin`, which the `rustc` grant doesn't
+  cover, so those versions depend on the host; the fixture denies those
+  constants. built runs `$RUSTDOC -V`, and Cargo passes a bare `rustdoc`
+  unless configured: same problem, so the harness now sets `RUSTDOC` like
+  `RUSTC`. The `sh`, `grep` and `awk` grants need distro-specific libraries
+  (bash's libtinfo, gawk's six), kept in the fixture's grants.
+- **Reproducible timestamps need `SOURCE_DATE_EPOCH` granted.** vergen (in
+  the members, and in registry crates lrlex and lrpar), built and shadow-rs
+  use it instead of the current time. The fixture sets it through Cargo's
+  `[env]`; a policy that doesn't pass it silently embeds the build time.
+- **Generated files hide degradation.** built and shadow-rs write
+  `OUT_DIR/*.rs` and print no directives, so the members also export a
+  digest of the file; that's how the dirty-check denial above showed up.
+- **Registry crates' git finds no repository,** or the wrong one. Crates
+  like wasm-bindgen-shared, typst-utils and crate-git-revision run git in
+  their own source dir in `CARGO_HOME`, which has no `.git`; git then walks
+  up into whatever repository encloses `CARGO_HOME` (a dotfiles repo, or
+  here the crabshell checkout). Denial makes no difference, so the policies
+  don't grant them `git`, which would read the whole registry.
+  crate-git-revision reads `.cargo_vcs_info.json`, which Cargo publishes,
+  and requests it. typst-utils reads its knobs with `option_env!`, when the
+  script compiles, so no policy affects them.
+- **zerocopy already uses `[package.metadata.build-rs]`.** It keeps its
+  version cfgs there, and crabshell fails its build on the unknown keys.
+  `names` (through rand) was left out of the fixture for this; crabshell
+  needs another table name, or to ignore tables it can't parse.
+- **Some scripts read their whole environment.** mach-sys hashes it, with
+  the time, into a random nonce; built and shadow-rs collect it but only
+  look up names. Requests cover only the names used.
 - **Build-dependency libraries read env on the crate's behalf.** pyo3,
   pyo3-ffi and pyo3-macros-backend each call pyo3-build-config, so each
   requests what that library reads (`TARGET`, `PYO3_*`), and pyo3 reads

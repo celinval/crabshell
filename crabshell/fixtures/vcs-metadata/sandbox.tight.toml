@@ -1,7 +1,33 @@
 #:schema ../../schema/sandbox.schema.json
 # The tightest consumer policy that works without crate requests: the union of
-# requests.toml, granted to the workspace member.
+# requests.toml, granted to the workspace members and to every external crate.
 include = ["grants.toml"]
 
 [local]
-grants = ["git"]
+# OUT_DIR is write-only; the scripts read back what they generate.
+read = { inherit = true, value = [":out_dir", ":manifest_dir/../Cargo.lock"] }
+grants = ["git", "sh", "grep", "awk", "rustc"]
+# The default grant already covers TARGET, HOST, CARGO_CFG_* and
+# CARGO_FEATURE_*, so only the rest is added.
+env = { inherit = true, value = [
+    "CARGO_MANIFEST_DIR", "CARGO_PKG_*", "PROFILE", "OPT_LEVEL", "DEBUG", "NUM_JOBS",
+    "RUSTDOC", "RUSTUP_TOOLCHAIN", "SHELL", "SOURCE_DATE_EPOCH", "BUILT_OVERRIDE_*", "VERGEN_*",
+    "CI", "CONTINUOUS_INTEGRATION", "BUILD_NUMBER", "CI_NAME", "TASK_ID", "RUN_ID",
+    "TRAVIS", "CIRCLECI", "GITLAB_CI", "APPVEYOR", "DRONE", "MAGNUM", "SEMAPHORE",
+    "JENKINS_URL", "bamboo_planKey", "TF_BUILD", "TEAMCITY_VERSION", "BUILDKITE",
+    "HUDSON_URL", "GO_PIPELINE_LABEL", "BITBUCKET_COMMIT", "GITHUB_ACTIONS",
+    "CI_COMMIT_TAG", "CI_COMMIT_REF_NAME", "GITHUB_REF",
+] }
+
+# Registry crates that run git find no repository, so they get no `git`,
+# which would let them read the whole registry.
+[external]
+read = { inherit = true, value = [":out_dir"] }
+grants = ["rustc"]
+env = { inherit = true, value = [
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION*", "PROFILE", "OPT_LEVEL",
+    "SOURCE_DATE_EPOCH", "VERGEN_*", "RUSTUP_TOOLCHAIN",
+    "HOTPATH_META_ALLOC_MAX_DEPTH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "PORTABLE_ATOMIC_DENY_WARNINGS", "ENSURE_NO_PANIC", "LIBC_BUILD_VERBOSE", "LIBC_CI",
+    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID", "ICU4X_DATA_DIR",
+] }

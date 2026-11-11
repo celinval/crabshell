@@ -1,6 +1,9 @@
-# A workspace whose member's build script records the commit it's built from,
-# as many applications do. The tests build a copy committed to a fresh git
-# repository, so the git dir sits at the workspace root, above the member.
+# A workspace whose members' build scripts record the commit they're built
+# from, as many applications do: `app` by running git itself, the others
+# through `built`, `vergen-gitcl` and `shadow-rs`. `app` also depends on
+# registry crates that embed build metadata. The tests build a copy committed
+# to a fresh git repository, so the git dir sits at the workspace root, above
+# the members.
 [workspace]
-members = ["app"]
+members = ["app", "with-built", "with-shadow", "with-vergen"]
 resolver = "3"

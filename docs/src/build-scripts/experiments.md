@@ -13,7 +13,7 @@ has several `sandbox.*.toml` policy variants:
 |---|---|
 | `cfg-only` | crossbeam-utils, crossbeam-epoch, crossbeam-deque, rayon-core, tiny-keccak, crunchy, icu_properties_data |
 | `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij |
-| `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc |
+| `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc, libseccomp, libseccomp-sys, pcap, libpulse-sys, libpulse-simple-sys, openmp-sys, x11-dl, tiny-xlib, yeslogic-fontconfig-sys, clang-sys, inotify-sys, odbc-sys, mongocrypt-sys, winapi, num-traits, proc-macro2, quote |
 | `declared` | crossbeam-utils, patched to declare `[package.metadata.build-rs]` |
 
 `cargo test --features test-requests` (`crabshell/fixtures.rs`) first builds each
@@ -151,7 +151,7 @@ What the requests cost, per build script:
 |---|---:|---|---|---:|
 | `cfg-only` | 22 | 0–6 | – | 0 |
 | `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
-| `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
+| `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
 | `vcs-metadata` | 1 | 0 | `git` | 0 |
@@ -226,6 +226,31 @@ What the requests cost, per build script:
 - **Some knobs can't be expressed portably.** openssl-sys reads each knob
   also prefixed with the target triple (`X86_64_UNKNOWN_LINUX_GNU_OPENSSL_DIR`).
   Patterns only match prefixes, so the request has to name the triple.
+- **System-library fallbacks hide a denied probe.** Without pkg-config,
+  libpulse-sys and libpulse-simple-sys link the library by soname, pcap
+  `dlopen`s `libpcap.so` and, failing that, assumes the newest libpcap
+  (every `libpcap_*` cfg), and libseccomp drops its `libseccomp_v2_6` cfg.
+  None fails. This host has none of their `-dev` packages, so the baseline
+  takes the same fallbacks and the fixture can't show the difference.
+- **Some probes only reach generated source.** x11-dl and tiny-xlib (with
+  `dlopen`) write each X11 library's pkg-config libdir into `OUT_DIR`, or
+  `None`. Denied, they emit the same directives, so comparing directives
+  can't catch it; the harness would have to compare `OUT_DIR` too.
+- **`dlopen` in a build script needs the library dir readable.** pcap loads
+  `libpcap.so` by name, which no request can turn into a portable path. Only
+  the `cc` grant's library dirs happen to cover it.
+- **cc-rs writes into `OUT_DIR` even to ask for search dirs.** openmp-sys
+  only runs `cc -print-search-dirs`, but cc-rs's compiler-family detection
+  opens a file in `OUT_DIR` read-write. Denied, it warns and guesses the
+  family, which openmp-sys uses to tell clang and MSVC apart.
+- **Some knobs are read when the script is compiled.** odbc-sys reads
+  `ODBC_SYS_STATIC_PATH` and `DYLD_LIBRARY_PATH` with `option_env!`, so rustc
+  bakes them into the build script, out of crabshell's reach and missing from
+  `rerun-if-env-changed`.
+- **Per-library knobs multiply.** x11-dl asks pkg-config about 16
+  libraries, so it requests 32 `<LIB>_STATIC`/`<LIB>_DYNAMIC` names; the tight
+  policy needs 16 prefix patterns for them. Most of the category's other
+  crates only emit link directives on Linux and request 0–3 names.
 - **The only machine-specific config is the consumer's.** On Amazon Linux the
   built-in `pkg-config` grant needs extending (`sh`, `rpm` and rpm's
   libraries); no request changes.

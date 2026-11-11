@@ -777,10 +777,11 @@ fn rustc_probe() {
 )]
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
-    // environment.
+    // environment. Not trusted: some build-time dependencies (regex,
+    // libloading, num-derive, ctor) aren't reviewed.
     check(&Fixture {
         name: "system-lib",
-        trusted: true,
+        trusted: false,
         dumps_env: true,
         default_suffices: false,
         git_repo: false,

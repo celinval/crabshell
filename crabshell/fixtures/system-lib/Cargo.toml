@@ -14,3 +14,17 @@ libz-sys = "1"
 lzma-sys = "0.1"
 openssl-sys = "0.9"
 zstd-sys = { version = "2", default-features = false, features = ["pkg-config"] }
+# Libraries that needn't be installed: the scripts fall back, only emit link
+# directives, or record what pkg-config knows for loading at runtime.
+clang-sys = { version = "1", features = ["runtime"] }
+inotify-sys = "0.1"
+libpulse-simple-sys = "1"
+libseccomp = "0.4"
+mongocrypt-sys = "0.1"
+odbc-sys = "0.31"
+openmp-sys = "1"
+pcap = "2"
+tiny-xlib = { version = "0.2", features = ["dlopen"] }
+winapi = "0.3"
+x11-dl = "2"
+yeslogic-fontconfig-sys = { version = "6", features = ["dlopen"] }

@@ -85,3 +85,109 @@ env = [
     "CARGO_MANIFEST_DIR", "TARGET", "ZSTD_SYS_NO_HIDE_SYMBOLS", "ZSTD_SYS_USE_PKG_CONFIG",
     "LIBZSTD_NO_PKG_CONFIG", "LIBZSTD_STATIC", "LIBZSTD_DYNAMIC",
 ]
+
+[package.clang-sys]
+# With `runtime`, the script only checks the features it was built with.
+
+[package.inotify-sys]
+# Runs pkg-config only on NetBSD and OpenBSD.
+requests = ["pkg-config"]
+env = ["CARGO_CFG_TARGET_OS"]
+
+[package.libpulse-sys]
+# Falls back to linking `libpulse.so.0` by name when pkg-config doesn't know
+# libpulse, or can't run.
+requests = ["pkg-config"]
+env = ["DOCS_RS", "LIBPULSE_NO_PKG_CONFIG", "LIBPULSE_STATIC", "LIBPULSE_DYNAMIC"]
+
+[package.libpulse-simple-sys]
+requests = ["pkg-config"]
+env = [
+    "DOCS_RS", "LIBPULSE_SIMPLE_NO_PKG_CONFIG", "LIBPULSE_SIMPLE_STATIC",
+    "LIBPULSE_SIMPLE_DYNAMIC",
+]
+
+[package.libseccomp]
+# Probes libseccomp only to emit a cfg for 2.6, so without it nothing fails.
+requests = ["pkg-config"]
+env = [
+    "HOST", "TARGET", "LIBSECCOMP_LIB_PATH",
+    "LIBSECCOMP_NO_PKG_CONFIG", "LIBSECCOMP_STATIC", "LIBSECCOMP_DYNAMIC",
+]
+
+[package.libseccomp-sys]
+env = ["LIBSECCOMP_LIB_PATH", "LIBSECCOMP_LINK_TYPE"]
+
+[package.mongocrypt-sys]
+env = ["MONGOCRYPT_LIB_DIR"]
+
+[package.num-traits]
+# autocfg compiles its probes into OUT_DIR; without reading them back, it
+# silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+
+[package.odbc-sys]
+# Also reads ODBC_SYS_STATIC_PATH and DYLD_LIBRARY_PATH, but through
+# `option_env!`, when the script is compiled; and runs `brew` on macOS.
+env = ["CARGO_FEATURE_STATIC", "CARGO_FEATURE_STATIC_LTDL"]
+
+[package.openmp-sys]
+# Asks the C compiler for its library dirs and looks for libgomp there.
+# cc-rs detects the compiler family through a file it opens read-write in
+# OUT_DIR; denied, it warns and guesses.
+read = [":out_dir"]
+requests = ["cc"]
+env = ["CC", "LIBRARY_PATH", "OPENMP_STATIC", "PATH", "TARGET"]
+
+[package.pcap]
+# Without pkg-config, dlopens `libpcap.so` to ask its version, and assumes
+# the newest when that fails.
+requests = ["pkg-config"]
+env = [
+    "DOCS_RS", "LIBPCAP_LIBDIR", "LIBPCAP_VER",
+    "LIBPCAP_NO_PKG_CONFIG", "LIBPCAP_STATIC", "LIBPCAP_DYNAMIC",
+]
+
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.quote]
+requests = ["rustc"]
+
+[package.tiny-xlib]
+# With `dlopen`, records each library's libdir from pkg-config in OUT_DIR,
+# or None.
+requests = ["pkg-config"]
+env = [
+    "CARGO_FEATURE_DLOPEN", "X11_NO_PKG_CONFIG", "X11_STATIC", "X11_DYNAMIC",
+    "X11_XCB_NO_PKG_CONFIG", "X11_XCB_STATIC", "X11_XCB_DYNAMIC",
+]
+
+[package.winapi]
+env = ["TARGET", "WINAPI_NO_BUNDLED_LIBRARIES", "WINAPI_STATIC_NOBUNDLE"]
+
+[package.x11-dl]
+# Records each X11 library's libdir from pkg-config in OUT_DIR, or None.
+requests = ["pkg-config"]
+env = [
+    "TARGET",
+    "XEXT_STATIC", "XEXT_DYNAMIC", "GL_STATIC", "GL_DYNAMIC", "XCURSOR_STATIC",
+    "XCURSOR_DYNAMIC", "XXF86VM_STATIC", "XXF86VM_DYNAMIC", "XFT_STATIC", "XFT_DYNAMIC",
+    "XINERAMA_STATIC", "XINERAMA_DYNAMIC", "XI_STATIC", "XI_DYNAMIC", "X11_STATIC",
+    "X11_DYNAMIC", "X11_XCB_STATIC", "X11_XCB_DYNAMIC", "XMU_STATIC", "XMU_DYNAMIC",
+    "XRANDR_STATIC", "XRANDR_DYNAMIC", "XTST_STATIC", "XTST_DYNAMIC", "XRENDER_STATIC",
+    "XRENDER_DYNAMIC", "XPRESENT_STATIC", "XPRESENT_DYNAMIC", "XSCRNSAVER_STATIC",
+    "XSCRNSAVER_DYNAMIC", "XT_STATIC", "XT_DYNAMIC",
+]
+
+[package.yeslogic-fontconfig-sys]
+# Probes fontconfig unless the `dlopen` feature or RUST_FONTCONFIG_DLOPEN is set.
+requests = ["pkg-config"]
+env = [
+    "RUST_FONTCONFIG_DLOPEN", "FONTCONFIG_NO_PKG_CONFIG", "FONTCONFIG_STATIC",
+    "FONTCONFIG_DYNAMIC",
+]

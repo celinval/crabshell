@@ -794,10 +794,11 @@ fn system_lib() {
 )]
 fn codegen() {
     // The generators find their data through CARGO_MANIFEST_DIR, which the
-    // default grant doesn't include.
+    // default grant doesn't include. Only its build scripts are reviewed, not
+    // its proc-macros, so it doesn't build outside the jail.
     check(&Fixture {
         name: "codegen",
-        trusted: true,
+        trusted: false,
         dumps_env: false,
         default_suffices: false,
         git_repo: false,

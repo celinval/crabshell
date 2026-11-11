@@ -15,8 +15,94 @@ env = ["CARGO_MANIFEST_DIR"]
 read = [":manifest_dir/local_names.txt"]
 env = ["CARGO_MANIFEST_DIR"]
 
-# Its data is compiled into the build script, so it only writes OUT_DIR.
+[package.tls-parser]
+read = [":manifest_dir/scripts/tls-ciphersuites.txt"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Generators that open their data relative to the working dir, the crate root.
+[package.oid-registry]
+read = [":manifest_dir/assets/oid_db.txt"]
+
+[package.gherkin]
+read = [":manifest_dir/src/languages.json"]
+
+[package.iso_currency]
+read = [":manifest_dir/isodata.tsv"]
+
+# Globs `patterns/*.pattern`; a glob it can't list matches nothing.
+[package.grok]
+read = [":manifest_dir/patterns"]
+
+# Lists its extensions dir and embeds each file's absolute path in the
+# generated `include_bytes!`, for rustc to read.
+[package.khronos_api]
+read = [":manifest_dir/api_webgl/extensions"]
+
+# Copies its linker script into OUT_DIR and adds it to the link search path.
+[package.defmt]
+read = [":manifest_dir/defmt.x.in"]
+env = ["TARGET"]
+
+# lalrpop walks the whole crate root for `.lalrpop` files, and picks the
+# grammar's features from `CARGO_FEATURE_*`.
+[package.basic-cookies]
+read = [":manifest_dir"]
+env = ["CARGO_FEATURE_*", "LALRPOP_LANE_TABLE"]
+
+# Their data is compiled into the build script, so they only write OUT_DIR.
 [package.mime_guess]
+[package.snap]
+[package.selectors]
+[package.terminfo]
+[package.cgmath]
+[package.gl]
+[package.crunchy]
+[package.tiny-keccak]
+
+# Generators configured through the environment. These two suffix a private
+# module name with the patch version.
+[package.typetag]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+[package.linkme]
+env = ["CARGO_PKG_VERSION_PATCH"]
+
+# Optional knobs that override the generated constants.
+[package.fastnum]
+env = [
+    "RUST_FASTNUM_DEFAULT_ROUNDING_MODE", "RUST_FASTNUM_FMT_EXPONENTIAL_LOWER_THRESHOLD",
+    "RUST_FASTNUM_FMT_EXPONENTIAL_UPPER_THRESHOLD", "RUST_FASTNUM_FMT_MAX_INTEGER_PADDING",
+    "RUST_FASTNUM_SERDE_DESERIALIZE_MODE",
+]
+
+# Scans the whole environment for `SMOLTCP_*` knobs and sizing features.
+[package.smoltcp]
+env = ["SMOLTCP_*", "CARGO_FEATURE_*"]
+
+# Writes the target and its features into OUT_DIR.
+[package.target-spec]
+env = ["TARGET", "CARGO_CFG_TARGET_FEATURE"]
+
+[package.jetscii]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE"]
+
+[package.target-lexicon]
+requests = ["rustc"]
+env = ["TARGET"]
+
+# Directive-only scripts pulled in by the generators.
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+[package.icu_locale_fallback_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_segmenter_data]
+env = ["ICU4X_DATA_DIR"]
+
+# The proc-macro reads DEFMT_LOG; its build script only declares it.
+[package.defmt-macros]
+[package.guppy-workspace-hack]
 
 # Version probes pulled in by the generators' dependencies (see rustc-probe).
 [package.num-traits]
@@ -61,3 +147,35 @@ env = ["CARGO_PKG_VERSION_PATCH"]
 [package.serde_core]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
+
+[package.thiserror]
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+[package.erased-serde]
+requests = ["rustc"]
+
+[package.typeid]
+requests = ["rustc"]
+
+[package.linkme-impl]
+requests = ["rustc"]
+
+[package.syn]
+requests = ["rustc"]
+
+[package.zmij]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]
+
+[package.rustversion]
+requests = ["rustc"]
+env = ["HOST"]
+
+# Compiles an asm probe from OUT_DIR. It fails on x86 either way, so a denied
+# probe goes unnoticed there.
+[package.heapless]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]

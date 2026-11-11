@@ -1,5 +1,5 @@
-# Depends on crates whose build scripts generate Rust source into `OUT_DIR`
-# from their own data, without running tools.
+# Depends on crates whose build scripts generate Rust source, parsers or
+# linker scripts into `OUT_DIR` from their own data, without running tools.
 [workspace]
 
 [package]
@@ -13,3 +13,23 @@ publish = false
 chrono-tz = { version = "0.10", features = ["case-insensitive"] }
 mime_guess = "2"
 web_atoms = "0.1"
+oid-registry = "0.8"
+snap = "1"
+selectors = "0.40"
+typetag = "0.2"
+linkme = "0.3"
+defmt = "1"
+gl = "0.14"
+smoltcp = "0.14"
+fastnum = "0.7"
+target-spec = "3"
+jetscii = "0.5"
+gherkin = "0.16"
+# Its default regex engine, onig, compiles C.
+grok = { version = "2", default-features = false, features = ["fancy-regex"] }
+basic-cookies = "0.1"
+iso_currency = "0.7"
+tls-parser = "0.12"
+# The feature makes its build script generate the swizzle operators.
+cgmath = { version = "0.18", features = ["swizzle"] }
+terminfo = "0.9"

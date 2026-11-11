@@ -152,7 +152,7 @@ What the requests cost, per build script:
 | `cfg-only` | 22 | 0–6 | – | 0 |
 | `rustc-probe` | 10 | 0–20 | `rustc` | 0 |
 | `system-lib` | 6 | 6–22 | `rustc`, `pkg-config`, `cc` | 0 |
-| `codegen` | 11 | 0–20 | `rustc` | 0 |
+| `codegen` | 46 | 0–20 | `rustc` | 0 |
 | `cc-toolchain` | 4 | 3–20 | `rustc`, `cc`, `cmake` | 0 |
 | `vcs-metadata` | 1 | 0 | `git` | 0 |
 | `lang-runtime` | 7 | 1–20 | `rustc`, `python` | 0 |
@@ -233,6 +233,45 @@ What the requests cost, per build script:
   would need it requested and granted; they pull `-sys` crates anyway.
 - **Empty build scripts cost nothing.** embassy-time-driver (for its `links`
   key) and nextest-workspace-hack run `fn main() {}` and request nothing.
+
+### More generators
+
+The `codegen` fixture grew to 46 build scripts: table generators (snap,
+selectors, terminfo, cgmath, gl), generators reading their own data
+(oid-registry, gherkin, iso_currency, grok, tls-parser, khronos_api), a
+lalrpop parser (basic-cookies), a linker script (defmt) and env-configured
+constants (smoltcp, fastnum). Every cell behaves as expected, and beyond the
+directives, every generated file in `OUT_DIR` matched the baseline byte for
+byte.
+
+- **A crate already uses `[package.metadata.build-rs]`.** zerocopy keeps its
+  version cfgs there (`no-zerocopy-simd-x86-avx12-1-89-0 = "1.89.0"`) and
+  its build script parses its own `Cargo.toml` for them. crabshell rejects
+  the table's unknown fields, so zerocopy's build script fails in every
+  scenario without requests. zerocopy, a dependency of rand's `std_rng`, is
+  among the most downloaded crates; the fixture leaves it out (with
+  unicode_names2, which pulled it in). The metadata key needs a name of its
+  own, or crabshell must ignore tables it can't parse.
+- **Most generators open their data relative to the working dir,** the
+  crate root, so they work under the default grant's crate-root read. Only
+  those using `CARGO_MANIFEST_DIR` (chrono-tz, web_atoms, tls-parser) need
+  the variable.
+- **lalrpop walks the whole crate root** for `.lalrpop` files, not just
+  `src`, so a crate using it requests `:manifest_dir`. Narrowed to `src`, it
+  fails loudly; so does grok's `glob`, when its patterns dir can't be listed.
+- **Env-configured constants degrade silently.** smoltcp scans `env::vars()`
+  for `SMOLTCP_*` and fastnum reads `RUST_FASTNUM_*`; denied, both fall back
+  to their defaults. The difference lands only in generated files, not in
+  directives, so a baseline comparison of directives can't catch it. The
+  same holds for `CARGO_CFG_TARGET_FEATURE` (target-spec, jetscii) and
+  lalrpop's `CARGO_FEATURE_*` scan, though the default grant covers those.
+- **Some generators can't be compared to a baseline.** lrlex and lrpar
+  (through promql-parser) run vergen, which emits the build time as
+  `cargo:rustc-env`, so no two builds print the same directives. They're
+  left out.
+- **Compile probes can be blind to denial.** heapless compiles an ARM
+  `clrex` probe from `OUT_DIR`; on x86 it fails whether or not rustc can
+  read it.
 
 ## Methodology TODOs
 

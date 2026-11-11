@@ -76,12 +76,19 @@ read = [":manifest_dir/descriptors.bin"]
 
 [package.pprof]
 read = [":manifest_dir/proto"]
+write = [":manifest_dir/proto"]
+requests = ["protoc"]
 
 [package.geozero]
-read = [":manifest_dir/src/mvt/vector_tile.rs"]
+read = [":manifest_dir/src/mvt"]
+write = [":manifest_dir/src/mvt"]
+requests = ["protoc"]
 
 # Generates only with a feature that writes to its own sources.
 [package.libdd-ddsketch]
+read = [":manifest_dir/src"]
+write = [":manifest_dir/src/pb"]
+requests = ["protoc"]
 
 # Generates its parsers with lalrpop, which reads every CARGO_FEATURE_*.
 [package.cedar-policy-core]

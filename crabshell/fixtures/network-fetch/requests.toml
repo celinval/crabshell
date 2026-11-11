@@ -6,12 +6,14 @@
 # files requests exactly those, since the crate root is otherwise narrowed
 # away.
 #
-# The fetching crates request what their offline path uses: the switches
-# they read to pick it, and the local copy. Their download paths would need
-# network and a cache under HOME, which no consumer here grants.
+# The fetching crates request everything they would access, offline path and
+# download path alike, on any feature or target: requests can't depend on
+# either. The consumer grants only the offline path: no network, and no
+# cache under HOME, which no variable names anyway.
 
 # Point at a local copy through an env var.
 [package.libduckdb-sys]
+network = true
 # Copies the pregenerated bindings, and stages `libduckdb.so` from the local
 # copy into OUT_DIR. The consumer names that dir as `:duckdb_lib_dir`, a
 # variable the crate can only hope exists.
@@ -23,17 +25,22 @@ env = [
 ]
 
 [package.liteparse-pdfium-sys]
-# Copies its pregenerated bindings. It only checks that the local copy exists.
+network = true
+# Copies its pregenerated bindings. It only checks that the local copy exists;
+# otherwise it downloads into a cache under HOME and copies the library into
+# the target dir, which no variable names.
 read = [":manifest_dir/bindings.rs"]
-env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "PDFIUM_LIB_PATH", "PDFIUM_INCLUDE_PATH"]
+env = ["HOME", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "PDFIUM_LIB_PATH", "PDFIUM_INCLUDE_PATH"]
 
 [package.ort-sys]
-env = [
+network = true
+env = ["HOME", 
     "TARGET", "DOCS_RS", "ORT_LIB_PATH", "ORT_LIB_LOCATION", "ORT_PREFER_DYNAMIC_LINK",
     "CARGO_NET_OFFLINE", "ORT_SKIP_DOWNLOAD", "ORT_OFFLINE",
 ]
 
 [package.libsodium-sys-stable]
+network = true
 env = ["SODIUM_LIB_DIR", "SODIUM_SHARED", "SODIUM_USE_PKG_CONFIG", "SODIUM_DISABLE_PIE"]
 
 [package.libbpf-sys]
@@ -41,9 +48,11 @@ env = ["SODIUM_LIB_DIR", "SODIUM_SHARED", "SODIUM_USE_PKG_CONFIG", "SODIUM_DISAB
 env = ["CARGO_MANIFEST_DIR", "TARGET", "LIBBPF_SYS_LIBRARY_PATH", "LIBBPF_SYS_LIBRARY_PATH_*"]
 
 # Probes pkg-config, then takes the version and search path from the consumer.
-# It also runs `z3 --version`, which it can't request: crabshell rejects a
-# `run` entry missing from the host.
+# It also runs `z3 --version` when present, and downloads a release with its
+# `gh-release` feature.
 [package.z3-sys]
+network = true
+run = ["z3"]
 requests = ["pkg-config"]
 env = [
     "CARGO_CFG_TARGET_ENV", "TARGET", "Z3_SYS_Z3_VERSION", "Z3_LIBRARY_PATH_OVERRIDE", "CXXSTDLIB",
@@ -53,26 +62,35 @@ env = [
 # Embeds the zip from utoipa-swagger-ui-vendored, then patches what it
 # extracted into OUT_DIR.
 [package.utoipa-swagger-ui]
+network = true
 read = [":out_dir"]
-env = ["CARGO_FEATURE_VENDORED", "SWAGGER_UI_DOWNLOAD_URL", "SWAGGER_UI_OVERWRITE_FOLDER"]
+env = ["HOME", "CARGO_FEATURE_VENDORED", "SWAGGER_UI_DOWNLOAD_URL", "SWAGGER_UI_OVERWRITE_FOLDER"]
 
 # Skips the download on its `xtask` feature.
 [package.tracel-llvm-bundler]
+network = true
 env = ["CARGO_FEATURE_XTASK"]
 
 # Runs `curl` to refresh its bundled pci.ids in place, inside its own sources,
 # and falls back to the bundled copy when that fails.
 [package.pci-ids]
+network = true
+run = ["curl"]
+write = [":manifest_dir/pciids/pci.ids"]
 read = [":manifest_dir/pciids/pci.ids"]
 
 # Probes pkg-config and MKLROOT, then downloads into a cache under HOME; any
 # failure leaves it linking nothing.
 [package.intel-mkl-src]
+network = true
 requests = ["pkg-config"]
-env = ["MKLROOT"]
+env = ["HOME", "MKLROOT"]
 
-# Copies the QuickJS sources into OUT_DIR and compiles them there.
+# Copies the QuickJS sources into OUT_DIR and compiles them there. For WASI
+# targets it downloads the WASI SDK with `curl`.
 [package.rquickjs-sys]
+network = true
+run = ["curl"]
 read = [":manifest_dir/quickjs", ":manifest_dir/quickjs.bind.h", ":out_dir"]
 requests = ["cc"]
 env = [
@@ -80,9 +98,12 @@ env = [
     "CARGO_FEATURE_UPDATE_BINDINGS", "TARGET",
 ]
 
-# Only download on other targets or features.
+# Only download on other targets or features: tun fetches wintun.dll on
+# Windows and copies it into the target dir, which no variable names.
 [package.tun]
+network = true
 [package.system-deps]
+network = true
 
 # Compiles the vendored liblzma for tracel-llvm-bundler; with its `static`
 # feature it never probes pkg-config.

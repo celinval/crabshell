@@ -34,11 +34,14 @@ Every fixture builds in each cell of **requests × grants**:
 - **Requests** stand in for the crates' own `[package.metadata.crabshell]`,
   since we can't edit them. `requests.toml` lists, for every build script,
   exactly what its code uses, from the vendor's point of view: no host paths,
-  tools through [named grants](../../docs/src/policy/grants.md). They're
-  injected with `CRABSHELL_REQUESTS`, which only the `test-requests` feature
-  honors.
+  tools through [named grants](../../docs/src/policy/grants.md). That
+  includes what the consumer won't grant, such as network or writes to the
+  crate's own sources, on any feature or target, since a request can't depend
+  on either. They're injected with `CRABSHELL_REQUESTS`, which only the
+  `test-requests` feature honors.
 - **Grants** are the consumer's policy: the default grant alone (no config),
-  `sandbox.tight.toml` (the union of all requests), or `sandbox.loose.toml`
+  `sandbox.tight.toml` (the union of all requests the fixture can build with;
+  never network), or `sandbox.loose.toml`
   (the category's grants and any env var).
 
 Precise × loose is the best case: everyone declares, and requests narrow a

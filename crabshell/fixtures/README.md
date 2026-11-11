@@ -37,7 +37,7 @@ Every fixture builds in each cell of **requests × grants**:
   tools through [named grants](../../docs/src/policy/grants.md). That
   includes what the consumer won't grant, such as network or writes to the
   crate's own sources, on any feature or target, since a request can't depend
-  on either. They're injected with `CRABSHELL_REQUESTS`, which only the
+  on either, and grants of any category, defined by this fixture or not. They're injected with `CRABSHELL_REQUESTS`, which only the
   `test-requests` feature honors.
 - **Grants** are the consumer's policy: the default grant alone (no config),
   `sandbox.tight.toml` (the union of all requests the fixture can build with;

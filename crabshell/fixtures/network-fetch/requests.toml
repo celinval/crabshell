@@ -39,8 +39,13 @@ env = ["HOME",
     "CARGO_NET_OFFLINE", "ORT_SKIP_DOWNLOAD", "ORT_OFFLINE",
 ]
 
+# Finds libsodium through SODIUM_LIB_DIR or pkg-config; otherwise builds its
+# bundled source with configure and make (`zig` for freestanding wasm), and
+# downloads the tarball if it's missing.
 [package.libsodium-sys-stable]
 network = true
+run = ["zig"]
+requests = ["pkg-config", "cc", "autotools"]
 env = ["SODIUM_LIB_DIR", "SODIUM_SHARED", "SODIUM_USE_PKG_CONFIG", "SODIUM_DISABLE_PIE"]
 
 [package.libbpf-sys]

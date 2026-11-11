@@ -212,3 +212,27 @@ env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 [package.zmij]
 requests = ["rustc"]
 env = ["OPT_LEVEL"]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]
+
+# Generates its word lists from its own data.
+[package.names]
+read = [":manifest_dir/data"]
+env = ["CARGO_PKG_VERSION", "NIGHTLY_BUILD"]
+
+[package.indexmap]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_FEATURE_STD"]
+
+[package.proc-macro-error]
+requests = ["rustc"]
+
+[package.proc-macro-error-attr]
+requests = ["rustc"]
+
+[package.syn]
+requests = ["rustc"]

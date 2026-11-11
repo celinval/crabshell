@@ -167,3 +167,20 @@ env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 [package.zmij]
 requests = ["rustc"]
 env = ["OPT_LEVEL"]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]
+
+# version_check.
+[package.ahash]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+# pyo3's cfgs, from the interpreter config pyo3-ffi passes on.
+[package.jiter]
+env = ["DEP_PYTHON_PYO3_CONFIG", "DEP_PYO3_PYTHON_PYO3_CONFIG"]
+
+[package.radium]
+env = ["TARGET", "CARGO_CFG_TARGET_ARCH"]

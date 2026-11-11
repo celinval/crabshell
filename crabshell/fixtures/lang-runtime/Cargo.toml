@@ -20,3 +20,4 @@ rustler = "0.38"
 rustler_sys = "2.4"
 swift-rs = { version = "1", features = ["build"] }
 glean-core = "71"
+jiter = { version = "0.19.0", features = ["python"] }

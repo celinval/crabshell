@@ -13,9 +13,7 @@ hotpath-meta = "0.31"
 # Pulls in lrpar, whose build script also uses vergen.
 lrlex = "0.15"
 mach-sys = "0.5"
-# `names` is left out: through rand it pulls in zerocopy, which uses
-# `[package.metadata.crabshell]` for its own data, and crabshell rejects that
-# table.
+names = "0.14.0"
 prettyplease = "0.3"
 protobuf = "3"
 rustc_version_runtime = "0.3"

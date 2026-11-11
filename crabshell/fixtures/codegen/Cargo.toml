@@ -33,3 +33,4 @@ tls-parser = "0.12"
 # The feature makes its build script generate the swizzle operators.
 cgmath = { version = "0.18", features = ["swizzle"] }
 terminfo = "0.9"
+unicode_names2 = "4.0.0"

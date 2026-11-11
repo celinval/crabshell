@@ -14,7 +14,7 @@ has several `sandbox.*.toml` policy variants:
 | `cfg-only` | crossbeam-utils, crossbeam-epoch, crossbeam-deque, rayon-core, tiny-keccak, crunchy, icu_properties_data |
 | `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij |
 | `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc, libseccomp, libseccomp-sys, pcap, libpulse-sys, libpulse-simple-sys, openmp-sys, x11-dl, tiny-xlib, yeslogic-fontconfig-sys, clang-sys, inotify-sys, odbc-sys, mongocrypt-sys, winapi, num-traits, proc-macro2, quote |
-| `declared` | crossbeam-utils, patched to declare `[package.metadata.build-rs]` |
+| `declared` | crossbeam-utils, patched to declare `[package.metadata.crabshell]` |
 
 `cargo test --features test-requests` (`crabshell/fixtures.rs`) first builds each
 fixture without the sandbox, as a baseline. It then builds the fixture once per
@@ -237,10 +237,14 @@ What the requests cost, per build script:
   crate-git-revision reads `.cargo_vcs_info.json`, which Cargo publishes,
   and requests it. typst-utils reads its knobs with `option_env!`, when the
   script compiles, so no policy affects them.
-- **zerocopy already uses `[package.metadata.build-rs]`.** It keeps its
-  version cfgs there, and crabshell fails its build on the unknown keys.
-  `names` (through rand) was left out of the fixture for this; crabshell
-  needs another table name, or to ignore tables it can't parse.
+- **zerocopy already used `[package.metadata.build-rs]`,** the key
+  crabshell first read requests from. It keeps its own version table
+  there (`no-zerocopy-core-error-1-81-0 = "1.81.0"`), which crabshell
+  rejected as a malformed request, failing zerocopy's build script, and
+  every crate pulling it in (rand, ahash), without requests. crabshell
+  now reads `[package.metadata.crabshell]` and ignores other tools'
+  tables; zerocopy runs `$RUSTC --version` and reads its own
+  `Cargo.toml`.
 - **Some scripts read their whole environment.** mach-sys hashes it, with
   the time, into a random nonce; built and shadow-rs collect it but only
   look up names. Requests cover only the names used.
@@ -257,12 +261,6 @@ What the requests cost, per build script:
   rustler_sys generate NIF glue from vendored headers, napi and jni only
   emit cfgs, uniffi parses a UDL file. So missing Erlang, Swift, Go, OCaml
   or PHP didn't block them.
-- **zerocopy already owns `[package.metadata.build-rs]`.** It keeps the
-  version cfgs its build script emits there (`no-zerocopy-... =
-  "1.89.0"`), so crabshell fails to parse its manifest and the build fails
-  whenever no request is injected for it. ahash, and through it jiter,
-  pull it in, so they're left out of `lang-runtime` until the key is
-  renamed or unknown fields are tolerated.
 - **Fallbacks hide denied variables on cross builds.** rustler and
   rustler_sys fall back to the host's family when `CARGO_CFG_TARGET_FAMILY`
   is missing: the same output natively, wrong output cross-compiling to
@@ -280,11 +278,6 @@ What the requests cost, per build script:
   them.
 - **autocfg needs `OUT_DIR` read back.** Like proc-macro2's probes, without it
   num-traits succeeds but silently drops `has_total_cmp`.
-- **`[package.metadata.build-rs]` is already taken.** zerocopy (and so
-  ahash) keeps its own version table there, which crabshell rejects as a
-  malformed declaration, failing the build. The key needs a name no crate
-  uses, or crabshell must tolerate tables it can't parse; both are left out
-  of `rustc-probe` until then.
 - **Probes inherit env the script never reads.** eyre's compile probe uses a
   nightly feature, which on stable works only because rustc inherits
   `RUSTC_BOOTSTRAP`. Without it in eyre's request, it silently drops
@@ -378,14 +371,6 @@ constants (smoltcp, fastnum). Every cell behaves as expected, and beyond the
 directives, every generated file in `OUT_DIR` matched the baseline byte for
 byte.
 
-- **A crate already uses `[package.metadata.build-rs]`.** zerocopy keeps its
-  version cfgs there (`no-zerocopy-simd-x86-avx12-1-89-0 = "1.89.0"`) and
-  its build script parses its own `Cargo.toml` for them. crabshell rejects
-  the table's unknown fields, so zerocopy's build script fails in every
-  scenario without requests. zerocopy, a dependency of rand's `std_rng`, is
-  among the most downloaded crates; the fixture leaves it out (with
-  unicode_names2, which pulled it in). The metadata key needs a name of its
-  own, or crabshell must ignore tables it can't parse.
 - **Most generators open their data relative to the working dir,** the
   crate root, so they work under the default grant's crate-root read. Only
   those using `CARGO_MANIFEST_DIR` (chrono-tz, web_atoms, tls-parser) need
@@ -436,13 +421,6 @@ byte.
   protoc's descriptors back from a temp file, so the `protoc` grant reads
   `:tmp_dir`, as `cc` does. Pure-Rust parsers (protox, protobuf-codegen's
   `pure()`) need nothing beyond the crate's own `.proto` files.
-- **zerocopy already uses `[package.metadata.build-rs]`.** zerocopy keeps
-  its own version table there (`no-zerocopy-core-error-1-81-0 = "1.81.0"`).
-  crabshell parses the table with unknown fields denied, so by the code,
-  zerocopy's build script fails under crabshell unless a request replaces
-  the table. metrics-exporter-prometheus pulls zerocopy in through `rand`,
-  so it was left out. The metadata key needs a name that doesn't collide,
-  or crabshell needs to tolerate foreign keys.
 - **bindgen's needs land on its consumers.** With bindgen's default
   `runtime` feature, clang-sys's build script does nothing; each crate
   running bindgen loads libclang into its own build script, so libclang, its

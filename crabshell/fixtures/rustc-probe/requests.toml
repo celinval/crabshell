@@ -211,3 +211,13 @@ requests = ["rustc"]
 [package.zmij]
 requests = ["rustc"]
 env = ["OPT_LEVEL"]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]
+
+# version_check.
+[package.ahash]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH"]

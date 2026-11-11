@@ -32,6 +32,7 @@ containerd-client = { version = "0.9", default-features = false }
 etcd-client = "0.20"
 prost-validate-types = "0.2"
 tracing-perfetto-sdk-schema = "0.13"
+metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["protobuf"] }
 
 [build-dependencies]
 prost-build = "0.14"

@@ -179,3 +179,11 @@ env = ["HOST"]
 read = [":out_dir"]
 requests = ["rustc"]
 env = ["TARGET"]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]
+
+# Its data is compiled into the build script, so it only writes OUT_DIR.
+[package.unicode_names2]

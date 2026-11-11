@@ -26,6 +26,7 @@ read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc"]
 env = { inherit = true, value = [
     "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION*", "PROFILE", "OPT_LEVEL",
+    "NIGHTLY_BUILD",
     "SOURCE_DATE_EPOCH", "VERGEN_*", "RUSTUP_TOOLCHAIN",
     "HOTPATH_META_ALLOC_MAX_DEPTH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
     "PORTABLE_ATOMIC_DENY_WARNINGS", "ENSURE_NO_PANIC", "LIBC_BUILD_VERBOSE", "LIBC_CI",

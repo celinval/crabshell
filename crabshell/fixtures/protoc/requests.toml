@@ -247,3 +247,16 @@ env = ["TARGET", "CARGO_CFG_SANITIZE"]
 # Only emit directives and write OUT_DIR, which the floor covers.
 [package.pulldown-cmark]
 [package.symbolic-demangle]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]
+
+# cfg_aliases over its own features.
+[package.borsh]
+env = ["CARGO_FEATURE_HASHBROWN", "CARGO_FEATURE_STD"]
+
+[package.metrics-exporter-prometheus]
+read = [":manifest_dir/proto"]
+requests = ["protoc"]

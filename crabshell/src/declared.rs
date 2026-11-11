@@ -70,10 +70,14 @@ pub fn injected(path: &Path, package: &str) -> Result<Option<Declared>, Declared
         #[serde(default)]
         package: std::collections::BTreeMap<String, Declared>,
     }
-    let text = std::fs::read_to_string(path)
-        .map_err(|source| DeclaredError::Read { path: path.to_path_buf(), source })?;
-    let requests: Requests = toml::from_str(&text)
-        .map_err(|source| DeclaredError::Parse { path: path.to_path_buf(), source })?;
+    let text = std::fs::read_to_string(path).map_err(|source| DeclaredError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let requests: Requests = toml::from_str(&text).map_err(|source| DeclaredError::Parse {
+        path: path.to_path_buf(),
+        source,
+    })?;
     Ok(requests.package.get(package).cloned())
 }
 
@@ -93,16 +97,25 @@ fn parse(text: &str) -> Result<Option<Declared>, toml::de::Error> {
     }
 
     let manifest: Manifest = toml::from_str(text)?;
-    Ok(manifest.package.and_then(|p| p.metadata).and_then(|m| m.build_rs))
+    Ok(manifest
+        .package
+        .and_then(|p| p.metadata)
+        .and_then(|m| m.build_rs))
 }
 
 /// A declaration that can't be read or parsed.
 #[derive(Debug)]
 pub enum DeclaredError {
     /// A requests file could not be read.
-    Read { path: PathBuf, source: std::io::Error },
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// A manifest or requests file was malformed.
-    Parse { path: PathBuf, source: toml::de::Error },
+    Parse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
 }
 
 impl fmt::Display for DeclaredError {
@@ -155,7 +168,10 @@ mod tests {
     #[test]
     fn a_manifest_without_a_declaration_has_none() {
         assert_eq!(parse("[package]\nname = \"dep\"\n").unwrap(), None);
-        assert_eq!(parse("[package.metadata.docs]\nall = true\n").unwrap(), None);
+        assert_eq!(
+            parse("[package.metadata.docs]\nall = true\n").unwrap(),
+            None
+        );
         assert_eq!(parse("[workspace]\n").unwrap(), None);
     }
 

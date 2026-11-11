@@ -40,7 +40,10 @@ fn main() -> ExitCode {
 fn parse(
     mut args: impl Iterator<Item = String>,
 ) -> Result<(Permissions, String, Vec<String>), String> {
-    let mut permissions = Permissions { env: vec!["*".into()], ..Permissions::default() };
+    let mut permissions = Permissions {
+        env: vec!["*".into()],
+        ..Permissions::default()
+    };
     loop {
         match args.next().as_deref() {
             Some("--read") => permissions.read.push(value(&mut args, "--read")?),

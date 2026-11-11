@@ -147,7 +147,9 @@ pub enum ListField {
 /// `$XDG_CONFIG_HOME/crabshell/config.toml`, or `~/.config/crabshell/config.toml`
 /// when `XDG_CONFIG_HOME` is unset or not absolute, as the XDG spec says.
 pub fn user_config_path(env: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
-    let xdg = env("XDG_CONFIG_HOME").map(PathBuf::from).filter(|dir| dir.is_absolute());
+    let xdg = env("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute());
     let base = match xdg {
         Some(dir) => dir,
         None => PathBuf::from(env("HOME")?).join(".config"),
@@ -260,7 +262,13 @@ impl ListField {
         match (lower, upper) {
             (lower, None) => lower,
             (None, upper) => upper,
-            (Some(lower), Some(ListField::Inherit { inherit: true, value })) => {
+            (
+                Some(lower),
+                Some(ListField::Inherit {
+                    inherit: true,
+                    value,
+                }),
+            ) => {
                 let mut merged = list_entries(&lower).to_vec();
                 merged.extend(value);
                 Some(match lower {
@@ -601,12 +609,20 @@ mod tests {
     #[test]
     fn user_config_follows_xdg() {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
-            move |name: &str| pairs.iter().find(|(k, _)| *k == name).map(|(_, v)| OsString::from(v))
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(k, _)| *k == name)
+                    .map(|(_, v)| OsString::from(v))
+            }
         };
         let xdg = user_config_path(env(&[("XDG_CONFIG_HOME", "/x"), ("HOME", "/h")]));
         assert_eq!(xdg, Some(PathBuf::from("/x/crabshell/config.toml")));
         let relative = user_config_path(env(&[("XDG_CONFIG_HOME", "x"), ("HOME", "/h")]));
-        assert_eq!(relative, Some(PathBuf::from("/h/.config/crabshell/config.toml")));
+        assert_eq!(
+            relative,
+            Some(PathBuf::from("/h/.config/crabshell/config.toml"))
+        );
         assert_eq!(user_config_path(env(&[])), None);
     }
 
@@ -650,7 +666,10 @@ mod tests {
             }))
         );
         assert_eq!(config.variables["pc"].sources().len(), 2);
-        assert_eq!(config.variables["fixed"], VariableDef::One(Source::Path("/opt/x".into())));
+        assert_eq!(
+            config.variables["fixed"],
+            VariableDef::One(Source::Path("/opt/x".into()))
+        );
     }
 
     #[test]
@@ -672,8 +691,14 @@ mod tests {
     fn includes_layer_below_the_including_file() {
         let dir = tempfile::tempdir().unwrap();
         let write = |name: &str, text: &str| std::fs::write(dir.path().join(name), text).unwrap();
-        write("a.toml", "[grant.git]\nrun = [\"git\"]\nread = [\"/a\"]\n[variables]\nx = \"/a\"\n");
-        write("b.toml", "[grant.git]\nread = { inherit = true, value = [\"/b\"] }\n");
+        write(
+            "a.toml",
+            "[grant.git]\nrun = [\"git\"]\nread = [\"/a\"]\n[variables]\nx = \"/a\"\n",
+        );
+        write(
+            "b.toml",
+            "[grant.git]\nread = { inherit = true, value = [\"/b\"] }\n",
+        );
         write(
             FILE_NAME,
             r#"
@@ -692,7 +717,10 @@ mod tests {
         assert_eq!(git.run, Some(ListField::Override(vec!["git".into()])));
         let read = vec!["/a".into(), "/b".into(), "/c".into()];
         assert_eq!(git.read, Some(ListField::Override(read)));
-        assert_eq!(config.variables["x"], VariableDef::One(Source::Path("/c".into())));
+        assert_eq!(
+            config.variables["x"],
+            VariableDef::One(Source::Path("/c".into()))
+        );
         assert!(config.include.is_empty());
     }
 
@@ -705,7 +733,13 @@ mod tests {
         let config = load(&dir.path().join(FILE_NAME)).unwrap();
 
         let value = vec!["ar".into()];
-        assert_eq!(config.grant["cc"].run, Some(ListField::Inherit { inherit: true, value }));
+        assert_eq!(
+            config.grant["cc"].run,
+            Some(ListField::Inherit {
+                inherit: true,
+                value
+            })
+        );
     }
 
     #[test]
@@ -727,6 +761,9 @@ mod tests {
 
     #[test]
     fn rejects_unknown_keys_in_list_tables() {
-        assert!(load_err("[external]\nread = { inherit = true, valu = [\"/x\"] }\n").contains("failed to parse"));
+        assert!(
+            load_err("[external]\nread = { inherit = true, valu = [\"/x\"] }\n")
+                .contains("failed to parse")
+        );
     }
 }

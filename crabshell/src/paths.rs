@@ -29,8 +29,14 @@ use crate::config::{Source, VariableDef};
 use crate::policy::Expand;
 
 /// Variables crabshell defines, from the build script's environment.
-pub const BUILTIN: &[&str] =
-    &["manifest_dir", "manifest_path", "out_dir", "tmp_dir", "cargo_home", "sysroot"];
+pub const BUILTIN: &[&str] = &[
+    "manifest_dir",
+    "manifest_path",
+    "out_dir",
+    "tmp_dir",
+    "cargo_home",
+    "sysroot",
+];
 
 /// The private `TMPDIR` of the build script whose `OUT_DIR` is `out_dir`.
 ///
@@ -72,15 +78,24 @@ impl Variables {
         defs: &BTreeMap<String, VariableDef>,
         env: impl Fn(&str) -> Option<OsString>,
     ) -> Self {
-        let path = |name: &str| env(name).filter(|v| !v.is_empty()).map(|v| vec![PathBuf::from(v)]);
+        let path = |name: &str| {
+            env(name)
+                .filter(|v| !v.is_empty())
+                .map(|v| vec![PathBuf::from(v)])
+        };
         let mut values = BTreeMap::new();
         values.insert("manifest_dir".to_string(), path("CARGO_MANIFEST_DIR"));
         values.insert("manifest_path".to_string(), path("CARGO_MANIFEST_PATH"));
         values.insert("out_dir".to_string(), path("OUT_DIR"));
-        let tmp = path("OUT_DIR").and_then(|dirs| tmp_dir(&dirs[0])).map(|dir| vec![dir]);
+        let tmp = path("OUT_DIR")
+            .and_then(|dirs| tmp_dir(&dirs[0]))
+            .map(|dir| vec![dir]);
         values.insert("tmp_dir".to_string(), tmp);
         values.insert("cargo_home".to_string(), path("CARGO_HOME"));
-        values.insert("sysroot".to_string(), sysroot(env("RUSTC"), env("PATH")).map(|p| vec![p]));
+        values.insert(
+            "sysroot".to_string(),
+            sysroot(env("RUSTC"), env("PATH")).map(|p| vec![p]),
+        );
         for (name, def) in defs {
             values.insert(name.clone(), evaluate(def, &env));
         }
@@ -107,7 +122,13 @@ impl Variables {
         Ok(value.as_ref().map(|roots| {
             roots
                 .iter()
-                .map(|root| if tail.is_empty() { root.clone() } else { root.join(tail) })
+                .map(|root| {
+                    if tail.is_empty() {
+                        root.clone()
+                    } else {
+                        root.join(tail)
+                    }
+                })
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect()
         }))
@@ -125,9 +146,14 @@ fn evaluate(def: &VariableDef, env: &impl Fn(&str) -> Option<OsString>) -> Optio
             Source::Path(path) => Some(vec![PathBuf::from(path)]),
             Source::Env(import) => match env(&import.env).filter(|v| !v.is_empty()) {
                 Some(value) => Some(
-                    std::env::split_paths(&value).filter(|p| !p.as_os_str().is_empty()).collect(),
+                    std::env::split_paths(&value)
+                        .filter(|p| !p.as_os_str().is_empty())
+                        .collect(),
                 ),
-                None => import.default.as_deref().and_then(|default| evaluate(default, env)),
+                None => import
+                    .default
+                    .as_deref()
+                    .and_then(|default| evaluate(default, env)),
             },
         };
         if let Some(found) = found {
@@ -147,7 +173,9 @@ fn sysroot(rustc: Option<OsString>, path: Option<OsString>) -> Option<PathBuf> {
     let rustc = if rustc.components().count() > 1 {
         rustc
     } else {
-        std::env::split_paths(&path?).map(|dir| dir.join(&rustc)).find(|p| p.is_file())?
+        std::env::split_paths(&path?)
+            .map(|dir| dir.join(&rustc))
+            .find(|p| p.is_file())?
     };
     rustc.parent()?.parent().map(Path::to_path_buf)
 }
@@ -162,7 +190,11 @@ pub struct Expander {
 impl Expander {
     /// An expander using `variables`, matching env patterns against `names`.
     pub fn new(variables: Variables, names: Vec<String>) -> Self {
-        Self { variables, names, dropped: RefCell::new(Vec::new()) }
+        Self {
+            variables,
+            names,
+            dropped: RefCell::new(Vec::new()),
+        }
     }
 
     /// The entries dropped so far because their variable is undefined.
@@ -180,7 +212,11 @@ impl Expand for Expander {
         let mut out = Vec::new();
         for path in expanded {
             if is_pattern(&path) {
-                out.extend(glob(&path)?.iter().map(|p| p.to_string_lossy().into_owned()));
+                out.extend(
+                    glob(&path)?
+                        .iter()
+                        .map(|p| p.to_string_lossy().into_owned()),
+                );
             } else if path.contains('/') && !Path::new(&path).is_absolute() {
                 return Err(PathError::Relative(entry.to_string()));
             } else {
@@ -195,7 +231,12 @@ impl Expand for Expander {
             return vec![entry.to_string()];
         }
         match glob::Pattern::new(entry) {
-            Ok(pattern) => self.names.iter().filter(|n| pattern.matches(n)).cloned().collect(),
+            Ok(pattern) => self
+                .names
+                .iter()
+                .filter(|n| pattern.matches(n))
+                .cloned()
+                .collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -221,7 +262,12 @@ pub fn glob(pattern: &str) -> Result<Vec<PathBuf>, PathError> {
         match path {
             Ok(path) => matches.push(path),
             Err(err) if err.error().kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(PathError::List(pattern.to_string(), err.error().to_string())),
+            Err(err) => {
+                return Err(PathError::List(
+                    pattern.to_string(),
+                    err.error().to_string(),
+                ));
+            }
         }
     }
     matches.sort();
@@ -262,7 +308,10 @@ impl fmt::Display for PathError {
                 BUILTIN.join(", :")
             ),
             PathError::Relative(entry) => {
-                write!(f, "`{entry}`: path must be absolute or start with a `:variable`")
+                write!(
+                    f,
+                    "`{entry}`: path must be absolute or start with a `:variable`"
+                )
             }
             PathError::Glob(detail) => write!(f, "invalid glob pattern `{detail}`"),
             PathError::List(entry, err) => write!(f, "`{entry}`: can't list a directory: {err}"),
@@ -289,12 +338,18 @@ mod tests {
     }
 
     fn vars(defs: &[(&str, VariableDef)]) -> Variables {
-        let defs = defs.iter().map(|(n, d)| (n.to_string(), d.clone())).collect();
+        let defs = defs
+            .iter()
+            .map(|(n, d)| (n.to_string(), d.clone()))
+            .collect();
         Variables::new(&defs, env)
     }
 
     fn import(name: &str, default: Option<VariableDef>) -> Source {
-        Source::Env(EnvImport { env: name.to_string(), default: default.map(Box::new) })
+        Source::Env(EnvImport {
+            env: name.to_string(),
+            default: default.map(Box::new),
+        })
     }
 
     fn path(path: &str) -> Source {
@@ -304,8 +359,14 @@ mod tests {
     #[test]
     fn expands_builtins() {
         let v = vars(&[]);
-        assert_eq!(v.expand(":manifest_dir/build").unwrap(), Some(vec!["/src/dep/build".into()]));
-        assert_eq!(v.expand(":sysroot").unwrap(), Some(vec!["/tc/nightly".into()]));
+        assert_eq!(
+            v.expand(":manifest_dir/build").unwrap(),
+            Some(vec!["/src/dep/build".into()])
+        );
+        assert_eq!(
+            v.expand(":sysroot").unwrap(),
+            Some(vec!["/tc/nightly".into()])
+        );
         // OUT_DIR isn't set, so `:out_dir` is undefined.
         assert_eq!(v.expand(":out_dir/x").unwrap(), None);
     }
@@ -313,7 +374,10 @@ mod tests {
     #[test]
     fn passes_other_entries_through() {
         let v = vars(&[]);
-        assert_eq!(v.expand("/usr/include").unwrap(), Some(vec!["/usr/include".into()]));
+        assert_eq!(
+            v.expand("/usr/include").unwrap(),
+            Some(vec!["/usr/include".into()])
+        );
         assert_eq!(v.expand("cc").unwrap(), Some(vec!["cc".into()]));
     }
 
@@ -325,7 +389,9 @@ mod tests {
             path("/usr/lib64/pkgconfig"),
         ]);
         let v = vars(&[("pc", def)]);
-        let expected = ["/a/pc", "/b/pc", "/usr/lib64/pkgconfig"].map(String::from).to_vec();
+        let expected = ["/a/pc", "/b/pc", "/usr/lib64/pkgconfig"]
+            .map(String::from)
+            .to_vec();
         assert_eq!(v.expand(":pc").unwrap(), Some(expected));
     }
 
@@ -335,8 +401,14 @@ mod tests {
         let unset = VariableDef::One(import("UNSET", Some(VariableDef::One(path("/usr")))));
         let none = VariableDef::One(import("UNSET", None));
         let v = vars(&[("set", set), ("unset", unset), ("none", none)]);
-        assert_eq!(v.expand(":set/include").unwrap(), Some(vec!["/opt/ssl/include".into()]));
-        assert_eq!(v.expand(":unset/include").unwrap(), Some(vec!["/usr/include".into()]));
+        assert_eq!(
+            v.expand(":set/include").unwrap(),
+            Some(vec!["/opt/ssl/include".into()])
+        );
+        assert_eq!(
+            v.expand(":unset/include").unwrap(),
+            Some(vec!["/usr/include".into()])
+        );
         assert_eq!(v.expand(":none/include").unwrap(), None);
     }
 
@@ -344,7 +416,10 @@ mod tests {
     fn expansion_applies_the_subpath_to_every_path() {
         let def = VariableDef::Many(vec![path("/usr/lib64"), path("/usr/lib/x86_64-linux-gnu")]);
         let v = vars(&[("lib_dir", def)]);
-        let expected = ["/usr/lib64/libz.so.1", "/usr/lib/x86_64-linux-gnu/libz.so.1"];
+        let expected = [
+            "/usr/lib64/libz.so.1",
+            "/usr/lib/x86_64-linux-gnu/libz.so.1",
+        ];
         assert_eq!(
             v.expand(":lib_dir/libz.so.1").unwrap(),
             Some(expected.map(String::from).to_vec())
@@ -354,16 +429,24 @@ mod tests {
     #[test]
     fn rejects_bad_entries() {
         let v = vars(&[]);
-        assert_eq!(v.expand("$HOME/x"), Err(PathError::EnvInPath("$HOME/x".into())));
+        assert_eq!(
+            v.expand("$HOME/x"),
+            Err(PathError::EnvInPath("$HOME/x".into()))
+        );
         assert_eq!(v.expand(":Bad"), Err(PathError::InvalidName(":Bad".into())));
-        assert_eq!(v.expand(":nope/x"), Err(PathError::Unknown(":nope/x".into())));
+        assert_eq!(
+            v.expand(":nope/x"),
+            Err(PathError::Unknown(":nope/x".into()))
+        );
         assert_eq!(glob("usr/lib"), Err(PathError::Relative("usr/lib".into())));
     }
 
     fn expander(v: Variables) -> Expander {
         Expander::new(
             v,
-            ["TARGET", "CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX", "HOME"].map(String::from).to_vec(),
+            ["TARGET", "CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX", "HOME"]
+                .map(String::from)
+                .to_vec(),
         )
     }
 
@@ -389,16 +472,31 @@ mod tests {
         let root = root.display();
 
         let mid = x.paths(&format!("{root}/xz-*/src")).unwrap();
-        assert_eq!(mid, [format!("{root}/xz-5.2/src"), format!("{root}/xz-5.4/src")]);
+        assert_eq!(
+            mid,
+            [format!("{root}/xz-5.2/src"), format!("{root}/xz-5.4/src")]
+        );
         let deep = x.paths(&format!("{root}/deep/**/probe.rs")).unwrap();
-        assert_eq!(deep, [format!("{root}/deep/a/b/probe.rs"), format!("{root}/deep/probe.rs")]);
-        assert!(matches!(x.paths(&format!("{root}/xz**")), Err(PathError::Glob(_))));
+        assert_eq!(
+            deep,
+            [
+                format!("{root}/deep/a/b/probe.rs"),
+                format!("{root}/deep/probe.rs")
+            ]
+        );
+        assert!(matches!(
+            x.paths(&format!("{root}/xz**")),
+            Err(PathError::Glob(_))
+        ));
     }
 
     #[test]
     fn the_expander_matches_env_patterns_against_set_names() {
         let x = expander(vars(&[]));
-        assert_eq!(x.names("CARGO_CFG_*"), ["CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX"]);
+        assert_eq!(
+            x.names("CARGO_CFG_*"),
+            ["CARGO_CFG_TARGET_OS", "CARGO_CFG_UNIX"]
+        );
         assert_eq!(x.names("OPENSSL_*"), Vec::<String>::new());
         // A plain name stays, set or not.
         assert_eq!(x.names("OPENSSL_DIR"), ["OPENSSL_DIR"]);
@@ -420,12 +518,18 @@ mod tests {
             std::fs::create_dir(dir.path().join(name)).unwrap();
         }
         let entry = format!("{}/lib*", dir.path().display());
-        assert_eq!(glob(&entry).unwrap(), [dir.path().join("lib"), dir.path().join("lib64")]);
+        assert_eq!(
+            glob(&entry).unwrap(),
+            [dir.path().join("lib"), dir.path().join("lib64")]
+        );
     }
 
     #[test]
     fn a_glob_under_a_missing_dir_matches_nothing() {
-        assert_eq!(glob("/nonexistent/crabshell/lib*").unwrap(), Vec::<PathBuf>::new());
+        assert_eq!(
+            glob("/nonexistent/crabshell/lib*").unwrap(),
+            Vec::<PathBuf>::new()
+        );
     }
 
     #[test]

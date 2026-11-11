@@ -72,12 +72,30 @@ impl Scenario {
         use Grants::*;
         use Requests::*;
         [
-            Scenario { requests: None, grants: Default },
-            Scenario { requests: None, grants: Tight },
-            Scenario { requests: None, grants: Loose },
-            Scenario { requests: Precise, grants: Default },
-            Scenario { requests: Precise, grants: Tight },
-            Scenario { requests: Precise, grants: Loose },
+            Scenario {
+                requests: None,
+                grants: Default,
+            },
+            Scenario {
+                requests: None,
+                grants: Tight,
+            },
+            Scenario {
+                requests: None,
+                grants: Loose,
+            },
+            Scenario {
+                requests: Precise,
+                grants: Default,
+            },
+            Scenario {
+                requests: Precise,
+                grants: Tight,
+            },
+            Scenario {
+                requests: Precise,
+                grants: Loose,
+            },
         ]
     };
 
@@ -171,7 +189,11 @@ impl Fixture {
                 .current_dir(&dir)
                 .output()
                 .unwrap();
-            assert!(output.status.success(), "git {args:?}:\n{}", output_stderr(&output));
+            assert!(
+                output.status.success(),
+                "git {args:?}:\n{}",
+                output_stderr(&output)
+            );
         };
         git(&["init", "--quiet", "--initial-branch=main"]);
         git(&["add", "."]);
@@ -280,7 +302,11 @@ impl Scratch {
             .env("RUSTC", &Toolchain::get().rustc)
             .output()
             .unwrap();
-        assert!(output.status.success(), "crabshell-probe failed:\n{}", output_stderr(&output));
+        assert!(
+            output.status.success(),
+            "crabshell-probe failed:\n{}",
+            output_stderr(&output)
+        );
         std::fs::write(config, output.stdout).unwrap();
     }
 
@@ -308,7 +334,10 @@ struct Toolchain {
 impl Toolchain {
     fn get() -> &'static Toolchain {
         static TOOLCHAIN: OnceLock<Toolchain> = OnceLock::new();
-        TOOLCHAIN.get_or_init(|| Toolchain { cargo: which("cargo"), rustc: which("rustc") })
+        TOOLCHAIN.get_or_init(|| Toolchain {
+            cargo: which("cargo"),
+            rustc: which("rustc"),
+        })
     }
 
     /// The toolchain's root dir, holding `bin/` and `lib/`.
@@ -327,13 +356,19 @@ fn which(tool: &str) -> PathBuf {
         .current_dir(e2e_tests())
         .output()
         .unwrap();
-    assert!(output.status.success(), "rustup which {tool}:\n{}", output_stderr(&output));
+    assert!(
+        output.status.success(),
+        "rustup which {tool}:\n{}",
+        output_stderr(&output)
+    );
     PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
 fn rustup_home() -> OsString {
     std::env::var_os("RUSTUP_HOME").unwrap_or_else(|| {
-        PathBuf::from(std::env::var_os("HOME").expect("HOME is set")).join(".rustup").into()
+        PathBuf::from(std::env::var_os("HOME").expect("HOME is set"))
+            .join(".rustup")
+            .into()
     })
 }
 
@@ -369,7 +404,12 @@ fn fetch(fixture: &Fixture) {
         .current_dir(fixture.dir())
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}: fetch failed:\n{}", fixture.name, output_stderr(&output));
+    assert!(
+        output.status.success(),
+        "{}: fetch failed:\n{}",
+        fixture.name,
+        output_stderr(&output)
+    );
 }
 
 /// How a build is confined.
@@ -402,8 +442,13 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
     cmd.env_clear().envs(outer_env());
     if let Mode::Sandboxed(scenario) = mode {
         let runner = format!("host.runner=[{:?}]", env!("CARGO_BIN_EXE_crabshell"));
-        cmd.args(["-Zhost-config", "-Ztarget-applies-to-host", "--config", &runner])
-            .env("CRABSHELL_CONFIG", scenario.config(fixture));
+        cmd.args([
+            "-Zhost-config",
+            "-Ztarget-applies-to-host",
+            "--config",
+            &runner,
+        ])
+        .env("CRABSHELL_CONFIG", scenario.config(fixture));
         if scenario.requests == Requests::Precise {
             cmd.env("CRABSHELL_REQUESTS", fixture.dir().join("requests.toml"));
         }
@@ -417,7 +462,10 @@ fn build(fixture: &Fixture, target_dir: &Path, mode: &Mode) -> Build {
     let logs = logs(target_dir, &output);
     assert_no_secrets(target_dir, &logs);
     let leaks_fake_token = logs.iter().any(|log| log.contains(FAKE_TOKEN.1));
-    Build { output, leaks_fake_token }
+    Build {
+        output,
+        leaks_fake_token,
+    }
 }
 
 /// A `jail` command that confines a build of `fixture` into `target_dir`.
@@ -431,7 +479,11 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
     let toolchain = Toolchain::get();
     let crabshell = PathBuf::from(env!("CARGO_BIN_EXE_crabshell"));
     let jail = crabshell.with_file_name("jail");
-    assert!(jail.is_file(), "missing {}: run `cargo test` from the workspace root", jail.display());
+    assert!(
+        jail.is_file(),
+        "missing {}: run `cargo test` from the workspace root",
+        jail.display()
+    );
 
     let mut read = vec![
         PathBuf::from("/usr"),
@@ -447,7 +499,11 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
     if fixture.git_repo && gitconfig.exists() {
         read.push(gitconfig.to_path_buf());
     }
-    let write = [target_dir.to_path_buf(), scratch.tmp(), PathBuf::from("/dev/null")];
+    let write = [
+        target_dir.to_path_buf(),
+        scratch.tmp(),
+        PathBuf::from("/dev/null"),
+    ];
 
     let mut cmd = Command::new(jail);
     // Policies expand globs such as `/lib*` by listing the parent dir. Listing
@@ -466,8 +522,15 @@ fn jail(fixture: &Fixture, target_dir: &Path) -> Command {
 
 /// Variables of the test's own environment that look like credentials.
 fn secrets() -> Vec<(String, String)> {
-    const MARKERS: &[&str] =
-        &["TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "SESSION", "AUTH", "KEY"];
+    const MARKERS: &[&str] = &[
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "CREDENTIAL",
+        "SESSION",
+        "AUTH",
+        "KEY",
+    ];
     std::env::vars()
         .filter(|(key, value)| {
             let key = key.to_uppercase();
@@ -573,7 +636,10 @@ fn directives(target_dir: &Path) -> BTreeMap<String, String> {
 /// Build `fixture` in every [`Scenario`] and check each outcome.
 #[cfg(not(feature = "test-requests"))]
 fn check(fixture: &Fixture) {
-    panic!("{}: the precise-requests scenarios need `--features test-requests`", fixture.name);
+    panic!(
+        "{}: the precise-requests scenarios need `--features test-requests`",
+        fixture.name
+    );
 }
 
 /// Build `fixture` in every [`Scenario`] and check each outcome.
@@ -588,7 +654,11 @@ fn check(fixture: &Fixture) {
 
     let baseline_dir = scratch.target(fixture, "baseline");
     let baseline = build(fixture, &baseline_dir, &Mode::Baseline);
-    assert!(baseline.output.status.success(), "{name}: baseline failed:\n{}", stderr(&baseline));
+    assert!(
+        baseline.output.status.success(),
+        "{name}: baseline failed:\n{}",
+        stderr(&baseline)
+    );
     assert_eq!(
         baseline.leaks_fake_token, fixture.dumps_env,
         "{name}: baseline leaks the fake token"
@@ -606,20 +676,35 @@ fn check(fixture: &Fixture) {
             "{name}: reference failed:\n{}",
             stderr(&reference)
         );
-        assert_eq!(directives(&reference_dir), expected, "{name}: the jail changes the output");
+        assert_eq!(
+            directives(&reference_dir),
+            expected,
+            "{name}: the jail changes the output"
+        );
     }
 
     for scenario in &Scenario::ALL {
         let label = format!("{name}/{}", scenario.name());
         let target_dir = scratch.target(fixture, &scenario.name());
         let build = build(fixture, &target_dir, &Mode::Sandboxed(scenario));
-        assert_eq!(build.leaks_fake_token, scenario.leaks(fixture), "{label}: fake token leak");
+        assert_eq!(
+            build.leaks_fake_token,
+            scenario.leaks(fixture),
+            "{label}: fake token leak"
+        );
         if scenario.succeeds(fixture) {
-            assert!(build.output.status.success(), "{label}: failed:\n{}", stderr(&build));
+            assert!(
+                build.output.status.success(),
+                "{label}: failed:\n{}",
+                stderr(&build)
+            );
             assert_eq!(directives(&target_dir), expected, "{label}: output differs");
         } else {
             let works = build.output.status.success() && directives(&target_dir) == expected;
-            assert!(!works, "{label}: expected the build to fail or differ from the baseline");
+            assert!(
+                !works,
+                "{label}: expected the build to fail or differ from the baseline"
+            );
         }
     }
 }
@@ -653,7 +738,10 @@ fn output_stderr(output: &Output) -> String {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn cfg_only() {
     // Its scripts only read TARGET and CARGO_CFG_*, which the default covers.
     check(&Fixture {
@@ -666,7 +754,10 @@ fn cfg_only() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn rustc_probe() {
     check(&Fixture {
         name: "rustc-probe",
@@ -678,7 +769,10 @@ fn rustc_probe() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn system_lib() {
     // libz-sys prints a cc-rs compiler command, whose `Debug` lists the whole
     // environment.
@@ -692,7 +786,10 @@ fn system_lib() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn codegen() {
     // The generators find their data through CARGO_MANIFEST_DIR, which the
     // default grant doesn't include.
@@ -706,7 +803,10 @@ fn codegen() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn cc_toolchain() {
     check(&Fixture {
         name: "cc-toolchain",
@@ -718,7 +818,10 @@ fn cc_toolchain() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn vcs_metadata() {
     check(&Fixture {
         name: "vcs-metadata",
@@ -730,7 +833,10 @@ fn vcs_metadata() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "test-requests"), ignore = "needs `--features test-requests`")]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
 fn lang_runtime() {
     check(&Fixture {
         name: "lang-runtime",

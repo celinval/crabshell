@@ -92,11 +92,17 @@ pub fn implicit_runtime(host: &str) -> Vec<&'static str> {
         "x86_64-unknown-linux-gnu" => &[
             &["/lib64/ld-linux-x86-64.so.2"],
             &["/lib64/libc.so.6", "/lib/x86_64-linux-gnu/libc.so.6"],
-            &["/lib64/libgcc_s.so.1", "/lib/x86_64-linux-gnu/libgcc_s.so.1"],
+            &[
+                "/lib64/libgcc_s.so.1",
+                "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+            ],
         ],
         _ => &[],
     };
-    candidates.iter().flat_map(|lib| lib.iter().copied()).collect()
+    candidates
+        .iter()
+        .flat_map(|lib| lib.iter().copied())
+        .collect()
 }
 
 /// Paths every build script on `host` can read implicitly.
@@ -200,7 +206,11 @@ pub fn tighten(
     };
     let keep = |granted: Vec<String>, wanted: Vec<String>, floor: &[&str]| -> Vec<String> {
         let mut out = intersect(&granted, &wanted);
-        out.extend(granted.into_iter().filter(|entry| floor.contains(&entry.as_str())));
+        out.extend(
+            granted
+                .into_iter()
+                .filter(|entry| floor.contains(&entry.as_str())),
+        );
         dedup(out)
     };
     let network = declared.network || grants::expand_network(&grants, &declared.requests);
@@ -215,8 +225,16 @@ pub fn tighten(
             wanted(&declared.write, |f| &f.write, Kind::Paths)?,
             IMPLICIT_READ_WRITE,
         ),
-        run: keep(permissions.run, wanted(&declared.run, |f| &f.run, Kind::Paths)?, &[]),
-        env: keep(permissions.env, wanted(&declared.env, |f| &f.env, Kind::Names)?, IMPLICIT_ENV),
+        run: keep(
+            permissions.run,
+            wanted(&declared.run, |f| &f.run, Kind::Paths)?,
+            &[],
+        ),
+        env: keep(
+            permissions.env,
+            wanted(&declared.env, |f| &f.env, Kind::Names)?,
+            IMPLICIT_ENV,
+        ),
         network: permissions.network && network,
         list: permissions.list,
     })
@@ -256,7 +274,9 @@ pub fn caps(
             None => None,
         };
         let value = value.map(|value| expand_all(x, kind, &value)).transpose()?;
-        let limit = get(&config.limits).as_ref().map(|cap| expand_all(x, kind, entries(cap)));
+        let limit = get(&config.limits)
+            .as_ref()
+            .map(|cap| expand_all(x, kind, entries(cap)));
         Ok(match (value, limit.transpose()?) {
             (Some(value), Some(limit)) => Some(intersect(&value, &limit)),
             (value, limit) => value.or(limit),
@@ -287,19 +307,32 @@ pub fn cap(
     pkg: &PackageContext,
 ) -> (Permissions, Vec<String>) {
     let mut removed = Vec::new();
-    let mut clamp = |field: &str,
-                     granted: Vec<String>,
-                     cap: &Option<Vec<String>>,
-                     keep: &[&str]| {
-        let Some(cap) = cap else { return granted };
-        let mut out = intersect(&granted, cap);
-        out.extend(granted.iter().filter(|entry| keep.contains(&entry.as_str())).cloned());
-        let out = dedup(out);
-        removed.extend(granted.iter().filter(|e| !out.contains(e)).map(|e| format!("{field} {e}")));
-        out
-    };
+    let mut clamp =
+        |field: &str, granted: Vec<String>, cap: &Option<Vec<String>>, keep: &[&str]| {
+            let Some(cap) = cap else { return granted };
+            let mut out = intersect(&granted, cap);
+            out.extend(
+                granted
+                    .iter()
+                    .filter(|entry| keep.contains(&entry.as_str()))
+                    .cloned(),
+            );
+            let out = dedup(out);
+            removed.extend(
+                granted
+                    .iter()
+                    .filter(|e| !out.contains(e))
+                    .map(|e| format!("{field} {e}")),
+            );
+            out
+        };
     let capped = Permissions {
-        read: clamp("read", permissions.read, &caps.read, &implicit_read(&pkg.host)),
+        read: clamp(
+            "read",
+            permissions.read,
+            &caps.read,
+            &implicit_read(&pkg.host),
+        ),
         write: clamp("write", permissions.write, &caps.write, IMPLICIT_READ_WRITE),
         run: clamp("run", permissions.run, &caps.run, &[]),
         env: clamp("env", permissions.env, &caps.env, IMPLICIT_ENV),
@@ -323,8 +356,11 @@ fn set_list(
         None => set_list(rest, get),
         Some(ListField::Override(value)) => Some(dedup(value.clone())),
         Some(ListField::Inherit { inherit, value }) => {
-            let mut out =
-                if *inherit { set_list(rest, get).unwrap_or_default() } else { Vec::new() };
+            let mut out = if *inherit {
+                set_list(rest, get).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             out.extend(value.iter().cloned());
             Some(dedup(out))
         }
@@ -333,8 +369,17 @@ fn set_list(
 
 /// The tables applying to `pkg`, most specific first.
 fn chain<'a>(config: &'a SandboxConfig, pkg: &PackageContext) -> Vec<&'a Fields> {
-    let category = if pkg.is_local { &config.local } else { &config.external };
-    config.package.get(&pkg.name).into_iter().chain([category]).collect()
+    let category = if pkg.is_local {
+        &config.local
+    } else {
+        &config.external
+    };
+    config
+        .package
+        .get(&pkg.name)
+        .into_iter()
+        .chain([category])
+        .collect()
 }
 
 /// The entries of either concrete list that the other list covers.
@@ -369,7 +414,11 @@ fn lookup_list(
         None => lookup_list(rest, get, default),
         Some(ListField::Override(value)) => dedup(value.clone()),
         Some(ListField::Inherit { inherit, value }) => {
-            let mut out = if *inherit { lookup_list(rest, get, default) } else { Vec::new() };
+            let mut out = if *inherit {
+                lookup_list(rest, get, default)
+            } else {
+                Vec::new()
+            };
             out.extend(value.iter().cloned());
             dedup(out)
         }
@@ -418,9 +467,11 @@ mod tests {
 
         fn names(&self, entry: &str) -> Vec<String> {
             match glob::Pattern::new(entry) {
-                Ok(pattern) if entry.contains('*') => {
-                    NAMES.iter().filter(|n| pattern.matches(n)).map(|n| n.to_string()).collect()
-                }
+                Ok(pattern) if entry.contains('*') => NAMES
+                    .iter()
+                    .filter(|n| pattern.matches(n))
+                    .map(|n| n.to_string())
+                    .collect(),
                 _ => vec![entry.to_string()],
             }
         }
@@ -446,21 +497,36 @@ mod tests {
     const HOST: &str = "x86_64-unknown-linux-gnu";
 
     fn external(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_local: false, host: HOST.to_string() }
+        PackageContext {
+            name: name.to_string(),
+            is_local: false,
+            host: HOST.to_string(),
+        }
     }
 
     fn local(name: &str) -> PackageContext {
-        PackageContext { name: name.to_string(), is_local: true, host: HOST.to_string() }
+        PackageContext {
+            name: name.to_string(),
+            is_local: true,
+            host: HOST.to_string(),
+        }
     }
 
     /// Every read path implicit access grants.
     fn implicit() -> Vec<String> {
-        implicit_read(HOST).into_iter().map(str::to_string).collect()
+        implicit_read(HOST)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
     }
 
     /// The default read grant followed by implicit access.
     fn default_read() -> Vec<String> {
-        DEFAULT_READ.iter().map(|path| path.to_string()).chain(implicit()).collect()
+        DEFAULT_READ
+            .iter()
+            .map(|path| path.to_string())
+            .chain(implicit())
+            .collect()
     }
 
     /// The resolved env minus implicit access.
@@ -474,9 +540,16 @@ mod tests {
     fn no_policy_grants_the_defaults_and_implicit_access() {
         let resolved = resolve(&SandboxConfig::default(), &external("any"));
         // The default's patterns expand to the names actually set.
-        let expected = ["TARGET", "HOST", "CARGO_CFG_TARGET_OS", "CARGO_CFG_SANITIZE"];
-        let expected: Vec<&str> =
-            expected.into_iter().chain(["CARGO_FEATURE_STD", "OUT_DIR"]).collect();
+        let expected = [
+            "TARGET",
+            "HOST",
+            "CARGO_CFG_TARGET_OS",
+            "CARGO_CFG_SANITIZE",
+        ];
+        let expected: Vec<&str> = expected
+            .into_iter()
+            .chain(["CARGO_FEATURE_STD", "OUT_DIR"])
+            .collect();
         assert_eq!(resolved.env, expected);
         assert_eq!(resolved.read, default_read());
         assert_eq!(resolved.write, ["/dev/null"]);
@@ -494,10 +567,17 @@ mod tests {
 
     #[test]
     fn requests_narrow_the_default_env_grant() {
-        let declared = Declared { env: vec!["CARGO_CFG_TARGET_OS".into()], ..Declared::default() };
+        let declared = Declared {
+            env: vec!["CARGO_CFG_TARGET_OS".into()],
+            ..Declared::default()
+        };
         let none = SandboxConfig::default();
-        let tightened =
-            tighten(resolve(&none, &external("dep")), &declared, &external("dep"), &none);
+        let tightened = tighten(
+            resolve(&none, &external("dep")),
+            &declared,
+            &external("dep"),
+            &none,
+        );
         assert_eq!(tightened.env, ["CARGO_CFG_TARGET_OS", "OUT_DIR"]);
     }
 
@@ -668,8 +748,12 @@ mod tests {
             requests: vec![],
         };
 
-        let tightened =
-            tighten(resolve(&config, &external("dep")), &declared, &external("dep"), &config);
+        let tightened = tighten(
+            resolve(&config, &external("dep")),
+            &declared,
+            &external("dep"),
+            &config,
+        );
         let mut expected = vec!["/usr/include".to_string()];
         expected.extend(implicit());
         assert_eq!(tightened.read, expected);
@@ -691,13 +775,26 @@ mod tests {
         );
         assert_eq!(
             granted_env(&capped, &external("dep")),
-            ["CARGO_CFG_TARGET_OS", "CARGO_CFG_SANITIZE", "CARGO_PKG_NAME"]
+            [
+                "CARGO_CFG_TARGET_OS",
+                "CARGO_CFG_SANITIZE",
+                "CARGO_PKG_NAME"
+            ]
         );
 
         let broad = config("[external]\nenv = [\"*\"]\n");
-        let declared = Declared { env: vec!["TARGET".into()], ..Declared::default() };
+        let declared = Declared {
+            env: vec!["TARGET".into()],
+            ..Declared::default()
+        };
         assert_eq!(
-            tighten(resolve(&broad, &external("dep")), &declared, &external("dep"), &broad).env,
+            tighten(
+                resolve(&broad, &external("dep")),
+                &declared,
+                &external("dep"),
+                &broad
+            )
+            .env,
             ["TARGET", "OUT_DIR"]
         );
     }
@@ -730,7 +827,10 @@ mod tests {
         );
         let resolved = resolve(&config, &external("dep"));
         assert_eq!(resolved.run, ["pkgconf"]);
-        assert_eq!(granted_env(&config, &external("dep")), ["TARGET", "PKG_CONFIG_PATH"]);
+        assert_eq!(
+            granted_env(&config, &external("dep")),
+            ["TARGET", "PKG_CONFIG_PATH"]
+        );
     }
 
     #[test]
@@ -761,8 +861,12 @@ mod tests {
             requests: vec!["pkg-config".into()],
             ..Declared::default()
         };
-        let tightened =
-            tighten(resolve(&config, &external("dep")), &declared, &external("dep"), &config);
+        let tightened = tighten(
+            resolve(&config, &external("dep")),
+            &declared,
+            &external("dep"),
+            &config,
+        );
         // Only pkg-config's tools survive; cc's are dropped.
         assert_eq!(tightened.run, ["pkg-config", "pkgconf"]);
         assert!(tightened.env.contains(&"ZLIB_STATIC".to_string()));
@@ -803,8 +907,12 @@ mod tests {
             ..Declared::default()
         };
         let none = SandboxConfig::default();
-        let tightened =
-            tighten(resolve(&none, &external("dep")), &declared, &external("dep"), &none);
+        let tightened = tighten(
+            resolve(&none, &external("dep")),
+            &declared,
+            &external("dep"),
+            &none,
+        );
         let mut expected = vec![":manifest_dir/build/probe.rs".to_string()];
         expected.extend(implicit());
         assert_eq!(tightened.read, expected);

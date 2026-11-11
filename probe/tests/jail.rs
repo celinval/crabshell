@@ -45,7 +45,10 @@ fn listing_grants_no_reads() {
     let secret = dir.path().join("secret");
     std::fs::write(&secret, "hunter2").unwrap();
 
-    assert!(jailed(&["--list", "/"], &["unreadable", secret.to_str().unwrap()]));
+    assert!(jailed(
+        &["--list", "/"],
+        &["unreadable", secret.to_str().unwrap()]
+    ));
 }
 
 #[test]

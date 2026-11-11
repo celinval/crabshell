@@ -64,7 +64,11 @@ fn main() -> ExitCode {
         }
     };
 
-    if passed { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if passed {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn can_create(dir: &Path) -> bool {
@@ -99,12 +103,21 @@ fn syscall_fails(syscall: Syscall) -> bool {
             // SAFETY: a null params pointer makes the kernel fail with EFAULT
             // unless something rejects the syscall first; nothing is set up.
             Syscall::IoUringSetup => unsafe {
-                libc::syscall(libc::SYS_io_uring_setup, 1, std::ptr::null_mut::<libc::c_void>())
+                libc::syscall(
+                    libc::SYS_io_uring_setup,
+                    1,
+                    std::ptr::null_mut::<libc::c_void>(),
+                )
             },
             #[cfg(target_arch = "x86_64")]
             // SAFETY: `socket` takes no pointers; a created socket is closed below.
             Syscall::X32Socket => unsafe {
-                libc::syscall(0x4000_0000 | libc::SYS_socket, libc::AF_INET, libc::SOCK_STREAM, 0)
+                libc::syscall(
+                    0x4000_0000 | libc::SYS_socket,
+                    libc::AF_INET,
+                    libc::SOCK_STREAM,
+                    0,
+                )
             },
             #[cfg(not(target_arch = "x86_64"))]
             Syscall::X32Socket => return true,

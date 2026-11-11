@@ -24,7 +24,9 @@ fn root() -> PathBuf {
 
 /// Generate the schema for `T`, as draft-07 for the widest editor support.
 fn generate<T: JsonSchema>(title: &str) -> Value {
-    let mut schema = SchemaSettings::draft07().into_generator().into_root_schema_for::<T>();
+    let mut schema = SchemaSettings::draft07()
+        .into_generator()
+        .into_root_schema_for::<T>();
     schema.insert("title".into(), title.into());
     let mut schema = serde_json::to_value(schema).unwrap();
     drop_null(&mut schema);
@@ -63,7 +65,10 @@ fn drop_null(value: &mut Value) {
 fn schemas() -> [(&'static str, Value); 2] {
     [
         (SANDBOX, generate::<SandboxConfig>("crabshell sandbox.toml")),
-        (BUILD_RS, generate::<Declared>("crabshell [package.metadata.build-rs]")),
+        (
+            BUILD_RS,
+            generate::<Declared>("crabshell [package.metadata.build-rs]"),
+        ),
     ]
 }
 
@@ -83,7 +88,10 @@ fn schemas_are_up_to_date() {
             std::fs::write(&path, text).unwrap();
         } else {
             let current = std::fs::read_to_string(&path).unwrap_or_default();
-            assert!(current == text, "{file} is stale: rerun with UPDATE_SCHEMA=1");
+            assert!(
+                current == text,
+                "{file} is stale: rerun with UPDATE_SCHEMA=1"
+            );
         }
     }
 }
@@ -95,7 +103,12 @@ fn assert_valid(schema: &Value, path: &Path, instance: &Value) {
         .iter_errors(instance)
         .map(|err| format!("{} at {}", err, err.instance_path()))
         .collect();
-    assert!(errors.is_empty(), "{}:\n{}", path.display(), errors.join("\n"));
+    assert!(
+        errors.is_empty(),
+        "{}:\n{}",
+        path.display(),
+        errors.join("\n")
+    );
 }
 
 fn toml(path: &Path) -> Value {
@@ -134,7 +147,11 @@ fn fixtures_and_builtins_match_the_schemas() {
             }
         }
     }
-    assert!(checked > 0, "no fixtures found under {}", fixtures.display());
+    assert!(
+        checked > 0,
+        "no fixtures found under {}",
+        fixtures.display()
+    );
 }
 
 #[test]
@@ -147,7 +164,9 @@ fn the_schemas_reject_unknown_keys_and_bad_names() {
     assert!(reject("[grant.Bad]\nrun = []\n"));
     assert!(reject("[variables]\nBad = \"/usr\"\n"));
     assert!(reject("[package.\"*\"]\nenv = []\n"));
-    assert!(reject("[external]\nread = { inherit = true, valu = [\"/x\"] }\n"));
+    assert!(reject(
+        "[external]\nread = { inherit = true, valu = [\"/x\"] }\n"
+    ));
     assert!(!reject(
         "[external]\ngrants = [\"cc\"]\nread = { inherit = true, value = [\"/x\"] }\n"
     ));

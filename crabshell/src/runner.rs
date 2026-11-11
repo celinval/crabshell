@@ -30,10 +30,12 @@ pub fn command<S: AsRef<OsStr>>(program: &S, args: &[S], allowed_env: &[String])
     let mut cmd = Command::new(program.as_ref());
     cmd.args(args).env_clear();
     let allowed = |key: &str| {
-        allowed_env.iter().any(|entry| match entry.strip_suffix('*') {
-            Some(prefix) => key.starts_with(prefix),
-            None => key == entry,
-        })
+        allowed_env
+            .iter()
+            .any(|entry| match entry.strip_suffix('*') {
+                Some(prefix) => key.starts_with(prefix),
+                None => key == entry,
+            })
     };
     for (key, value) in std::env::vars_os() {
         if key.to_str().is_some_and(allowed) {
@@ -113,7 +115,13 @@ impl Grants {
         for entry in &permissions.list {
             list.extend(expand(entry)?);
         }
-        Ok(Self { read, exec, write, list, tmp })
+        Ok(Self {
+            read,
+            exec,
+            write,
+            list,
+            tmp,
+        })
     }
 }
 
@@ -137,7 +145,9 @@ fn private_tmp(out_dir: &Path) -> io::Result<PathBuf> {
 /// The path a resolved entry names; resolution already expanded patterns.
 fn expand(entry: &str) -> io::Result<Vec<PathBuf>> {
     if !Path::new(entry).is_absolute() {
-        return Err(io::Error::other(format!("`{entry}`: expected an absolute path")));
+        return Err(io::Error::other(format!(
+            "`{entry}`: expected an absolute path"
+        )));
     }
     Ok(vec![PathBuf::from(entry)])
 }
@@ -164,8 +174,9 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
     };
 
     let abi = ABI::V6;
-    let mut ruleset =
-        Ruleset::default().handle_access(AccessFs::from_all(abi)).map_err(io::Error::other)?;
+    let mut ruleset = Ruleset::default()
+        .handle_access(AccessFs::from_all(abi))
+        .map_err(io::Error::other)?;
     if !network {
         ruleset = ruleset
             .handle_access(AccessNet::BindTcp | AccessNet::ConnectTcp)
@@ -175,7 +186,10 @@ fn confine(grants: &Grants, network: bool) -> io::Result<()> {
         .create()
         .and_then(|r| r.add_rules(path_beneath_rules(&grants.read, AccessFs::from_read(abi))))
         .and_then(|r| {
-            r.add_rules(path_beneath_rules(&grants.exec, AccessFs::Execute | AccessFs::ReadFile))
+            r.add_rules(path_beneath_rules(
+                &grants.exec,
+                AccessFs::Execute | AccessFs::ReadFile,
+            ))
         })
         .and_then(|r| r.add_rules(path_beneath_rules(&grants.write, AccessFs::from_write(abi))))
         .and_then(|r| r.add_rules(path_beneath_rules(&grants.list, AccessFs::ReadDir)))
@@ -223,8 +237,13 @@ fn deny_network() -> io::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(io::Error::other)?;
     // An empty rule list matches the syscall unconditionally.
-    let rules = BTreeMap::from([(libc::SYS_socket, sockets), (libc::SYS_io_uring_setup, vec![])]);
-    let arch = std::env::consts::ARCH.try_into().map_err(io::Error::other)?;
+    let rules = BTreeMap::from([
+        (libc::SYS_socket, sockets),
+        (libc::SYS_io_uring_setup, vec![]),
+    ]);
+    let arch = std::env::consts::ARCH
+        .try_into()
+        .map_err(io::Error::other)?;
     let filter =
         SeccompFilter::new(rules, SeccompAction::Allow, denied, arch).map_err(io::Error::other)?;
     let program: BpfProgram = filter.try_into().map_err(io::Error::other)?;
@@ -241,12 +260,27 @@ fn deny_x32() -> seccompiler::BpfProgram {
     use seccompiler::sock_filter;
 
     const X32_SYSCALL_BIT: u32 = 0x4000_0000;
-    let op = |code: u32, jt: u8, jf: u8, k: u32| sock_filter { code: code as u16, jt, jf, k };
+    let op = |code: u32, jt: u8, jf: u8, k: u32| sock_filter {
+        code: code as u16,
+        jt,
+        jf,
+        k,
+    };
     vec![
         // The syscall number is the first field of `seccomp_data`.
         op(libc::BPF_LD | libc::BPF_W | libc::BPF_ABS, 0, 0, 0),
-        op(libc::BPF_JMP | libc::BPF_JSET | libc::BPF_K, 0, 1, X32_SYSCALL_BIT),
-        op(libc::BPF_RET | libc::BPF_K, 0, 0, libc::SECCOMP_RET_ERRNO | libc::EACCES as u32),
+        op(
+            libc::BPF_JMP | libc::BPF_JSET | libc::BPF_K,
+            0,
+            1,
+            X32_SYSCALL_BIT,
+        ),
+        op(
+            libc::BPF_RET | libc::BPF_K,
+            0,
+            0,
+            libc::SECCOMP_RET_ERRNO | libc::EACCES as u32,
+        ),
         op(libc::BPF_RET | libc::BPF_K, 0, 0, libc::SECCOMP_RET_ALLOW),
     ]
 }

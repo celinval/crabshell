@@ -131,8 +131,18 @@ const GRANTED: [(&str, &str); 2] = [("CRABSHELL_GRANTED", "yes"), ("CRABSHELL_UN
 fn propagates_only_granted_env() {
     let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_UNGRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_UNGRANTED"]
+    ));
 }
 
 #[test]
@@ -147,8 +157,18 @@ fn category_follows_the_manifest_location() {
         "#,
     );
 
-    assert!(build.check("mine", Origin::Local, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
+    assert!(build.check(
+        "mine",
+        Origin::Local,
+        &GRANTED,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_GRANTED"]
+    ));
 }
 
 #[test]
@@ -169,7 +189,12 @@ fn named_package_overrides_its_category() {
         &GRANTED,
         &["env-present", "CRABSHELL_GRANTED"]
     ));
-    assert!(build.check("other", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
+    assert!(build.check(
+        "other",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_GRANTED"]
+    ));
 }
 
 #[test]
@@ -184,7 +209,12 @@ fn limits_clamp_a_category_grant() {
         "#,
     );
 
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_GRANTED"]
+    ));
 }
 
 #[test]
@@ -198,7 +228,12 @@ fn out_dir_is_always_granted() {
 fn a_rejected_config_fails_the_build() {
     let build = Build::new("[package.\"*\"]\nenv = []\n");
 
-    assert!(!build.check("dep", Origin::External, &GRANTED, &["env-absent", "ANYTHING"]));
+    assert!(!build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "ANYTHING"]
+    ));
 }
 
 #[test]
@@ -255,7 +290,12 @@ fn ungranted_paths_are_unreadable() {
     let build = Build::new("[external]\n");
     let secret = build.secret();
 
-    assert!(build.check("dep", Origin::External, &[], &["unreadable", secret.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["unreadable", secret.to_str().unwrap()]
+    ));
 }
 
 #[test]
@@ -269,7 +309,12 @@ fn read_grants_are_read_only() {
     )
     .unwrap();
 
-    assert!(build.check("dep", Origin::External, &[], &["readable", secret.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["readable", secret.to_str().unwrap()]
+    ));
     assert!(build.check("dep", Origin::External, &[], &["unwritable", dir]));
 }
 
@@ -286,8 +331,18 @@ fn the_crate_root_is_readable_and_out_dir_writable() {
         &[],
         &["readable", manifest.join("Cargo.toml").to_str().unwrap()]
     ));
-    assert!(build.check("dep", Origin::External, &[], &["unwritable", manifest.to_str().unwrap()]));
-    assert!(build.check("dep", Origin::External, &[], &["writable", out_dir.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["unwritable", manifest.to_str().unwrap()]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["writable", out_dir.to_str().unwrap()]
+    ));
 }
 
 #[test]
@@ -296,8 +351,18 @@ fn only_granted_programs_can_run() {
     let path = std::env::var("PATH").unwrap();
     let env = [("PATH", path.as_str())];
 
-    assert!(build.check("dep", Origin::External, &env, &["can-exec", "/usr/bin/true"]));
-    assert!(build.check("dep", Origin::External, &env, &["cannot-exec", "/usr/bin/false"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["can-exec", "/usr/bin/true"]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["cannot-exec", "/usr/bin/false"]
+    ));
 }
 
 #[test]
@@ -352,8 +417,18 @@ fn a_declaration_tightens_the_grant() {
     )
     .unwrap();
 
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_UNGRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_UNGRANTED"]
+    ));
 }
 
 #[test]
@@ -371,8 +446,18 @@ fn out_dir_and_tmpdir_are_write_only() {
     let out_dir = build.out_dir();
     let tmp = build.dir.path().join("crabshell-tmp");
 
-    assert!(build.check("dep", Origin::External, &[], &["write-only", out_dir.to_str().unwrap()]));
-    assert!(build.check("dep", Origin::External, &[], &["write-only", tmp.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["write-only", out_dir.to_str().unwrap()]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["write-only", tmp.to_str().unwrap()]
+    ));
 }
 
 #[test]
@@ -381,8 +466,18 @@ fn read_grants_reach_out_dir_and_tmpdir() {
     let out_dir = build.out_dir();
     let tmp = build.dir.path().join("crabshell-tmp");
 
-    assert!(build.check("dep", Origin::External, &[], &["read-back", out_dir.to_str().unwrap()]));
-    assert!(build.check("dep", Origin::External, &[], &["read-back", tmp.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["read-back", out_dir.to_str().unwrap()]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["read-back", tmp.to_str().unwrap()]
+    ));
 }
 
 #[test]
@@ -390,7 +485,12 @@ fn write_grants_no_read_access() {
     let build = Build::new("[external]\nwrite = [\":manifest_dir\"]\nread = []\n");
     let manifest = build.manifest_dir("dep", &Origin::External);
 
-    assert!(build.check("dep", Origin::External, &[], &["write-only", manifest.to_str().unwrap()]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &[],
+        &["write-only", manifest.to_str().unwrap()]
+    ));
 }
 
 /// A requests file stands in for a crate's `[package.metadata.build-rs]`.
@@ -403,10 +503,25 @@ fn injected_requests_tighten_the_grant() {
     let mut env = GRANTED.to_vec();
     env.push(("CRABSHELL_REQUESTS", requests.to_str().unwrap()));
 
-    assert!(build.check("dep", Origin::External, &env, &["env-present", "CRABSHELL_GRANTED"]));
-    assert!(build.check("dep", Origin::External, &env, &["env-absent", "CRABSHELL_UNGRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["env-absent", "CRABSHELL_UNGRANTED"]
+    ));
     // Packages the file doesn't list keep the consumer's grant.
-    assert!(build.check("other", Origin::External, &env, &["env-present", "CRABSHELL_UNGRANTED"]));
+    assert!(build.check(
+        "other",
+        Origin::External,
+        &env,
+        &["env-present", "CRABSHELL_UNGRANTED"]
+    ));
 }
 
 #[cfg(not(feature = "test-requests"))]
@@ -471,12 +586,24 @@ fn the_user_config_caps_the_project_policy() {
     let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
     build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
-    let output =
-        build.run("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_UNGRANTED"]);
+    let output = build.run(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_UNGRANTED"],
+    );
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("narrows dep's policy: env CRABSHELL_UNGRANTED"), "{stdout}");
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
+    assert!(
+        stdout.contains("narrows dep's policy: env CRABSHELL_UNGRANTED"),
+        "{stdout}"
+    );
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
 }
 
 /// Fields the user config doesn't name stay as the project sets them.
@@ -487,7 +614,12 @@ fn the_user_config_leaves_unnamed_fields_alone() {
     let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\"]\nnetwork = true\n");
     build.user_config("[limits]\nnetwork = false\n");
 
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", "CRABSHELL_GRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-present", "CRABSHELL_GRANTED"]
+    ));
     assert!(build.check("dep", Origin::External, &GRANTED, &["no-connect", &addr]));
 }
 
@@ -497,5 +629,10 @@ fn the_user_config_cannot_widen() {
     let build = Build::new("[external]\nenv = []\n");
     build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
-    assert!(build.check("dep", Origin::External, &GRANTED, &["env-absent", "CRABSHELL_GRANTED"]));
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &GRANTED,
+        &["env-absent", "CRABSHELL_GRANTED"]
+    ));
 }

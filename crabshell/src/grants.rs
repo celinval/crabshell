@@ -65,14 +65,20 @@ pub fn expand(
 
 /// Whether any grant named in `names` grants network access.
 pub fn expand_network(grants: &Grants, names: &[String]) -> bool {
-    names.iter().filter_map(|name| grants.get(name)).any(|grant| grant.network == Some(true))
+    names
+        .iter()
+        .filter_map(|name| grants.get(name))
+        .any(|grant| grant.network == Some(true))
 }
 
 /// Apply `overrides` to `base` field by field.
 fn merge(base: Fields, overrides: &Fields) -> Fields {
     let list = |base: Option<ListField>, over: &Option<ListField>| match over {
         None => base,
-        Some(ListField::Inherit { inherit: true, value }) => {
+        Some(ListField::Inherit {
+            inherit: true,
+            value,
+        }) => {
             let mut merged: Vec<String> = base.as_ref().map(entries).unwrap_or_default().to_vec();
             merged.extend(value.iter().cloned());
             Some(ListField::Override(merged))
@@ -107,7 +113,11 @@ mod tests {
     #[test]
     fn builtins_parse_and_have_valid_names() {
         let grants = builtin();
-        assert!(["cc", "pkg-config", "rustc"].iter().all(|name| grants.contains_key(*name)));
+        assert!(
+            ["cc", "pkg-config", "rustc"]
+                .iter()
+                .all(|name| grants.contains_key(*name))
+        );
         assert!(grants.keys().all(|name| is_valid_name(name)));
         assert!(grants.values().all(|grant| grant.grants.is_none()));
     }
@@ -124,13 +134,17 @@ mod tests {
     #[test]
     fn inherit_extends_a_builtin_field() {
         let toml = "[grant.pkg-config]\nrun = { inherit = true, value = [\"rpm\"] }\n";
-        let run = expand(&effective(&config(toml)), &["pkg-config".into()], |f| &f.run);
+        let run = expand(&effective(&config(toml)), &["pkg-config".into()], |f| {
+            &f.run
+        });
         assert_eq!(run, ["pkg-config", "pkgconf", "rpm"]);
     }
 
     #[test]
     fn config_can_define_new_grants() {
-        let grants = effective(&config("[grant.protoc]\nrun = [\"protoc\"]\nnetwork = false\n"));
+        let grants = effective(&config(
+            "[grant.protoc]\nrun = [\"protoc\"]\nnetwork = false\n",
+        ));
         assert_eq!(expand(&grants, &["protoc".into()], |f| &f.run), ["protoc"]);
         assert!(!expand_network(&grants, &["protoc".into()]));
     }

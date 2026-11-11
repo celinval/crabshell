@@ -25,7 +25,10 @@ fn main() -> ExitCode {
     };
 
     let err = runner::exec(&program, &args, &permissions);
-    eprintln!("crabshell: failed to run {}: {err}", program.to_string_lossy());
+    eprintln!(
+        "crabshell: failed to run {}: {err}",
+        program.to_string_lossy()
+    );
     ExitCode::FAILURE
 }
 
@@ -70,7 +73,9 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         host: std::env::var("HOST").unwrap_or_default(),
     };
     let variables = paths::Variables::new(&config.variables, |name| std::env::var_os(name));
-    let names = std::env::vars_os().filter_map(|(name, _)| name.into_string().ok()).collect();
+    let names = std::env::vars_os()
+        .filter_map(|(name, _)| name.into_string().ok())
+        .collect();
     let x = paths::Expander::new(variables, names);
     let permissions = policy::resolve(&config, &pkg, &x)?;
     let declared = match injected(&pkg.name)? {

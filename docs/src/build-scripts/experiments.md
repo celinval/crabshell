@@ -147,7 +147,7 @@ What the requests cost, per build script:
 
 | Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
 |---|---:|---|---|---:|
-| `cfg-only` | 22 | 0–6 | – | 0 |
+| `cfg-only` | 36 | 0–6 | – | 0 |
 | `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
 | `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 46 | 0–20 | `rustc` | 0 |
@@ -340,7 +340,14 @@ What the requests cost, per build script:
   kvm-ioctls, wee_alloc), heapless (embassy-time-queue-utils),
   portable-atomic (atomic-time), bare-metal (cortex-m, panic-probe,
   nrf-pac), slotmap (ic-cdk-executor) and proc-macro2 (anything using
-  syn).
+  syn). Resolving the 184 crates of the category no fixture covers yet, for
+  this host (one is yanked), leaves 15 whose build scripts all stay within
+  the default grant: 12 ICU4X data crates, dashu-int, scuffle-workspace-hack
+  and z3, which needs `pkg-config`. 137 of the others pull proc-macro2, 115
+  libc, 85 serde_core, 72 thiserror and 64 semver. Beyond the crates above,
+  the probe sits in anyhow (wai-bindgen-gen-rust-wasm), rustversion
+  (gxhash), num-traits through autocfg (embassy-hal-internal,
+  range-set-blaze) and libm (wasmtime-internal-core).
 - **Denying an `OUT_DIR` listing is silent.** scratch empties its `OUT_DIR`
   with `remove_dir_all` and ignores errors. `OUT_DIR` is write-only, so
   opening it fails and stale contents stay. A fresh build looks the same, so
@@ -359,7 +366,16 @@ What the requests cost, per build script:
   native-tls, curl, hyper-openssl) read `DEP_OPENSSL_*` the same way, and
   would need it requested and granted; they pull `-sys` crates anyway.
 - **Empty build scripts cost nothing.** embassy-time-driver (for its `links`
-  key) and nextest-workspace-hack run `fn main() {}` and request nothing.
+  key), nextest-workspace-hack and scuffle-workspace-hack run `fn main() {}`
+  and request nothing; dashu-int's only declares a cfg its own test workflow
+  sets through `RUSTFLAGS`.
+- **One knob can span a whole crate family.** ICU4X publishes a data crate
+  per component, each with the same ten-line build script reading
+  `ICU4X_DATA_DIR`; the fixture now builds 13 of them, across the 1.x and 2.x
+  generations. Requests are per package, so `requests.toml` repeats the
+  entry 13 times, while the consumer grants the name once for all external
+  crates. Nothing in the format factors a request over a family, the way a
+  named grant factors a policy.
 
 ### More generators
 

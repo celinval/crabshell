@@ -14,8 +14,44 @@ env = ["TARGET", "CARGO_CFG_SANITIZE"]
 [package.crossbeam-deque]
 env = ["TARGET", "CARGO_CFG_SANITIZE"]
 
-# Optional override of the bundled data.
+# Optional override of the bundled data, in every ICU4X data crate.
 [package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_calendar_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_casemap_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_collator_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_datetime_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_decimal_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_experimental_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_list_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_locale_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_locid_transform_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_plurals_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_time_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_timezone_data]
 env = ["ICU4X_DATA_DIR"]
 
 # Only emit directives and write OUT_DIR, which the floor covers.
@@ -72,8 +108,10 @@ env = ["DEP_RB_ENCODED_CARGO_ARGS"]
 read = [":out_dir"]
 
 # Read nothing: lalrpop-util checks the build host's `std::env::consts::OS`,
-# the others are empty.
+# dashu-int only declares a cfg the test workflow sets, the others are empty.
 [package.lalrpop-util]
+[package.dashu-int]
 [package.decancer]
 [package.embassy-time-driver]
 [package.nextest-workspace-hack]
+[package.scuffle-workspace-hack]

@@ -15,10 +15,25 @@ cortex-m-semihosting = "0.6"
 crossbeam-epoch = "0.9"
 crossbeam-utils = "0.8"
 current_platform = "0.2"
+dashu-int = "0.6"
 decancer = "4"
 embassy-time-driver = "0.2"
 iceoryx2-pal-configuration = "0.10"
+# ICU4X's data crates, one per component: the same build script in both the
+# 1.x and the 2.x generation.
+icu_calendar_data = "2"
+icu_casemap_data = "2"
+icu_collator_data = "2"
+icu_datetime_data = "2"
+icu_decimal_data = "2"
+icu_experimental_data = "0.6"
+icu_list_data = "2"
+icu_locale_data = "2"
+icu_locid_transform_data = "1.5"
+icu_plurals_data = "2"
 icu_properties_data = "2"
+icu_time_data = "2"
+icu_timezone_data = "1.5"
 lalrpop-util = "0.23"
 nextest-workspace-hack = "0.1"
 # objc2 refuses non-Apple targets unless a GNUstep runtime is selected.
@@ -26,6 +41,7 @@ objc2 = { version = "0.6", features = ["gnustep-1-7"] }
 rayon-core = "1"
 rb-sys-env = "0.2"
 scratch = "1"
+scuffle-workspace-hack = "0.1"
 # Its default `serde` feature pulls serde, whose build script runs rustc.
 syscalls = { version = "0.8", default-features = false }
 tiny-keccak = { version = "2", features = ["sha3"] }

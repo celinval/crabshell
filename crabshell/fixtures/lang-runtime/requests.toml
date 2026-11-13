@@ -6,20 +6,25 @@
 # (`PYO3_PYTHON`, `VIRTUAL_ENV`, ...) come with the `python` grant.
 
 # Runs the interpreter and passes its configuration on to pyo3 as
-# DEP_PYTHON_PYO3_CONFIG.
+# DEP_PYTHON_PYO3_CONFIG. Its own features decide how Python is linked, so it
+# reads them back out of the environment: without
+# CARGO_FEATURE_EXTENSION_MODULE it links libpython even for an extension
+# module.
 [package.pyo3-ffi]
 requests = ["python", "rustc"]
 env = [
     "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_PKG_VERSION", "TARGET",
     "UNSAFE_PYO3_SKIP_VERSION_CHECK",
+    "CARGO_FEATURE_EXTENSION_MODULE", "CARGO_FEATURE_ABI3", "CARGO_FEATURE_ABI3T",
 ]
 
 [package.pyo3]
 requests = ["rustc"]
-env = ["DEP_PYTHON_PYO3_CONFIG", "PYO3_BUILD_EXTENSION_MODULE", "PYO3_WIP_NO_STD", "TARGET"]
-
-[package.pyo3-macros-backend]
-env = ["PYO3_WIP_NO_STD"]
+env = [
+    "DEP_PYTHON_PYO3_CONFIG", "PYO3_BUILD_EXTENSION_MODULE", "PYO3_WIP_NO_STD", "TARGET",
+    "CARGO_FEATURE_EXTENSION_MODULE", "CARGO_FEATURE_ABI3", "CARGO_FEATURE_ABI3T",
+    "CARGO_FEATURE_AUTO_INITIALIZE",
+]
 
 # Writes the target triple into OUT_DIR, and checks the rustc version.
 [package.target-lexicon]
@@ -53,6 +58,15 @@ requests = ["rustc"]
 # or pyo3 pass on, and turns it into cfgs. Nothing runs the interpreter.
 [package.numpy]
 env = ["DEP_PYTHON_PYO3_CONFIG", "DEP_PYO3_PYTHON_PYO3_CONFIG"]
+
+# Another pyo3 user, which also emits a cfg for a second copy of its FFT
+# kernels. It reads CARGO_CFG_TARGET_FEATURE with `unwrap_or_default`, so a
+# request that leaves it out silently drops that cfg.
+[package.malachite-nz]
+env = [
+    "DEP_PYTHON_PYO3_CONFIG", "DEP_PYO3_PYTHON_PYO3_CONFIG",
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "CARGO_FEATURE_STD",
+]
 
 # JNI: picks the thread-attach guard by target OS, with a Windows override.
 [package.jni]
@@ -94,12 +108,41 @@ env = ["TEST_SWIFT_RS"]
 read = [":manifest_dir/src/glean.udl", ":manifest_dir/Cargo.toml"]
 env = ["UNIFFI_FORCE_CONTRACT_VERSION"]
 
+# Only emits a check-cfg here. Its `python` feature adds the cfg that takes
+# BLAS from SciPy, and its `buildinfo` feature runs vergen's build, cargo,
+# rustc and sysinfo builders: `$RUSTC -vV`, the host's name, user, memory and
+# CPU, and `cargo metadata`, which no grant covers (running Cargo itself) and
+# which fails the script when it can't run.
+[package.clarabel]
+requests = ["rustc"]
+env = ["SOURCE_DATE_EPOCH", "VERGEN_*", "CARGO", "DEBUG", "OPT_LEVEL", "TARGET"]
+
+# Compiles its Java support classes on Android targets only: `javac` and
+# `java` (for d8.jar) out of a JDK and an Android SDK, both found through the
+# environment or by looking up `java` on PATH. Neither the SDK nor the JDK
+# has a grant of its own, and no request can name their paths.
+[package.mundy]
+read = [":out_dir"]
+requests = ["java"]
+env = [
+    "CARGO_CFG_TARGET_OS", "PROFILE", "JAVA_HOME", "JAVA_SOURCE_VERSION",
+    "JAVA_TARGET_VERSION", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_JAR",
+    "ANDROID_D8_JAR", "ANDROID_PLATFORM", "ANDROID_API_LEVEL", "ANDROID_SDK_VERSION",
+    "ANDROID_SDK_EXTENSION", "ANDROID_BUILD_TOOLS_VERSION", "PATH",
+]
+
 # Build scripts of the bindings' dependencies.
 [package.anyhow]
 # Compiles src/nightly.rs into OUT_DIR, then removes it.
 read = [":manifest_dir/src/nightly.rs", ":out_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# autocfg, for a version check only.
+[package.async-io]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
 
 [package.camino]
 requests = ["rustc"]
@@ -119,14 +162,24 @@ env = ["HOST", "TARGET"]
 requests = ["rustc"]
 env = ["CARGO_CFG_TARGET_ARCH", "CARGO_FEATURE_AVX512", "HOST", "TARGET"]
 
+# 0.4 only detects the memory sanitizer; 0.3 also runs `$RUSTC -vV`, on
+# Windows targets.
 [package.getrandom]
-env = ["CARGO_CFG_SANITIZE"]
+requests = ["rustc"]
+env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
 
 [package.icu_normalizer_data]
 env = ["ICU4X_DATA_DIR"]
 
 [package.icu_properties_data]
 env = ["ICU4X_DATA_DIR"]
+
+# Reads its own sources through CARGO_MANIFEST_DIR, and unwraps OPT_LEVEL.
+[package.libm]
+env = [
+    "CARGO_MANIFEST_DIR", "OPT_LEVEL", "TARGET", "ENSURE_NO_PANIC", "CARGO_CFG_TARGET_*",
+    "CARGO_FEATURE_*",
+]
 
 [package.num-traits]
 # autocfg compiles its probes into OUT_DIR; without reading them back, it
@@ -157,6 +210,10 @@ env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 
 [package.serde_json]
 env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+
+# syn 1, pulled in by jni-macros.
+[package.syn]
+requests = ["rustc"]
 
 [package.thiserror]
 # Reads compile probes from its own sources, and rustc's output in OUT_DIR.

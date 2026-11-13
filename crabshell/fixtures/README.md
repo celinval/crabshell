@@ -17,7 +17,7 @@ since `host.runner` is unstable.
 | `system-lib` | locate system libraries through pkg-config, the C compiler, a consumer's own `.pc` files or environment knobs, or fall back without them |
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs (with the default compiler or clang), CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl`, `vergen-gix` and `shadow-rs`, or from a proc-macro, and in registry crates |
-| `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
+| `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy, malachite-nz), or generate Node-API, JNI, Erlang NIF, Android Java and UniFFI glue |
 | `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers |
 | `bindgen` | generate FFI bindings from C headers with bindgen, loading libclang |
 | `network-fetch` | download prebuilt binaries or data, built offline through local copies or fallbacks |
@@ -105,6 +105,9 @@ Debian.
 The `cc-toolchain` fixture needs `clang` as well as the default compiler:
 minicov compiles with clang by name, and aegis compiles with it when it can
 run it.
+The `lang-runtime` fixture needs a Python 3 interpreter on `PATH`, which
+pyo3-ffi runs to resolve its configuration; its other bindings (Node-API,
+JNI, Erlang NIFs, Swift, UniFFI, Android Java) need no runtime installed.
 The jail has no network, so `network-fetch` builds offline in every build,
 the baseline included: its `.cargo/config.toml` points the crates at
 `prebuilt/`, which stands in for a local copy of their native libraries.

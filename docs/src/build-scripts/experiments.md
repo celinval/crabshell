@@ -153,7 +153,7 @@ What the requests cost, per build script:
 | `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 53 | 0–20 | `rustc`, `cc`, `cxx`, `clang`, `cmake`, `autotools`, and `git`, `pkg-config`, which no policy grants | 0 |
 | `vcs-metadata` | 81 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
-| `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
+| `lang-runtime` | 43 | 0–20 | `rustc`, `python`, `java` | 0 |
 | `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
 | `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
 | `network-fetch` | 38 | 0–20 | `rustc`, `cc`, `pkg-config` | 0 |
@@ -286,19 +286,55 @@ What the requests cost, per build script:
 - **Some scripts read their whole environment.** mach-sys hashes it, with
   the time, into a random nonce; built and shadow-rs collect it but only
   look up names. Requests cover only the names used.
-- **Build-dependency libraries read env on the crate's behalf.** pyo3,
-  pyo3-ffi and pyo3-macros-backend each call pyo3-build-config, so each
-  requests what that library reads (`TARGET`, `PYO3_*`), and pyo3 reads
-  the interpreter config pyo3-ffi passes on as `DEP_PYTHON_PYO3_CONFIG`.
-  An empty request narrows the default grant away too: target-lexicon needs
-  `TARGET` requested explicitly.
+- **Build-dependency libraries read env on the crate's behalf.** pyo3 and
+  pyo3-ffi both call pyo3-build-config, so each requests what that library
+  reads (`TARGET`, `PYO3_*`), and pyo3 reads the interpreter config pyo3-ffi
+  passes on as `DEP_PYTHON_PYO3_CONFIG`. An empty request narrows the default
+  grant away too: target-lexicon needs `TARGET` requested explicitly.
 - **Interpreter config travels as link metadata.** Only pyo3-ffi runs
-  Python; numpy's build script reads the result as
-  `DEP_PYO3_PYTHON_PYO3_CONFIG` (or `DEP_PYTHON_PYO3_CONFIG`) and panics
+  Python; the build scripts of numpy, jiter and malachite-nz read the result
+  as `DEP_PYO3_PYTHON_PYO3_CONFIG` (or `DEP_PYTHON_PYO3_CONFIG`) and panic
   without it. Most binding crates need no runtime at all: rustler and
   rustler_sys generate NIF glue from vendored headers, napi and jni only
   emit cfgs, uniffi parses a UDL file. So missing Erlang, Swift, Go, OCaml
   or PHP didn't block them.
+- **A crate's own features reach its build script only as environment.**
+  pyo3-ffi picks how Python is linked from `CARGO_FEATURE_EXTENSION_MODULE`,
+  falling back to `PYO3_BUILD_EXTENSION_MODULE`. A request listing only the
+  crate's `PYO3_*` knobs narrows `CARGO_FEATURE_*` away, and the script then
+  links `libpython` and adds an rpath to it into a build that asked for an
+  extension module: the policy changed what the crate links. Every feature a
+  script branches on has to be requested by name.
+- **One `links` key per lock caps the fixture's versions.** pyo3-ffi claims
+  `links = "python"`, so a workspace holds one pyo3 generation: malachite-nz
+  takes 0.29 and clarabel's `python` feature 0.25, so the fixture moved to
+  0.29 (where pyo3-macros-backend has no build script) and clarabel's Python
+  path stays out of reach.
+- **Build metadata can re-enter Cargo.** clarabel's `buildinfo` feature runs
+  vergen's cargo builder, which spawns `cargo metadata`, and its sysinfo
+  builder reads the host's name, user, memory and CPU. Running Cargo has no
+  grant (it would read the whole registry), and vergen propagates the error
+  instead of degrading, so the fixture leaves the feature off and the request
+  records the knobs.
+- **Android paths can't be requested.** mundy compiles its Java support
+  classes with `javac` and dexes them through `java -jar d8.jar`, taken from
+  a JDK and an Android SDK named by `JAVA_HOME`, `ANDROID_HOME` and friends,
+  or from whatever `java` on `PATH` resolves to. No grant covers either, and
+  no request can name their paths, so mundy's asks for a `java` grant that no
+  fixture defines; on Linux its script reads `CARGO_CFG_TARGET_OS` and stops.
+- **A pyo3 user still has cfgs of its own to lose.** malachite-nz reads
+  `CARGO_CFG_TARGET_FEATURE` with `unwrap_or_default` to decide whether to
+  compile a second copy of its FFT kernels for AVX2; a request that leaves it
+  out drops them silently.
+- **The category's remaining crates need runtimes this host hasn't got.**
+  Erlang, OCaml, PHP, Go and Swift are missing, so ocaml-sys,
+  ocaml-boxroot-sys, ext-php-rs and envtest stay out; the pctx runtimes build
+  a V8 snapshot, which needs V8 downloaded and run; tauri needs GTK and
+  WebKit through pkg-config. rb-sys and magnus only need an installed Ruby,
+  but this host's sits in a non-standard prefix whose subdirectories symlink
+  into separate package trees, all outside the jail's roots. blazediff's
+  `napi` feature would bring napi 2 next to the fixture's napi 3 and pull its
+  vendored C codecs in with it.
 - **Fallbacks hide denied variables on cross builds.** rustler and
   rustler_sys fall back to the host's family when `CARGO_CFG_TARGET_FAMILY`
   is missing: the same output natively, wrong output cross-compiling to

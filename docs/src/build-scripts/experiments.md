@@ -155,12 +155,13 @@ What the requests cost, per build script:
 | `vcs-metadata` | 81 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 43 | 0–20 | `rustc`, `python`, `java` | 0 |
 | `protoc` | 80 | 0–20 | `rustc`, `cc`, `protoc` | 2 |
-| `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
+| `bindgen` | 40 | 0–20 | `rustc`, `cc`, `bindgen`, `pkg-config` | 2 |
 | `network-fetch` | 38 | 0–20 | `rustc`, `cc`, `pkg-config` | 0 |
 
-- **No request names a path or a program.** The floor and named grants
+- **Almost no request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
-  the user's system.
+  the user's system. The exceptions are two tools no grant covers:
+  drm-fourcc's `rustfmt` and pq-sys's `pg_config`, each run by one crate.
 - **Env names are the whole remaining cost,** and about half are variables
   Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
   Granting those by default would roughly halve the largest requests (`libc`,
@@ -708,7 +709,10 @@ byte, bar one that no two builds agree on (below).
   the `rustc` grant, bindgen 0.72 and later can't run `$RUSTC --version` and
   target the newest Rust they know. Both could change the generated
   bindings, which the harness doesn't compare; comparing `OUT_DIR`'s `.rs`
-  files by hand showed no difference in any cell.
+  files by hand showed no difference in any cell, for every file the fixture
+  generates. gbm-sys and drm-sys confirm the `rustc` part: on bindgen 0.69
+  and 0.70 they never run it, and their bindings match the baseline without
+  the grant.
 - **rustfmt never runs.** bindgen formats its output with `rustfmt` from
   `PATH`, which is rustup's proxy in `~/.cargo/bin`, outside every jail; it
   reports the failure on stderr and writes unformatted bindings, in the
@@ -722,7 +726,40 @@ byte, bar one that no two builds agree on (below).
   `/usr/include/postgresql` on Debian) and alsa-sys (`asoundlib.h`, under
   `alsa/`) need `BINDGEN_EXTRA_CLANG_ARGS` on some distros, input-sys's
   bundled headers need libudev's, and io-uring's generated bindings don't
-  compile against this host's older kernel headers; they're left out.
+  compile against this host's older kernel headers; none of them generates
+  bindings here. pq-sys and input-sys joined the fixture with that path off,
+  taking their pre-generated bindings instead.
+- **Bundled headers cost nothing but a read of the crate.** gbm-sys ships
+  gbm.h and parses it through a relative `-Iinclude`, so it needs no system
+  library at build time at all, only `:manifest_dir/include` and the
+  `bindgen` grant for libclang and clang's own headers.
+- **An include dir the consumer chooses needs a consumer variable.** drm-sys
+  parses the kernel's drm.h and drm_mode.h from `LIBDRM_INCLUDE_PATH`, or
+  else from pkg-config's `libdrm`, which not every distro installs. Its
+  request has to name a variable (`:libdrm_include_path`) the consumer
+  defines under exactly that name, the same gap as libduckdb-sys's
+  `DUCKDB_LIB_DIR`. Here it's belt and braces: those headers sit under
+  `/usr/include`, which the `bindgen` grant reads anyway, and the fixture
+  passes libdrm's own copy of them through `BINDGEN_EXTRA_CLANG_ARGS`, a
+  knob that reaches the script through the `bindgen` grant's env.
+- **Pre-generated bindings move the cost to the crate's own files and
+  features.** pq-sys copies the file its target's pointer width selects, and
+  input-sys checks the one its features select, so both request their own
+  `src/` and the names behind that choice rather than libclang.
+  input-sys's version comes from `CARGO_FEATURE_LIBINPUT_*`: with that left
+  out of its request, narrowing drops it, and the script silently falls back
+  to the oldest libinput it knows, exporting `LIBINPUT_VERSION_STR=1_9`
+  instead of `1_21` and compiling different bindings. `CARGO_FEATURE_*` is in
+  the default grant, so only a request can lose it.
+- **A bindgen path that never runs here still costs a request.** libproc,
+  netstat2, proc-maps, tun-rs and iceoryx2-pal-posix only bind on another
+  target, and drm-fourcc only under a feature; their build scripts do
+  nothing in this fixture, yet each is listed with what that path would use:
+  writes into its own sources (proc-maps, drm-fourcc), a header parsed as
+  C++ from a hardcoded Command Line Tools include dir no request can name
+  without a host path (libproc, netstat2), `clang -E` and then `rustfmt`
+  over the generated sources (drm-fourcc), and `DOCS_RS` (tun-rs). None of
+  it is verifiable from here.
 - **Fetching crates build offline through env vars.** In `network-fetch`,
   the consumer points libduckdb-sys, liteparse-pdfium-sys, ort-sys,
   libsodium-sys-stable, libbpf-sys and z3-sys at a local copy through

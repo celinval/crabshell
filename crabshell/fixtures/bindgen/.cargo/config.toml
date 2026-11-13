@@ -7,3 +7,11 @@ runner = ["../../../target/debug/crabshell"]
 
 [env]
 CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+
+# drm-sys takes its include dir from this variable, or else from pkg-config,
+# and not every distro ships a `libdrm.pc`. All it parses are the kernel's
+# uapi drm headers, which come with the kernel headers a C toolchain needs.
+LIBDRM_INCLUDE_PATH = "/usr/include/drm"
+# Where distros that ship libdrm's own copy of those headers keep them, for
+# hosts without the uapi ones. clang ignores an include dir that's missing.
+BINDGEN_EXTRA_CLANG_ARGS = "-I/usr/include/libdrm"

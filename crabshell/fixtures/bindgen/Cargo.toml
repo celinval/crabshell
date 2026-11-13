@@ -1,6 +1,9 @@
 # Depends on crates whose build scripts run bindgen over C headers, through
 # libclang. Features are chosen so that each crate generates its bindings at
-# build time instead of using pre-generated ones.
+# build time instead of using pre-generated ones, except where that's
+# impossible here: a crate whose bindgen path needs a header this host hasn't
+# got, writes its bindings into its own sources, or only runs on another
+# target joins with that path off, and requests what it would need anyway.
 [workspace]
 
 [package]
@@ -11,9 +14,19 @@ publish = false
 
 [dependencies]
 cryptoki-sys = { version = "0.5", features = ["generate-bindings"] }
+drm-fourcc = "2.2"
+drm-sys = { version = "0.8", features = ["use_bindgen"] }
 exacl = { version = "0.13", features = ["buildtime_bindgen"] }
 foundationdb-sys = { version = "0.11", features = ["embedded-fdb-include", "fdb-7_3"] }
 fts-sys = "0.2"
+gbm-sys = { version = "0.4", features = ["use_bindgen"] }
+iceoryx2-pal-posix = "0.10"
+input-sys = "1.19"
+libproc = "0.14"
+netstat2 = "0.11"
 pkcs11-bindings = "0.1"
+pq-sys = "0.7"
+proc-maps = "0.5"
 selinux-sys = "0.7"
+tun-rs = "2.8"
 v4l2-sys-mit = "0.3"

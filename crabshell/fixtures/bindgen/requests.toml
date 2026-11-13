@@ -8,7 +8,20 @@
 # crate requests its own headers like any other file. Tools come from named
 # grants: `bindgen` for libclang and clang, and `rustc` for bindgen 0.72 and
 # later, which run `$RUSTC --version` to pick the Rust target they generate
-# code for.
+# code for. A crate whose bindgen path only runs on another target, or needs
+# a header this host hasn't got, still requests everything that path would
+# use: a request can't depend on the target or on features.
+
+# version_check runs `$RUSTC --version`.
+[package.ahash]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+[package.anyhow]
+# Compiles src/nightly.rs into OUT_DIR, then removes it.
+read = [":manifest_dir/src/nightly.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
 # Writes the target triple to OUT_DIR, and only emits rerun directives for
 # clang-sys's knobs.
@@ -22,6 +35,25 @@ env = ["TARGET"]
 read = [":manifest_dir/vendor"]
 requests = ["bindgen", "rustc"]
 env = ["MAKE_GENERIC_BINDINGS"]
+
+# With `build_bindings`, runs `clang -E -dM` over the system drm_fourcc.h for
+# its macros, writes a C wrapper to OUT_DIR, runs bindgen over it into its own
+# `src/consts.rs`, hand-writes `src/as_enum.rs` and formats that with rustfmt.
+# Without the feature it only emits a rerun directive.
+[package.drm-fourcc]
+read = [":out_dir"]
+write = [":manifest_dir/src/as_enum.rs", ":manifest_dir/src/consts.rs"]
+run = ["rustfmt"]
+requests = ["bindgen"]
+
+# Parses the kernel's drm.h and drm_mode.h from the include dir the consumer
+# names in LIBDRM_INCLUDE_PATH, or from pkg-config's `libdrm` when it's unset.
+# Naming that dir takes a variable the consumer defines, and there's no
+# convention for its name.
+[package.drm-sys]
+read = [":libdrm_include_path"]
+requests = ["bindgen", "pkg-config"]
+env = ["LIBDRM_INCLUDE_PATH"]
 
 [package.exacl]
 read = [":manifest_dir/bindgen/wrapper.h"]
@@ -43,6 +75,33 @@ env = [
     "SYSROOT_x86_64_unknown_linux_gnu",
 ]
 
+# Its own bundled gbm.h, through a relative `-Iinclude`.
+[package.gbm-sys]
+read = [":manifest_dir/include"]
+requests = ["bindgen"]
+
+[package.getrandom]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.iceoryx2-pal-configuration]
+env = ["IOX2_CUSTOM_PLATFORM_CONFIGURATION_PATH"]
+
+# Emits a cfg for how the platform is bound, and runs bindgen on QNX only. It
+# also checks that the platform dir the consumer names holds an `os.rs`, which
+# takes a variable the consumer defines.
+[package.iceoryx2-pal-posix]
+requests = ["bindgen"]
+env = ["CARGO_CFG_TARGET_OS", "IOX2_CUSTOM_POSIX_PLATFORM_PATH"]
+
+# Checks the prebuilt bindings of the libinput version its features select,
+# and names that version and the target in rustc-env. With `use_bindgen` it
+# generates them from its own bundled headers instead, which include libudev's;
+# it pins the Rust target it generates for, so bindgen doesn't run `$RUSTC`.
+[package.input-sys]
+read = [":manifest_dir/include", ":manifest_dir/src/bindings"]
+requests = ["bindgen"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "CARGO_FEATURE_LIBINPUT_*"]
+
 [package.libc]
 requests = ["rustc"]
 env = [
@@ -57,9 +116,46 @@ env = [
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
 
+# On macOS, bindings for the system libproc.h, parsed as C++ from a hardcoded
+# Command Line Tools include dir no request can name, for a pinned Rust
+# target, so bindgen doesn't run `$RUSTC`. Nothing on Linux.
+[package.libproc]
+requests = ["bindgen"]
+
+[package.memoffset]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
+# On macOS, bindings for the system libproc.h, parsed as C++.
+[package.netstat2]
+requests = ["bindgen", "rustc"]
+env = ["CARGO_CFG_TARGET_OS"]
+
+# cfg_aliases reads CARGO_CFG_<cfg> for each alias; nix only uses target_os.
+[package.nix]
+env = ["CARGO_CFG_TARGET_OS"]
+
+[package.paste]
+requests = ["rustc"]
+
 [package.pkcs11-bindings]
 read = [":manifest_dir/wrapper.h", ":manifest_dir/pkcs11.h", ":manifest_dir/pkcs11f.h", ":manifest_dir/pkcs11t.h"]
 requests = ["bindgen", "rustc"]
+
+# Copies the prebuilt bindings of the target from its own sources, or with
+# `buildtime_bindgen` runs bindgen over its own wrapper.h, which includes the
+# system libpq-fe.h. It finds libpq through pkg-config or `pg_config`, which
+# only this crate runs, so no grant covers it.
+[package.pq-sys]
+read = [":manifest_dir/src", ":manifest_dir/wrapper.h"]
+run = ["pg_config"]
+requests = ["bindgen", "pkg-config", "rustc"]
+env = [
+    "CARGO_CFG_TARGET_POINTER_WIDTH", "CARGO_CFG_WINDOWS", "CARGO_MANIFEST_DIR",
+    "PG_CONFIG_*", "PQ_LIB_DIR", "PQ_LIB_DIR_*", "PQ_LIB_STATIC", "PQ_LIB_STATIC_*",
+    "TARGET",
+]
 
 # Checks its version and `links` key against its own manifest.
 [package.prettyplease]
@@ -70,6 +166,13 @@ env = ["CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR"
 read = [":manifest_dir/src/probe", ":out_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# On FreeBSD only: bindings from its own wrapper.h, written into its own
+# sources.
+[package.proc-maps]
+read = [":manifest_dir/src/freebsd_maps/wrapper.h"]
+write = [":manifest_dir/src/freebsd_maps/bindings.rs"]
+requests = ["bindgen", "rustc"]
 
 [package.quote]
 requests = ["rustc"]
@@ -98,7 +201,25 @@ env = [
     "SYSROOT_x86_64_unknown_linux_gnu",
 ]
 
+[package.thiserror]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/build/probe.rs", ":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# On Windows with its `bindgen` feature, bindings for its own wintun header;
+# elsewhere it only looks for a docs.rs build.
+[package.tun-rs]
+read = [":manifest_dir/src/platform/windows/tun/wintun_functions.h"]
+requests = ["bindgen", "rustc"]
+env = ["CARGO_CFG_TARGET_OS", "DOCS_RS"]
+
 # bindgen 0.65 doesn't run rustc.
 [package.v4l2-sys-mit]
 read = [":manifest_dir/wrapper.h"]
 requests = ["bindgen"]
+
+# Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
+[package.zerocopy]
+read = [":manifest_dir/Cargo.toml"]
+requests = ["rustc"]

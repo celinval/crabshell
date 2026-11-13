@@ -12,6 +12,10 @@
 # libclang's directory, from LIBCLANG_PATH. When unset, the entries using it
 # are dropped and bindgen can't find libclang.
 libclang_dir = { env = "LIBCLANG_PATH" }
+# The drm headers' directory, from the LIBDRM_INCLUDE_PATH drm-sys reads. Its
+# request names this variable, so the consumer has to define it under exactly
+# this name for the read to survive narrowing.
+libdrm_include_path = { env = "LIBDRM_INCLUDE_PATH" }
 
 [grant.bindgen]
 # Only for its include paths: if `clang` isn't on PATH, bindgen goes on

@@ -19,7 +19,7 @@ since `host.runner` is unstable.
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl`, `vergen-gix` and `shadow-rs`, or from a proc-macro, and in registry crates |
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy, malachite-nz), or generate Node-API, JNI, Erlang NIF, Android Java and UniFFI glue |
 | `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers, or ship checked-in code and regenerate it into their own sources on a feature or a knob |
-| `bindgen` | generate FFI bindings from C headers with bindgen, loading libclang |
+| `bindgen` | generate FFI bindings from C headers with bindgen, loading libclang, or pick a pre-generated file instead |
 | `network-fetch` | download prebuilt binaries or data, built offline through local copies or fallbacks |
 
 ## Scenarios
@@ -110,6 +110,10 @@ run it.
 The `lang-runtime` fixture needs a Python 3 interpreter on `PATH`, which
 pyo3-ffi runs to resolve its configuration; its other bindings (Node-API,
 JNI, Erlang NIFs, Swift, UniFFI, Android Java) need no runtime installed.
+Debian. Its `.cargo/config.toml` also points drm-sys at the kernel's uapi drm
+headers through `LIBDRM_INCLUDE_PATH`, since not every distro ships a
+`libdrm.pc`, and adds libdrm's own copy of them to
+`BINDGEN_EXTRA_CLANG_ARGS` for hosts that have only that one.
 The jail has no network, so `network-fetch` builds offline in every build,
 the baseline included: its `.cargo/config.toml` points the crates at
 `prebuilt/`, which stands in for a local copy of their native libraries.

@@ -81,6 +81,9 @@ The `system-lib` policies extend the built-in `pkg-config` grant for Amazon
 Linux, where `pkg-config` is a wrapper that runs `rpm`; other distros may need
 different overrides.
 
+The `rustc-probe` policies also grant `cc`, which the category otherwise
+doesn't need: s2n-quic-platform's probes are executables, so rustc links them.
+
 The `protoc` fixture sets `PROTOC` to the vendored protoc in the tests'
 `CARGO_HOME` (x86_64 Linux only); building it by hand needs `PROTOC` set to
 a protoc of your own.

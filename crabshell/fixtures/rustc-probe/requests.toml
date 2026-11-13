@@ -2,16 +2,24 @@
 # point of view: only what its own code uses, with no knowledge of the host.
 # Test-only: crabshell reads it through CRABSHELL_REQUESTS (feature
 # `test-requests`) in place of the crates' `[package.metadata.crabshell]`.
-# Every build script in the fixture is listed; a crate that reads its own
-# files requests exactly those, since the crate root is otherwise narrowed
-# away. Running
-# `$RUSTC` comes from the
-# `rustc` grant, which also covers RUSTC, its wrappers and
-# CARGO_ENCODED_RUSTFLAGS.
+# Every build script that runs is listed; a crate that reads its own files
+# requests exactly those, since the crate root is otherwise narrowed away.
+# Running `$RUSTC` comes from the `rustc` grant, which also covers RUSTC, its
+# wrappers and CARGO_ENCODED_RUSTFLAGS. crunchy's and wit-bindgen's scripts
+# only build for wasm targets, so they never run here.
 #
 # Crates using a build-dependency library request what it reads on their
 # behalf: version_check needs only `rustc`; autocfg also compiles probes into
 # OUT_DIR, reads them back, and passes TARGET to rustc.
+
+# version_check.
+[package.ahash]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH"]
+
+# Runs `$RUSTC --version` and asserts on its output, so denial fails the build.
+[package.allocative]
+requests = ["rustc"]
 
 [package.anyhow]
 # Compiles a probe from its own sources into OUT_DIR, and removes it after.
@@ -25,8 +33,45 @@ read = [":out_dir"]
 requests = ["rustc"]
 env = ["TARGET"]
 
+# rustc_version, which also runs RUSTC_WRAPPER. It unwraps the result, so
+# denial fails the build instead of degrading.
+[package.atomic-traits]
+requests = ["rustc"]
+
+# autocfg, plus generated source configured through its own knobs.
+[package.bigdecimal]
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "RUST_BIGDECIMAL_DEFAULT_PRECISION", "RUST_BIGDECIMAL_DEFAULT_ROUNDING_MODE",
+    "RUST_BIGDECIMAL_FMT_EXPONENTIAL_LOWER_THRESHOLD",
+    "RUST_BIGDECIMAL_FMT_EXPONENTIAL_UPPER_THRESHOLD",
+    "RUST_BIGDECIMAL_FMT_MAX_INTEGER_PADDING", "RUST_BIGDECIMAL_SERDE_SCALE_LIMIT",
+    "TARGET",
+]
+
+# Runs `rustc` from PATH rather than `$RUSTC`, like doc-comment. It also
+# checks whether overflow checks are on by overflowing in its own process.
+[package.bnum]
+
+# Parses `release:` out of `$RUSTC -vV`, through RUSTC_WRAPPER when set.
+[package.branches]
+requests = ["rustc"]
+env = ["OPT_LEVEL"]
+
 [package.camino]
 requests = ["rustc"]
+
+# version_check.
+[package.circular-queue]
+requests = ["rustc"]
+
+# Runs `$RUSTC -vV` itself, through RUSTC_WRAPPER, and parses `release:`. It
+# scans CARGO_ENCODED_RUSTFLAGS for `-Z assume-incomplete-release`, and writes
+# the version it found to OUT_DIR, which its own `include!` reads.
+[package.const_fn]
+requests = ["rustc"]
+env = ["CONST_FN_DENY_WARNINGS", "HOST", "RUSTC_BOOTSTRAP"]
 
 # rustversion's `cfg!` runs when the build script is compiled, not when it
 # runs, so the script itself needs no `rustc`.
@@ -37,12 +82,19 @@ env = ["CARGO_CFG_TARGET_ARCH"]
 [package.cookie]
 requests = ["rustc"]
 
+# rustc_version, plus CRC tables written to OUT_DIR.
+[package.crc32c]
+requests = ["rustc"]
+
 [package.crc32fast]
 requests = ["rustc"]
 
 # Pulled in by async-io (see cfg-only).
 [package.crossbeam-utils]
 env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# rustversion's attribute macros, evaluated when the script compiles.
+[package.decorum]
 
 # Runs `rustc` from PATH rather than `$RUSTC`. A request can't express that
 # portably (under rustup it's a proxy needing its own env), so detection
@@ -52,8 +104,19 @@ env = ["TARGET", "CARGO_CFG_SANITIZE"]
 # Only rustversion's `cfg!`, like constant_time_eq.
 [package.encoding_rs]
 
+# autocfg expression probes, plus a knob of its own.
+[package.erasable]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["ERASABLE_ENFORCE_1_1_0_SEMANTICS", "TARGET"]
+
 [package.erased-serde]
 requests = ["rustc"]
+
+# version_check, plus the profile, which it turns into a cfg.
+[package.error-chain]
+requests = ["rustc"]
+env = ["PROFILE"]
 
 [package.eyre]
 # autocfg, plus its own probe written to OUT_DIR. The probe needs a nightly
@@ -62,6 +125,22 @@ requests = ["rustc"]
 read = [":out_dir"]
 requests = ["rustc"]
 env = ["RUSTC_BOOTSTRAP", "TARGET"]
+
+# rustc_version, unwrapped.
+[package.field-offset]
+requests = ["rustc"]
+
+# Needs RUSTC and OUT_DIR, and panics without either, although the probes it
+# reads them for are dead code in this version.
+[package.fixed]
+requests = ["rustc"]
+
+# rustc_version, for the channel.
+[package.flatbuffers]
+requests = ["rustc"]
+
+[package.float16]
+requests = ["rustc"]
 
 # autocfg, for version checks only.
 [package.fs-err]
@@ -79,12 +158,22 @@ read = [":out_dir"]
 requests = ["rustc"]
 env = ["TARGET"]
 
+# Runs `$RUSTC --version`, falling back to `rustc` on PATH, and panics if
+# neither runs.
+[package.hex_lit]
+requests = ["rustc"]
+
 [package.httparse]
 requests = ["rustc"]
 env = [
     "CARGO_CFG_HTTPARSE_DISABLE_SIMD", "CARGO_CFG_HTTPARSE_DISABLE_SIMD_COMPILETIME",
     "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_FEATURE", "CARGO_FEATURE_STD",
 ]
+
+# version_check, plus its own package name, which it insists on.
+[package.im-rc]
+requests = ["rustc"]
+env = ["CARGO_PKG_NAME", "IM_TEST_RC"]
 
 # Compiles a probe into OUT_DIR, only when targeting WASI.
 [package.io-lifetimes]
@@ -106,11 +195,21 @@ env = [
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
 
+# Pulled in by bigdecimal and num-traits (see vcs-metadata).
+[package.libm]
+env = [
+    "CARGO_MANIFEST_DIR", "OPT_LEVEL", "TARGET", "ENSURE_NO_PANIC", "CARGO_CFG_TARGET_*",
+    "CARGO_FEATURE_*",
+]
+
 # autocfg, for version checks only.
 [package.matrixmultiply]
 read = [":out_dir"]
 requests = ["rustc"]
 env = ["CARGO_CFG_TARGET_ARCH", "CARGO_FEATURE_AVX512", "TARGET"]
+
+[package.maybe-uninit]
+requests = ["rustc"]
 
 # autocfg, for version checks only.
 [package.memoffset]
@@ -118,9 +217,21 @@ read = [":out_dir"]
 requests = ["rustc"]
 env = ["TARGET"]
 
+# version_check.
+[package.multer]
+requests = ["rustc"]
+
 # cfg_aliases reads CARGO_CFG_<cfg> for each alias; nix only uses target_os.
 [package.nix]
 env = ["CARGO_CFG_TARGET_OS"]
+
+[package.no-panic]
+requests = ["rustc"]
+
+# autocfg, for version checks only (see codegen).
+[package.num-traits]
+read = [":out_dir"]
+requests = ["rustc"]
 
 [package.parking_lot_core]
 env = ["CARGO_CFG_SANITIZE"]
@@ -143,12 +254,6 @@ env = [
     "RUSTC_BOOTSTRAP", "TARGET",
 ]
 
-[package.proc-macro2]
-# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
-read = [":manifest_dir/src/probe", ":out_dir"]
-requests = ["rustc"]
-env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
-
 # version_check.
 [package.proc-macro-error]
 requests = ["rustc"]
@@ -160,12 +265,26 @@ requests = ["rustc"]
 [package.proc-macro-hack]
 requests = ["rustc"]
 
+[package.proc-macro2]
+# Reads compile probes from its own sources, and rustc's output in OUT_DIR.
+read = [":manifest_dir/src/probe", ":out_dir"]
+requests = ["rustc"]
+env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
+
+# version_check, for the channel and the host triple.
+[package.proc-macro2-diagnostics]
+requests = ["rustc"]
+
 [package.quote]
 requests = ["rustc"]
 
 [package.ref-cast]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH"]
+
+# rustc_version, plus -Zallow-features out of the encoded rustflags.
+[package.rstest_macros]
+requests = ["rustc"]
 
 [package.rustix]
 # Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
@@ -183,6 +302,17 @@ env = [
 requests = ["rustc"]
 env = ["HOST"]
 
+# Compiles every probe in its own `features` dir into an executable in
+# OUT_DIR, so rustc links as well, with RUSTC_LINKER when Cargo passes one. It
+# scans its whole environment for CARGO_FEATURE_* to pass on as `--cfg`.
+[package.s2n-quic-platform]
+read = [":manifest_dir/features", ":out_dir"]
+requests = ["rustc", "cc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_TARGET_OS", "CARGO_FEATURE_*",
+    "S2N_QUIC_PLATFORM_FEATURES_OVERRIDE", "TARGET",
+]
+
 [package.serde]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH"]
@@ -191,9 +321,40 @@ env = ["CARGO_PKG_VERSION_PATCH"]
 requests = ["rustc"]
 env = ["CARGO_PKG_VERSION_PATCH", "TARGET"]
 
+# autocfg expression probes.
+[package.slice-dst]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
+
+# Only rustversion's `cfg!`, like constant_time_eq.
+[package.slog]
+env = ["CARGO_FEATURE_STD"]
+
 # version_check.
 [package.slotmap]
 requests = ["rustc"]
+
+# Generated typenum and tuple source, sized by a cfg, plus rustc_version for
+# the channel.
+[package.stabby-abi]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_STABBY_DEFAULT_ALLOC", "CARGO_CFG_STABBY_MAX_TUPLE",
+    "CARGO_FEATURE_ALLOC_RS", "CARGO_FEATURE_LIBC",
+]
+
+# Parses `release:`, `LLVM version:` and `commit-hash:` out of `$RUSTC -vV`
+# and writes them, with Cargo's build settings, into generated source.
+[package.stabby-macros]
+requests = ["rustc"]
+env = ["DEBUG", "HOST", "NUM_JOBS", "OPT_LEVEL", "TARGET"]
+
+# autocfg, for a version check only.
+[package.substring]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["TARGET"]
 
 # syn 1, pulled in by proc-macro-error.
 [package.syn]
@@ -208,16 +369,22 @@ env = ["CARGO_PKG_VERSION_PATCH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 [package.typeid]
 requests = ["rustc"]
 
-[package.zmij]
-requests = ["rustc"]
-env = ["OPT_LEVEL"]
+# rustversion's `cfg!` again, plus the target's features, and a link arg on
+# Emscripten.
+[package.wasm-bindgen]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FEATURE", "CARGO_CFG_TARGET_OS"]
+
+# Hashes two of its sources, and runs `git rev-parse HEAD` (see vcs-metadata).
+[package.wasm-bindgen-shared]
+read = [":manifest_dir/src/lib.rs", ":manifest_dir/src/tys.rs"]
+requests = ["git"]
+env = ["CARGO_MANIFEST_DIR"]
 
 # Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.
 [package.zerocopy]
 read = [":manifest_dir/Cargo.toml"]
 requests = ["rustc"]
 
-# version_check.
-[package.ahash]
+[package.zmij]
 requests = ["rustc"]
-env = ["CARGO_CFG_TARGET_ARCH"]
+env = ["OPT_LEVEL"]

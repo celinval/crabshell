@@ -12,7 +12,7 @@ has several `sandbox.*.toml` policy variants:
 | Fixture | Crates with build scripts |
 |---|---|
 | `cfg-only` | crossbeam-utils, crossbeam-epoch, crossbeam-deque, rayon-core, tiny-keccak, crunchy, icu_properties_data |
-| `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij |
+| `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij, allocative, atomic-traits, bigdecimal, bnum, branches, circular-queue, const_fn, crc32c, decorum, erasable, error-chain, field-offset, fixed, flatbuffers, float16, hex_lit, im-rc, libm, maybe-uninit, multer, no-panic, num-traits, proc-macro2-diagnostics, rstest_macros, s2n-quic-platform, slice-dst, slog, stabby-abi, stabby-macros, substring, wasm-bindgen, wasm-bindgen-shared |
 | `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc, libseccomp, libseccomp-sys, pcap, libpulse-sys, libpulse-simple-sys, openmp-sys, x11-dl, tiny-xlib, yeslogic-fontconfig-sys, clang-sys, inotify-sys, odbc-sys, mongocrypt-sys, winapi, num-traits, proc-macro2, quote |
 | `declared` | crossbeam-utils, patched to declare `[package.metadata.crabshell]` |
 
@@ -148,7 +148,7 @@ What the requests cost, per build script:
 | Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
 |---|---:|---|---|---:|
 | `cfg-only` | 36 | 0–6 | – | 0 |
-| `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
+| `rustc-probe` | 73 | 0–20 | `rustc`, `cc` | 0 |
 | `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
 | `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
@@ -569,6 +569,76 @@ byte, bar one that no two builds agree on (below).
 - **An optional tool can't be requested.** z3-sys runs `z3 --version` when
   present, but crabshell rejects a `run` entry that isn't on `PATH`, so a
   request for it would break builds on hosts without Z3.
+
+### More version probes
+
+The `rustc-probe` fixture grew to 73 build scripts: crates running `$RUSTC`
+themselves (const_fn, branches, allocative, hex_lit, maybe-uninit, no-panic,
+stabby-macros), through rustc_version (atomic-traits, field-offset,
+flatbuffers, float16, crc32c, rstest_macros, stabby-abi), version_check
+(circular-queue, error-chain, im-rc, multer, proc-macro2-diagnostics) or
+autocfg (bigdecimal, erasable, slice-dst, substring), compile probes that link
+(s2n-quic-platform), and more rustversion users (slog, decorum,
+wasm-bindgen). Every cell behaves as expected.
+
+- **A compile probe that links needs the whole C toolchain.**
+  s2n-quic-platform compiles each file in its own `features` dir with
+  `--crate-type bin --out-dir $OUT_DIR`, so rustc also links, and each probe
+  resolves a syscall through the linker. Without the `cc` grant rustc reports
+  "linker `cc` not found" and the crate silently loses seven cfgs
+  (`s2n_quic_platform_cmsg`, `socket_msg`, `socket_mmsg`, `gso`, `gro`,
+  `pktinfo`, `tos`). The fixture's policies grant `cc` for it alone; probes
+  that stop at `--emit=metadata` (fixed) or at `--version` need only `rustc`.
+- **A probe can need the features of the crate it probes for.**
+  s2n-quic-platform scans `env::vars()` for `CARGO_FEATURE_*` and passes each
+  on as `--cfg feature="..."`, which its probes' `extern` blocks are gated on.
+  Enumerating the environment means the request has to name the pattern, not
+  the variables; without it the probes fail to compile, and the loss is as
+  silent as the missing linker.
+- **A degraded generated file fails at the consumer, not the script.**
+  stabby-macros parses `release:`, `commit-hash:` and `LLVM version:` out of
+  `$RUSTC -vV` and writes them, with `OPT_LEVEL`, `DEBUG`, `NUM_JOBS`,
+  `TARGET` and `HOST`, into `OUT_DIR/env_vars.rs`. Denying those names only
+  omits constants, so the build script succeeds and the crate fails to compile
+  with five unresolved names.
+- **The `rustc` grant's variable matters more than its program.** fixed 1.31
+  no longer compiles the probes it has the code for, but still `expect`s
+  `RUSTC`, so it panics without the grant although it never runs rustc. The
+  crates that unwrap rustc_version (atomic-traits, field-offset, flatbuffers,
+  float16, crc32c, rstest_macros, stabby-abi) and those that assert on
+  `--version` output (allocative, hex_lit) also fail outright, while
+  version_check's users (error-chain, im-rc, multer, circular-queue,
+  proc-macro2-diagnostics) get `None` and emit nothing.
+- **A silent fallback to the MSRV.** const_fn warns "unable to determine
+  rustc version", emits no cfg at all, and the crate then assumes its MSRV
+  (1.31): the version it writes to `OUT_DIR` is `include!`d only behind the
+  cfg the script would have emitted, so nothing fails. maybe-uninit and
+  branches do the same without even a warning (branches falls back to
+  `branches_stable`).
+- **The profile is a cfg too.** error-chain turns `PROFILE` into
+  `cfg(build="debug")`, which isn't in the default grant: denying it drops the
+  cfg silently. branches reads `OPT_LEVEL` the same way, but only emits
+  `branches_cold_weights` at `2` or `3`, so the fixture's debug build can't
+  show the difference.
+- **autocfg's `OUT_DIR` read keeps costing cfgs.** Without it bigdecimal
+  silently drops `has_unsigned_abs`, as num-traits drops `has_total_cmp`.
+  Version-only users (substring) notice nothing on this host.
+- **More probes run when the build script compiles.** slog and wasm-bindgen
+  use rustversion's `cfg!` (wasm-bindgen renames the crate to
+  `rustversion_compat`), decorum its attribute form
+  (`#[rustversion::nightly] fn main`), so the most downloaded crate of the
+  category needs no `rustc` grant: its request is three `CARGO_CFG_TARGET_*`
+  names.
+- **Running `rustc` from `PATH` recurs.** bnum does what doc-comment does,
+  and its nightly check is equally invisible on a stable host: both the
+  baseline and every sandboxed build see no `nightly` in the output.
+- **A crate can insist on its own name.** im-rc matches `CARGO_PKG_NAME`
+  against `im`/`im-rc` and panics on anything else, so it fails without the
+  variable, as ring does.
+- **`RUSTC_WORKSPACE_WRAPPER` is deliberately not used.** const_fn, branches
+  and rustc_version run `RUSTC_WRAPPER` but skip the workspace wrapper, since
+  clippy's driver answers `-vV` differently; the built-in `rustc` grant passes
+  both.
 
 ## Methodology TODOs
 

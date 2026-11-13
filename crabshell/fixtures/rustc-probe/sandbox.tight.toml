@@ -4,11 +4,16 @@
 [external]
 # OUT_DIR is write-only; compile probes and cc-rs read back what they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc"]
+# `cc` is only here because s2n-quic-platform's probes are executables, which
+# rustc has to link.
+grants = ["rustc", "cc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
-    "CARGO_PKG_VERSION_PATCH", "OPT_LEVEL",
+    "CARGO_MANIFEST_DIR", "CARGO_PKG_NAME", "CARGO_PKG_VERSION_PATCH",
+    "DEBUG", "NUM_JOBS", "OPT_LEVEL", "PROFILE",
     "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "LIBC_BUILD_VERBOSE", "LIBC_CI",
     "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID", "PORTABLE_ATOMIC_DENY_WARNINGS",
+    "CONST_FN_DENY_WARNINGS", "ENSURE_NO_PANIC", "ERASABLE_ENFORCE_1_1_0_SEMANTICS",
+    "IM_TEST_RC", "RUST_BIGDECIMAL_*", "S2N_QUIC_PLATFORM_FEATURES_OVERRIDE",
 ] }

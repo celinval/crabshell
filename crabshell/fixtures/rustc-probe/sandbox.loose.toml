@@ -3,5 +3,5 @@
 [external]
 # OUT_DIR is write-only; compile probes and cc-rs read back what they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc"]
+grants = ["rustc", "cc"]
 env = ["*"]

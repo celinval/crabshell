@@ -1,6 +1,8 @@
 # Depends on crates whose build scripts generate Rust from `.proto` files:
-# through protoc (vendored, or the one `PROTOC` names), or through pure-Rust
-# parsers. Its own build script compiles `proto/` with the vendored protoc.
+# through protoc (vendored, or the one `PROTOC` names), through pure-Rust
+# parsers, or not at all, shipping checked-in code and regenerating it only on
+# a feature or a knob. Its own build script compiles `proto/` with the
+# vendored protoc.
 [workspace]
 
 [package]
@@ -14,6 +16,7 @@ prost = "0.14"
 prost-types = "0.14"
 # Run the vendored protoc themselves.
 perfetto_protos = "0.51"
+yellowstone-grpc-proto = { version = "12.7", default-features = false }
 # Pure-Rust parsers: protobuf-codegen's, or protox.
 containerd-shim-protos = "0.11"
 prometheus-client = { version = "0.25", features = ["protobuf", "protobuf-protox"] }
@@ -25,12 +28,24 @@ yara-x-proto = "1"
 geozero = { version = "0.15", default-features = false, features = ["with-mvt"] }
 pbjson-types = "0.9"
 pprof = { version = "0.15", default-features = false, features = ["prost-codec"] }
+pprof2 = { version = "0.13", default-features = false, features = ["prost-codec"] }
 libdd-ddsketch = "1"
+libdd-trace-protobuf = "5"
+# Generate only on a feature, or on a knob the consumer sets.
+denokv_proto = "0.14"
+goosefs-sdk = "0.2"
+hdfs-native = "0.14"
+prometheus = "0.14"
+protosol = "16"
+tokio-cron-scheduler = "0.15"
 # Run the protoc that `PROTOC` names.
 cedar-policy = { version = "4", features = ["protobufs"] }
+chroma-types = "0.15"
 containerd-client = { version = "0.9", default-features = false }
 etcd-client = "0.20"
 prost-validate-types = "0.2"
+pulsar = { version = "6.9", default-features = false, features = ["tokio-rustls-runtime-ring"] }
+smg-mesh = "1.4"
 tracing-perfetto-sdk-schema = "0.13"
 metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["protobuf"] }
 

@@ -154,7 +154,7 @@ What the requests cost, per build script:
 | `cc-toolchain` | 53 | 0–20 | `rustc`, `cc`, `cxx`, `clang`, `cmake`, `autotools`, and `git`, `pkg-config`, which no policy grants | 0 |
 | `vcs-metadata` | 81 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 43 | 0–20 | `rustc`, `python`, `java` | 0 |
-| `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
+| `protoc` | 80 | 0–20 | `rustc`, `cc`, `protoc` | 2 |
 | `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
 | `network-fetch` | 38 | 0–20 | `rustc`, `cc`, `pkg-config` | 0 |
 
@@ -638,6 +638,56 @@ byte, bar one that no two builds agree on (below).
   protoc's descriptors back from a temp file, so the `protoc` grant reads
   `:tmp_dir`, as `cc` does. Pure-Rust parsers (protox, protobuf-codegen's
   `pure()`) need nothing beyond the crate's own `.proto` files.
+- **Shipping checked-in code is the category's norm.** Of the 12 crates the
+  fixture gained last, 8 generate nothing in a default build: pprof2
+  regenerates only when its proto's hash changes (like pprof), while
+  prometheus, libdd-trace-protobuf, denokv_proto, tokio-cron-scheduler,
+  protosol, goosefs-sdk and hdfs-native each need a feature, and goosefs-sdk
+  the knob below as well. All of them generate into their own `src/` or
+  `proto/`, so each request names a write no consumer grants — and the
+  fixture can carry them precisely because the default path needs neither the
+  write nor protoc.
+- **Denying a regeneration knob is indistinguishable from not setting it.**
+  goosefs-sdk declares `rerun-if-env-changed=GOOSEFS_SDK_REGEN_PROTO` and
+  checks it for `1`; statsig-rust and bigtable_rs use `STATSIG_BUILD_PROTO`
+  and `BUILD_BIGTABLE_RS_GOOGLE_PROTO` the same way. Unlike the silent
+  degradation elsewhere, the denied path is the one the vendor ships, so it's
+  the safe outcome; the knob is the consumer's own and a policy that grants
+  it would also have to grant the write.
+- **protobuf-codegen's default parser is the pure one.** prometheus's `gen`
+  feature and yara-x-proto generate without protoc at all; a `protoc` request
+  only appears where a crate calls `.protoc()` or goes through prost-build or
+  tonic-prost-build.
+- **A build script can point `PROTOC` at its own protoc.** hdfs-native,
+  libdd-trace-protobuf, yellowstone-grpc-proto and pulsar (with
+  `protobuf-src`) call `env::set_var("PROTOC", ...)` before prost-build runs,
+  overriding whatever the consumer set. crabshell only filters the
+  environment the script starts with, so the grant has to cover whichever
+  binary the script then picks: protoc-bin-vendored's, inside `CARGO_HOME`,
+  or the one protobuf-src builds from vendored C++ sources, which would need
+  `cc` and `autotools` as well.
+- **A request can name a program inside its own crate.** protosol looks for
+  protoc at `PROTOC_EXECUTABLE`, `PROTOSOL_PROTOC` or `opt/bin/protoc` in its
+  crate, which a bare name on `PATH` can't express, so its request names that
+  path in `run`; hdfs-native requests `cp` for the tree it copies into
+  `OUT_DIR`. Neither is granted here, so both narrow away: those are the two
+  programs in the table above.
+- **A `links` key can publish a schema directory.** protosol lists its proto
+  dir and emits `cargo:PROTO_DIR=<that dir>`, so dependents find the schemas
+  as `DEP_PROTOSOL_PROTO_DIR` (temporalio-protos publishes a descriptor set
+  the same way). A dependent would have to request both that `DEP_*` name and
+  a read of a path in `CARGO_HOME` that no variable names.
+- **Codegen can depend on the build script's own profile.** chroma-types
+  compiles one schema more when its build script was compiled with
+  `debug_assertions`, which no grant or request affects; the crate notes that
+  `#[cfg(test)]` wouldn't work there either.
+- **Most of the category's remaining crates are too big to fixture.** Every
+  scenario rebuilds the whole graph, so crates shipping megabytes of
+  generated Rust (google-cloud-googleapis, gcloud-googleapis, the lance
+  family, delta_kernel, temporalio-protos, statsig-rust) or pulling
+  arrow/datafusion, cranelift (yara-x) or aws-lc-rs (bigtable_rs) stayed out.
+  sp1-prover-types can't be compared at all: it emits a build timestamp, so
+  no two builds print the same directives.
 - **bindgen's needs land on its consumers.** With bindgen's default
   `runtime` feature, clang-sys's build script does nothing; each crate
   running bindgen loads libclang into its own build script, so libclang, its

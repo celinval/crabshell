@@ -14,7 +14,13 @@ grants = ["rustc", "cc", "protoc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
-    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_*",
-    "LALRPOP_LANE_TABLE", "OPT_LEVEL", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION",
+    "CARGO_PKG_VERSION_*", "DEBUG", "LALRPOP_LANE_TABLE", "OPT_LEVEL", "RUSTC_BOOTSTRAP",
+    "RUSTC_STAGE",
     "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+    "BLAKE3_CI", "ENSURE_NO_PANIC", "ICU4X_DATA_DIR", "PORTABLE_ATOMIC_DENY_WARNINGS",
+    "RING_PREGENERATE_ASM",
+    # Knobs that make a crate regenerate its own sources, which nothing sets
+    # here.
+    "GOOSEFS_SDK_REGEN_PROTO", "PROTOC_EXECUTABLE", "PROTOSOL_PROTOC",
 ] }

@@ -18,7 +18,7 @@ since `host.runner` is unstable.
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs (with the default compiler or clang), CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl`, `vergen-gix` and `shadow-rs`, or from a proc-macro, and in registry crates |
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy, malachite-nz), or generate Node-API, JNI, Erlang NIF, Android Java and UniFFI glue |
-| `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers |
+| `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers, or ship checked-in code and regenerate it into their own sources on a feature or a knob |
 | `bindgen` | generate FFI bindings from C headers with bindgen, loading libclang |
 | `network-fetch` | download prebuilt binaries or data, built offline through local copies or fallbacks |
 
@@ -95,8 +95,10 @@ The `rustc-probe` policies also grant `cc`, which the category otherwise
 doesn't need: s2n-quic-platform's probes are executables, so rustc links them.
 
 The `protoc` fixture sets `PROTOC` to the vendored protoc in the tests'
-`CARGO_HOME` (x86_64 Linux only); building it by hand needs `PROTOC` set to
-a protoc of your own.
+`CARGO_HOME`. Cargo's `[env]` takes a literal path, so that one spells out the
+host arch, the registry hash and protoc-bin-vendored's version, and has to be
+updated when the lock bumps it; building the fixture by hand needs `PROTOC`
+set to a protoc of your own.
 The `bindgen` fixture needs libclang and `clang`, and finds libclang through
 `LIBCLANG_PATH`, which the tests set to the directory LLVM keeps next to
 clang's resource dir (`clang -print-resource-dir`). By hand, set it yourself,

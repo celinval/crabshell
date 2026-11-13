@@ -18,6 +18,12 @@ requests = ["protoc"]
 read = [":manifest_dir/protos", ":out_dir"]
 requests = ["protoc"]
 
+# Runs the vendored protoc twice: once for the tonic clients, once into a
+# subdirectory of OUT_DIR it creates for a build without tonic.
+[package.yellowstone-grpc-proto]
+read = [":manifest_dir/proto"]
+requests = ["protoc"]
+
 # prost-build runs the protoc `PROTOC` names.
 [package.cedar-policy]
 read = [":manifest_dir/protobuf_schema"]
@@ -41,6 +47,21 @@ requests = ["protoc"]
 read = [":manifest_dir/protos"]
 requests = ["protoc"]
 env = ["CARGO_MANIFEST_DIR"]
+
+# Its schema sits in the crate root, where Cargo starts the script.
+[package.pulsar]
+read = [":manifest_dir/PulsarApi.proto"]
+requests = ["protoc"]
+
+[package.smg-mesh]
+read = [":manifest_dir/src/proto"]
+requests = ["protoc"]
+
+# Compiles one schema more when the build script itself was compiled with
+# debug assertions, which no policy affects.
+[package.chroma-types]
+read = [":manifest_dir/idl"]
+requests = ["protoc"]
 
 # prost-build 0.8 records which protoc its users run: `PROTOC`, or else the
 # one bundled in its own crate. It runs nothing itself.
@@ -79,6 +100,11 @@ read = [":manifest_dir/proto"]
 write = [":manifest_dir/proto"]
 requests = ["protoc"]
 
+[package.pprof2]
+read = [":manifest_dir/proto"]
+write = [":manifest_dir/proto"]
+requests = ["protoc"]
+
 [package.geozero]
 read = [":manifest_dir/src/mvt"]
 write = [":manifest_dir/src/mvt"]
@@ -89,6 +115,61 @@ requests = ["protoc"]
 read = [":manifest_dir/src"]
 write = [":manifest_dir/src/pb"]
 requests = ["protoc"]
+
+# Generates into its own `src` too, and reads the files back to prepend
+# license and serde headers.
+[package.libdd-trace-protobuf]
+read = [":manifest_dir/src"]
+write = [":manifest_dir/src"]
+requests = ["protoc"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# protobuf-codegen's pure parser writes into the crate's own `proto` dir, with
+# no protoc, on its `gen` feature.
+[package.prometheus]
+read = [":manifest_dir/proto"]
+write = [":manifest_dir/proto"]
+
+# Writes a descriptor set to OUT_DIR, then copies the modules it generated
+# there into the crate's own `protobuf` module.
+[package.denokv_proto]
+read = [":manifest_dir/schema", ":out_dir"]
+write = [":manifest_dir/protobuf"]
+requests = ["protoc"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Copies the file it generated in OUT_DIR into its own `src/job`.
+[package.tokio-cron-scheduler]
+read = [":manifest_dir/proto", ":out_dir"]
+write = [":manifest_dir/src/job"]
+requests = ["protoc"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Regenerates only when the consumer sets its knob and the matching feature is
+# on; its checked-in code otherwise needs no protoc.
+[package.goosefs-sdk]
+read = [":manifest_dir/proto"]
+write = [":manifest_dir/src/generated"]
+requests = ["protoc"]
+env = ["GOOSEFS_SDK_REGEN_PROTO"]
+
+# Builds protoc from protobuf-src's vendored C++ sources for the generating
+# feature, and copies its `minidfs` tree into OUT_DIR with `cp` for the
+# integration-test one.
+[package.hdfs-native]
+read = [":manifest_dir/minidfs", ":manifest_dir/src/proto"]
+run = ["cp"]
+requests = ["protoc"]
+
+# Names its proto dir to downstream crates through its `links` key, after
+# listing it. Regenerating cleans and rewrites `src/generated`, with the protoc
+# one of its two knobs names, or the one it ships under `opt/bin`.
+[package.protosol]
+read = [":manifest_dir/.gitmodules", ":manifest_dir/proto", ":manifest_dir/src/generated"]
+write = [":manifest_dir/src/generated"]
+run = [":manifest_dir/opt/bin/protoc"]
+requests = ["protoc"]
+env = ["CARGO_MANIFEST_DIR", "PROTOC_EXECUTABLE", "PROTOSOL_PROTOC"]
 
 # Generates its parsers with lalrpop, which reads every CARGO_FEATURE_*.
 [package.cedar-policy-core]
@@ -251,8 +332,67 @@ env = ["TARGET", "CARGO_CFG_SANITIZE"]
 [package.crossbeam-deque]
 env = ["TARGET", "CARGO_CFG_SANITIZE"]
 
+[package.matrixmultiply]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_FEATURE_AVX512", "TARGET"]
+
+[package.num-complex]
+read = [":out_dir"]
+requests = ["rustc"]
+env = ["CARGO_FEATURE_I128"]
+
+[package.crc32fast]
+requests = ["rustc"]
+
+# Compiles its vendored C and assembly through cc-rs (see cc-toolchain).
+[package.blake3]
+read = [":manifest_dir/c", ":out_dir"]
+requests = ["cc"]
+env = [
+    "BLAKE3_CI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_VENDOR", "CARGO_FEATURE_NEON",
+    "CARGO_FEATURE_NO_NEON", "CARGO_FEATURE_PREFER_INTRINSICS", "CARGO_FEATURE_PURE",
+    "CARGO_FEATURE_WASM32_SIMD", "HOST", "TARGET",
+]
+
+# Compiles its vendored C and pregenerated assembly. It checks `links` against
+# its own name and version.
+[package.ring]
+read = [
+    ":manifest_dir/crypto", ":manifest_dir/include", ":manifest_dir/pregenerated",
+    ":manifest_dir/third_party", ":out_dir",
+]
+requests = ["cc"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN", "CARGO_CFG_TARGET_ENV",
+    "CARGO_CFG_TARGET_OS", "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME",
+    "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR", "CARGO_PKG_VERSION_PATCH",
+    "CARGO_PKG_VERSION_PRE", "DEBUG", "RING_PREGENERATE_ASM",
+]
+
+# Generates its timezone tables from its own data (see codegen).
+[package.chrono-tz]
+read = [":manifest_dir/tz"]
+env = ["CARGO_MANIFEST_DIR"]
+
+[package.libm]
+env = [
+    "CARGO_CFG_TARGET_*", "CARGO_FEATURE_*", "CARGO_MANIFEST_DIR", "ENSURE_NO_PANIC",
+    "OPT_LEVEL", "TARGET",
+]
+
+[package.icu_normalizer_data]
+env = ["ICU4X_DATA_DIR"]
+
+[package.icu_properties_data]
+env = ["ICU4X_DATA_DIR"]
+
 # Only emit directives and write OUT_DIR, which the floor covers.
+[package.crunchy]
 [package.pulldown-cmark]
+[package.rayon-core]
+[package.rustls]
 [package.symbolic-demangle]
 
 # Reads the version table in its own Cargo.toml and runs `$RUSTC --version`.

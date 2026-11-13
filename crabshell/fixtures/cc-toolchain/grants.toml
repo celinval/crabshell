@@ -12,13 +12,22 @@ env = ["CMAKE", "CMAKE_*", "HOST_CMAKE*", "TARGET_CMAKE*", "PROFILE", "NUM_JOBS"
 [grant.cxx]
 run = ["c++"]
 
+# Compiling with clang, which some crates name instead of the default
+# compiler, on top of the `cc` grant: that already reads the system library
+# dirs, where LLVM also keeps clang's resource dir, and the system headers.
+[grant.clang]
+run = ["clang"]
+
 # Running configure scripts and make, on top of the `cc` grant. Configure
 # scripts and the makefiles they write run a shell and many coreutils.
 # libtool's checks fall back silently without `file` (and its magic
 # database), `dd`, `getconf` and `objdump`, writing a different libtool.
+# libtool also probes the C++ compiler even for a C-only project, under the
+# name `g++` before `c++`: where those are one file, as on Fedora-like
+# distributions, allowing `c++` allows both.
 [grant.autotools]
 run = [
-    "sh", "make",
+    "sh", "make", "c++",
     "sed", "grep", "awk", "cat", "cp", "mv", "rm", "ln", "mkdir", "rmdir", "chmod", "touch",
     "tr", "expr", "sort", "uniq", "uname", "ls", "dirname", "basename", "head", "tail", "wc",
     "cmp", "diff", "env", "test", "true", "false", "printf", "echo", "date", "sleep", "mktemp",

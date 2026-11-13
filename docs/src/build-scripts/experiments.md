@@ -151,7 +151,7 @@ What the requests cost, per build script:
 | `rustc-probe` | 73 | 0–20 | `rustc`, `cc` | 0 |
 | `system-lib` | 42 | 0–52 | `rustc`, `pkg-config`, `pkg-config-path`, `cc` | 0 |
 | `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
-| `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
+| `cc-toolchain` | 53 | 0–20 | `rustc`, `cc`, `cxx`, `clang`, `cmake`, `autotools`, and `git`, `pkg-config`, which no policy grants | 0 |
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
 | `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
@@ -194,6 +194,44 @@ What the requests cost, per build script:
   directive comparison can't. A missing `run` entry also fails the whole
   script (`not found on PATH`), so a long tool list is less portable than a
   long read list, whose missing paths are skipped.
+- **A C-only configure still probes the C++ compiler.** libffi is pure C, yet
+  libffi-sys's configure runs libtool's C++ checks, looking for `g++` before
+  `c++`. Requesting `cc` and the coreutils of `autotools` denied exec of
+  `/usr/bin/g++`: every C++ test failed, and the generated `libtool` and
+  `config.status` lost the whole C++ tag (`compiler_CXX=''`, `LD_CXX=''`, no
+  PIC flags) while all four `cargo:` directives still matched. The
+  `autotools` grant now runs `c++`, which on Fedora-like distributions is the
+  same file as `g++`, so Landlock's exec rule, which attaches to the file,
+  covers both; where a distro ships two binaries, the probe would degrade
+  again. What then remains in `config.log` is configure's platform banner,
+  which runs `/bin/arch` and records `unknown` without it.
+- **Crates pick clang over the default compiler, and cc-rs says so.** minicov
+  compiles the LLVM profiling runtime with `compiler("clang")` and
+  `-nostdlibinc`, and aegis runs `clang --version` and uses clang when that
+  succeeds. A one-line `clang` grant is enough on top of `cc`, whose `/lib64`
+  and `/usr/lib64` reads already cover clang's resource headers. Denying it
+  fails minicov, which names clang and has no fallback. aegis falls back to
+  the default compiler, but not silently: cc-rs declares the knobs of the
+  compiler family it picked, so the baseline prints
+  `rerun-if-env-changed=CLANG_NO_DEFAULT_CONFIG` and `CCC_OVERRIDE_OPTIONS`
+  where the fallback prints `GCC_EXEC_PREFIX` and the `CC`, `HOST_CC`,
+  `CC_<target>` lookups. The objects' `.comment` section confirms which
+  compiler ran.
+- **A script that reads its whole environment can only be requested by
+  pattern.** sqlite3-src walks `env::vars()` and turns every `SQLITE_*` name
+  into a define for the amalgamation, so the library's feature set depends on
+  which of them the policy passes; the request names `SQLITE_*`, which is as
+  precise as it can be. libffi-sys also reads `cp --help` before copying the
+  vendored sources with `cp -R`, and unwraps the output: without `cp` it
+  panics instead of degrading.
+- **Requests name grants the policy will never give.** brotli-sys runs `git
+  submodule update --init` when its vendored tree holds no `.git`, ignoring
+  the result; in `CARGO_HOME` there's no repository, so denying exec changes
+  no directive, and the request still names the `git` grant another fixture
+  defines. bzip2-sys, libdeflate-sys and sqlite3-src likewise request
+  `pkg-config` for the feature sets that look for a system library; the
+  policies grant it to none of them, which is what keeps the vendored path,
+  and the fixture, independent of whether the host has `bzip2.pc`.
 - **Target-prefixed knobs recur.** tikv-jemalloc-sys reads
   `<TARGET>_LDFLAGS`, `<TARGET>_JEMALLOC_SYS_*` and so on before the plain
   names; prefix patterns can't express them, so requests list only the plain

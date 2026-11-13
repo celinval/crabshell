@@ -11,29 +11,50 @@ publish = false
 
 [dependencies]
 # cc-rs, C and assembly.
+alloca = "0.4"
+blake2b-rs = "0.2"
 blake3 = "1"
 blst = "0.3"
+brotli-sys = "0.3"
+bzip2-sys = { version = "0.1", features = ["static"] }
+cdivsufsort = "2"
+cee-scape = { version = "0.2", features = ["use_c_to_interface_with_setjmp"] }
+clear_on_drop = "0.2"
+errno-dragonfly = "0.1"
+file-lock = "2"
+ittapi-sys = "0.5"
+libdeflate-sys = "1"
 libmimalloc-sys = "0.1"
 libnghttp2-sys = "0.1"
 lz4-sys = "1"
+miniz-sys = "0.1"
 psm = "0.1"
 ring = "0.17"
 secp256k1-sys = "0.14"
 sha2-asm = "0.6"
+sqlite-vec = "0.1"
+sqlite3-src = { version = "0.7", features = ["bundled"] }
+sys-info = "0.9"
 tree-sitter = "0.27"
 tree-sitter-rust = "0.24"
+tun-tap = { version = "0.1", default-features = false }
+vsprintf = "2"
 zstd-sys = "2"
 # cc-rs, C++.
 cxx = "1"
 esaxx-rs = "0.1"
 link-cplusplus = "1"
 snappy_src = "0.2"
+# cc-rs with clang, named or probed for.
+aegis = "0.9"
+minicov = "0.3"
 # CMake.
 libsamplerate-sys = "0.1"
 libz-ng-sys = "1"
 protobuf-src = "2"
 snmalloc-sys = { version = "0.7", features = ["build_cmake"] }
 # configure scripts and make.
+libffi-sys = "4"
 mp3lame-sys = "0.1"
 sasl2-sys = { version = "0.1", features = ["vendored"] }
 tikv-jemalloc-sys = "0.7"

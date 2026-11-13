@@ -15,7 +15,7 @@ since `host.runner` is unstable.
 | `codegen` | generate Rust source, parsers or linker scripts into `OUT_DIR` from their own data, their own sources, or a parser generator they compile first |
 | `rustc-probe` | also run `$RUSTC` to detect versions or features |
 | `system-lib` | locate system libraries through pkg-config, the C compiler, a consumer's own `.pc` files or environment knobs, or fall back without them |
-| `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs, CMake, or configure scripts and make |
+| `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs (with the default compiler or clang), CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl` and `shadow-rs`, and in registry crates |
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
 | `protoc` | generate Rust from `.proto` files, through a vendored protoc or pure-Rust parsers |
@@ -102,6 +102,9 @@ The `bindgen` fixture needs libclang and `clang`, and finds libclang through
 clang's resource dir (`clang -print-resource-dir`). By hand, set it yourself,
 e.g. `LIBCLANG_PATH=/usr/lib64` on Fedora or `/usr/lib/llvm-<N>/lib` on
 Debian.
+The `cc-toolchain` fixture needs `clang` as well as the default compiler:
+minicov compiles with clang by name, and aegis compiles with it when it can
+run it.
 The jail has no network, so `network-fetch` builds offline in every build,
 the baseline included: its `.cargo/config.toml` points the crates at
 `prebuilt/`, which stands in for a local copy of their native libraries.

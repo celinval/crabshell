@@ -8,6 +8,28 @@
 # `cxx`, `cmake` and `autotools` grants. cc-rs, CMake and configure scripts
 # open their files in OUT_DIR read-write.
 
+[package.aegis]
+# Compiles the vendored libaegis. It runs `clang --version` and compiles with
+# clang when that works, falling back to the default compiler otherwise.
+read = [":manifest_dir/src/c", ":out_dir"]
+requests = ["cc", "clang"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS",
+    "CARGO_FEATURE_FORCE_WASM_RELAXED_SIMD", "CARGO_FEATURE_FORCE_WASM_STRICT_SIMD",
+    "CARGO_FEATURE_PURE_RUST", "CARGO_FEATURE_RAF_CORE", "CARGO_MANIFEST_DIR", "HOST", "TARGET",
+]
+
+[package.alloca]
+# Compiles one C file, after probing the compiler for a hardening flag.
+read = [":manifest_dir/alloca.c", ":out_dir"]
+requests = ["cc"]
+
+[package.blake2b-rs]
+# Compiles either the SSE or the portable BLAKE2b, by target feature.
+read = [":manifest_dir/BLAKE2", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_CFG_TARGET_FEATURE"]
+
 [package.blake3]
 # Compiles its assembly, after probing the compiler for AVX-512 flags.
 read = [":manifest_dir/c", ":out_dir"]
@@ -30,6 +52,36 @@ env = [
     "CARGO_MANIFEST_DIR",
 ]
 
+[package.brotli-sys]
+# Compiles the vendored brotli. When the vendored sources hold no `.git`, it
+# first runs `git submodule update --init` and ignores whether that worked.
+read = [":manifest_dir/brotli", ":out_dir"]
+requests = ["cc", "git"]
+
+[package.bzip2-sys]
+# Compiles the vendored bzip2 and copies its header. Without the `static`
+# feature it first looks for a system bzip2 through pkg-config.
+read = [":manifest_dir/bzip2-1.0.8", ":out_dir"]
+requests = ["cc", "pkg-config"]
+env = ["TARGET"]
+
+[package.cdivsufsort]
+# Compiles the vendored libdivsufsort.
+read = [":manifest_dir/c-sources", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_FEATURE_CROSSCHECK", "PROFILE"]
+
+[package.cee-scape]
+# Compiles its setjmp shims, and panics unless a feature selects one.
+read = [":manifest_dir/src", ":out_dir"]
+requests = ["cc"]
+env = ["CARGO_FEATURE_TEST_C_INTEGRATION", "CARGO_FEATURE_USE_C_TO_INTERFACE_WITH_SETJMP"]
+
+[package.clear_on_drop]
+# Compiles its one C file.
+read = [":manifest_dir/src/hide.c", ":out_dir"]
+requests = ["cc"]
+
 [package.cxx]
 # Compiles its C++ runtime. It checks `links` against its major version.
 read = [":manifest_dir/src/cxx.cc", ":manifest_dir/include", ":out_dir"]
@@ -41,8 +93,23 @@ env = ["CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION_MAJOR"]
 read = [":manifest_dir/src", ":out_dir"]
 requests = ["cc", "cxx"]
 
+[package.errno-dragonfly]
+# Compiles its one C file, on every target.
+read = [":manifest_dir/src/errno.c", ":out_dir"]
+requests = ["cc"]
+
+[package.file-lock]
+# Compiles its one C file.
+read = [":manifest_dir/src/file_lock.c", ":out_dir"]
+requests = ["cc"]
+
 [package.getrandom]
 env = ["CARGO_CFG_SANITIZE"]
+
+[package.ittapi-sys]
+# Compiles the vendored ittnotify.
+read = [":manifest_dir/c-library", ":out_dir"]
+requests = ["cc"]
 
 [package.libc]
 requests = ["rustc"]
@@ -57,6 +124,19 @@ env = [
     "RUST_LIBC_UNSTABLE_FREEBSD_VERSION", "RUST_LIBC_UNSTABLE_GNU_FILE_OFFSET_BITS",
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
+
+[package.libdeflate-sys]
+# Compiles the vendored libdeflate and copies its header. With the `dynamic`
+# feature it first looks for a system libdeflate through pkg-config.
+read = [":manifest_dir/libdeflate", ":out_dir"]
+requests = ["cc", "pkg-config"]
+
+[package.libffi-sys]
+# Copies the vendored libffi into OUT_DIR with `cp`, whose `--help` output it
+# reads for a flag, then configures and builds it there with `make install`.
+read = [":manifest_dir/libffi", ":out_dir"]
+requests = ["cc", "autotools"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_FEATURE_SYSTEM", "CFLAGS", "HOST", "TARGET"]
 
 [package.libmimalloc-sys]
 # Compiles the vendored mimalloc.
@@ -100,12 +180,30 @@ read = [":manifest_dir/liblz4", ":out_dir"]
 requests = ["cc"]
 env = ["CRT_STATIC", "TARGET"]
 
+[package.minicov]
+# Compiles the vendored LLVM profiling runtime, with clang by name and
+# without the system headers.
+read = [":manifest_dir/c", ":out_dir"]
+requests = ["cc", "clang"]
+
+[package.miniz-sys]
+# Compiles the vendored miniz.
+read = [":manifest_dir/miniz.c", ":manifest_dir/miniz.h", ":out_dir"]
+requests = ["cc"]
+env = ["TARGET"]
+
 [package.mp3lame-sys]
 # Configures and builds the vendored LAME through the autotools crate, which
 # also looks up the C++ compiler.
 read = [":manifest_dir/lame-3.100", ":out_dir"]
 requests = ["cc", "cxx", "autotools"]
 env = ["DOCS_RS", "HOST", "MP3LAME_SYS_OVERRIDE_HOST", "TARGET"]
+
+[package.num-traits]
+# autocfg compiles its probes into OUT_DIR; without reading them back, it
+# silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
 
 [package.object]
 requests = ["rustc"]
@@ -193,6 +291,33 @@ env = [
     "CARGO_MANIFEST_DIR", "DEBUG", "MSYSTEM", "OPT_LEVEL", "TARGET",
 ]
 
+[package.sqlite-vec]
+# Compiles its SQLite extension against the vendored SQLite headers.
+read = [
+    ":manifest_dir/sqlite-vec.c", ":manifest_dir/sqlite-vec.h", ":manifest_dir/sqlite3.h",
+    ":manifest_dir/sqlite3ext.h", ":out_dir",
+]
+requests = ["cc"]
+
+[package.sqlite3-src]
+# Compiles the vendored SQLite amalgamation. Without the `bundled` feature it
+# first looks for a system SQLite through pkg-config. It walks its whole
+# environment for `SQLITE_*` variables to pass on as defines, so a request can
+# only name them as a pattern.
+read = [":manifest_dir/source", ":out_dir"]
+requests = ["cc", "pkg-config"]
+env = [
+    "CARGO_CFG_SQLITE3_SRC_WASI_SDK_PATH", "CARGO_CFG_SQLITE3_SRC_WASI_TARGET_ENV",
+    "CARGO_CFG_TARGET_FAMILY", "CARGO_CFG_TARGET_OS", "SQLITE_*", "WASI_SDK_PATH",
+    "WASI_TARGET_ENV",
+]
+
+[package.sys-info]
+# Compiles the C for the target's operating system.
+read = [":manifest_dir/c", ":out_dir"]
+requests = ["cc"]
+env = ["TARGET"]
+
 [package.tikv-jemalloc-sys]
 # Copies the vendored jemalloc to OUT_DIR, then configures and builds it.
 read = [":manifest_dir/jemalloc", ":manifest_dir/configure", ":out_dir"]
@@ -217,6 +342,16 @@ env = ["CARGO_MANIFEST_DIR", "TARGET"]
 [package.tree-sitter-rust]
 # Compiles the grammar's generated parser and scanner.
 read = [":manifest_dir/src", ":out_dir"]
+requests = ["cc"]
+
+[package.tun-tap]
+# Compiles its one C file.
+read = [":manifest_dir/src/tuntap.c", ":out_dir"]
+requests = ["cc"]
+
+[package.vsprintf]
+# Compiles its one C file.
+read = [":manifest_dir/src/lib.c", ":out_dir"]
 requests = ["cc"]
 
 [package.zmij]

@@ -7,7 +7,7 @@ include = ["grants.toml"]
 # OUT_DIR is write-only; compilers, CMake and configure scripts read back what
 # they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc", "cc", "cxx", "cmake", "autotools"]
+grants = ["rustc", "cc", "cxx", "clang", "cmake", "autotools"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
@@ -18,5 +18,6 @@ env = { inherit = true, value = [
     "BLAKE3_CI", "BLST_TEST_NO_STD", "CARGO_ENCODED_RUSTFLAGS", "CI", "CRT_STATIC", "DEP_ATOMIC",
     "DEP_TREE_SITTER_LANGUAGE_WASM_HEADERS", "DEP_WASMTIME_C_API_INCLUDE", "DOCS_RS",
     "JEMALLOC_OVERRIDE", "JEMALLOC_SYS_*", "MP3LAME_SYS_OVERRIDE_HOST", "MSYSTEM",
-    "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "SASL2_STATIC",
+    "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "SASL2_STATIC", "SQLITE_*", "WASI_SDK_PATH",
+    "WASI_TARGET_ENV",
 ] }

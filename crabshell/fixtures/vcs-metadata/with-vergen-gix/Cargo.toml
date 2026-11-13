@@ -1,0 +1,10 @@
+[package]
+name = "with-vergen-gix"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+# Reads the repository with gix instead of running git. The `si` feature,
+# which reports the host's CPU, memory and name, is left out.
+vergen-gix = { version = "10", features = ["build", "cargo", "rustc"] }

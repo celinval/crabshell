@@ -152,7 +152,7 @@ What the requests cost, per build script:
 | `system-lib` | 42 | 0–52 | `rustc`, `pkg-config`, `pkg-config-path`, `cc` | 0 |
 | `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 53 | 0–20 | `rustc`, `cc`, `cxx`, `clang`, `cmake`, `autotools`, and `git`, `pkg-config`, which no policy grants | 0 |
-| `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
+| `vcs-metadata` | 81 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
 | `protoc` | 54 | 0–20 | `rustc`, `cc`, `protoc` | 0 |
 | `bindgen` | 14 | 0–20 | `rustc`, `cc`, `bindgen` | 0 |
@@ -737,6 +737,80 @@ wasm-bindgen). Every cell behaves as expected.
   clippy's driver answers `-vV` differently; the built-in `rustc` grant passes
   both.
 
+### More build metadata
+`vcs-metadata` grew to 81 build scripts. Two members now record the commit
+without running `git` themselves: `with-vergen-gix`, where vergen-gix reads
+the repository in process with gix, and `with-git-version`, where a
+proc-macro runs `git` while rustc expands it. The registry crates added embed
+the compiler version (aws-types, sentry-contexts, stabby-macros, hotpath), the
+commit (cross, solana-version, regorus, and stellar-xdr and soroban-env-common
+through crate-git-revision), their own version (prettier-please,
+verus_prettyplease, zed_extension_api), or a listing of their own files
+(i-slint-compiler, cross). Every cell behaves as expected.
+- **Reading the repository in process costs the same reads, minus the
+  program.** gix walks up from the crate looking for a `.git`, so the request
+  has to name the repository exactly as the `git` grant does; the fixture's
+  `git-repo` grant is that grant without `run`. Requesting `git` instead
+  would ask for a program the script never spawns. Granted nothing, gix
+  reports "Could not find a git repository" and vergen sets no
+  `VERGEN_GIT_*`; granted only the git dir, its dirty check fails with "IO
+  error while writing blob or reading file metadata" and vergen again drops
+  every `VERGEN_GIT_*`, not just the dirty flag as the git CLI does. Both
+  fail the crate's `env!`, so a library reading the repository itself
+  degrades louder, and all-or-nothing, where `git` degrades quietly.
+- **A proc-macro is outside the policy.** `with-git-version` embeds the
+  commit through git-version's `git_version!`, which runs `git` in the crate's
+  dir while rustc expands it. crabshell only wraps build scripts, so every
+  cell, including the bare default grant, gets the real commit; the member
+  asserts at compile time that it did. The directive comparison can't see it
+  either, since a proc-macro prints no directives. Any crate can embed the
+  commit this way.
+- **`.cargo_vcs_info.json` makes a published crate deterministic.**
+  crate-git-revision (stellar-xdr, soroban-env-common, stellar-strkey) reads
+  the commit Cargo records at publish time and only falls back to git, so
+  denial changes nothing for a registry build. Its 0.0.9 dirty check runs
+  `git status --porcelain --untracked-files=no`, which in a checkout would
+  need the work tree like every other dirty check.
+- **Scripts that print nothing can only be checked by their output files.**
+  cross writes `commit-info.txt` and `docker-images.rs` into `OUT_DIR` and
+  prints no directives at all; aws-types, sentry-contexts and stabby-macros
+  generate a source file with the compiler version and print nothing either.
+  Comparing every script's `OUT_DIR` against the baseline is the only check
+  that covers them: in all four working cells, every file matched byte for
+  byte except mach-sys's nonce and the `.rmeta` of eyre's compile probe,
+  which rustc writes into the per-cell `OUT_DIR` and which differs between
+  any two builds.
+- **A listing of its own crate is a read like any other.** cross lists its
+  `docker/` dir for the image names and i-slint-compiler walks `widgets/` for
+  the styles it embeds, both through `CARGO_MANIFEST_DIR`, so both fail under
+  the default grant. Listing is also all they need: the generated code reaches
+  the files with `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), ...))`,
+  which rustc reads, outside the sandbox.
+- **A write into `.git` can be requested but never granted.** regorus copies
+  its own `scripts/pre-commit` and `pre-push` into `.git/hooks` whenever it
+  finds a real `.git` next to the crate — a build script installing hooks in
+  the consumer's repository. From the registry there is no `.git`, so the copy
+  never happens; the request records the write, and no policy here grants one
+  outside `OUT_DIR`.
+- **Half the metadata crates need no grant at all.** prettier-please pastes
+  its version in with `concat!("cargo:VERSION=", env!(...))`, read when the
+  script compiles, so its request is empty; verus_prettyplease reads the same
+  value at run time and requests one name. zed_extension_api turns
+  `CARGO_PKG_VERSION` into bytes, vstd defaults `RUST_MIN_STACK`, and hotpath
+  recovers a custom profile's name from `OUT_DIR`'s own path, which the floor
+  always provides.
+- **Non-determinism has to be kept out of the fixture.** vergen's and
+  built's `si`/sysinfo features report the host's name, CPU and memory, and
+  mach-sys hashes the environment and the time into a nonce; the members take
+  neither feature and nothing prints the nonce. `SOURCE_DATE_EPOCH` fixes
+  every build timestamp, and gix's commit dates come from the fixture's
+  commit, which `Fixture::init_repo` pins.
+- **A registry crate that runs git watches files it will never see.**
+  solana-version prints `rerun-if-changed` for `HEAD`, `refs`, `packed-refs`
+  and `reftable` under both `--git-dir` and `--git-common-dir`, so in a
+  checkout its directives name paths outside the crate. In `CARGO_HOME` git
+  finds no repository, so, as for wasm-bindgen-shared and typst-utils,
+  denying it makes no difference.
 ## Methodology TODOs
 
 - **A control variant for crabshell's own effect.** A permissive policy

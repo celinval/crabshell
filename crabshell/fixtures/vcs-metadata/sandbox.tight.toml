@@ -6,7 +6,7 @@ include = ["grants.toml"]
 [local]
 # OUT_DIR is write-only; the scripts read back what they generate.
 read = { inherit = true, value = [":out_dir", ":manifest_dir/../Cargo.lock"] }
-grants = ["git", "sh", "grep", "awk", "rustc"]
+grants = ["git", "git-repo", "sh", "grep", "awk", "rustc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
@@ -26,9 +26,9 @@ read = { inherit = true, value = [":out_dir"] }
 grants = ["rustc"]
 env = { inherit = true, value = [
     "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION*", "PROFILE", "OPT_LEVEL",
-    "NIGHTLY_BUILD",
+    "DEBUG", "NUM_JOBS", "NIGHTLY_BUILD",
     "SOURCE_DATE_EPOCH", "VERGEN_*", "RUSTUP_TOOLCHAIN",
-    "HOTPATH_META_ALLOC_MAX_DEPTH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "GIT_HASH", "HOTPATH_META_ALLOC_MAX_DEPTH", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
     "PORTABLE_ATOMIC_DENY_WARNINGS", "ENSURE_NO_PANIC", "LIBC_BUILD_VERBOSE", "LIBC_CI",
-    "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID", "ICU4X_DATA_DIR",
+    "RUST_LIBC_UNSTABLE_*", "RUST_MIN_STACK", "WIND_RELEASE_ID", "ICU4X_DATA_DIR",
 ] }

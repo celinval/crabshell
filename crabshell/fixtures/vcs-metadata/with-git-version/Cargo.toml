@@ -1,0 +1,9 @@
+[package]
+name = "with-git-version"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# A proc-macro, not a build script: it runs git while the crate compiles.
+git-version = "0.3"

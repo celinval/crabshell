@@ -7,17 +7,41 @@ publish = false
 # Crates whose build scripts embed build metadata: their commit, versions,
 # Cargo's profile, a timestamp.
 [dependencies]
-# Leaves out git-version, a proc-macro that runs git, and sysinfo.
+# Leaves out sysinfo, whose build script reads the host's CPU and memory.
+
+# Through rustc_version.
+aws-types = "1"
 bugreport = { version = "0.6", default-features = false, features = ["format_markdown"] }
+# Writes the git short hash, the commit date and a listing of its own
+# `docker/` dir into OUT_DIR, printing no directives at all.
+cross = "0.2"
+# Both read the compiler's version and the profile off OUT_DIR's path.
+hotpath = "0.26"
 hotpath-meta = "0.31"
+# Embeds a listing of its `widgets/` dir, found through CARGO_MANIFEST_DIR.
+i-slint-compiler = "1.18"
 # Pulls in lrpar, whose build script also uses vergen.
 lrlex = "0.15"
 mach-sys = "0.5"
 names = "0.14.0"
+# A prettyplease fork, like verus_prettyplease, which regorus pulls in.
+prettier-please = "0.3"
 prettyplease = "0.3"
 protobuf = "3"
+# Copies git hooks into `.git` where one exists, and embeds the commit.
+regorus = { version = "0.12", default-features = false, features = ["std", "opa-runtime"] }
 rustc_version_runtime = "0.3"
-# Through crate-git-revision.
+# Also through rustc_version, for the version and the release channel.
+sentry-contexts = { version = "0.49", default-features = false }
+# Runs git for the commit and the refs to watch.
+solana-version = "4"
+# Parses `rustc -vV` itself, for the compiler's commit hash.
+stabby-macros = "72"
+# All three through crate-git-revision.
+soroban-env-common = "28"
 stellar-strkey = "1"
+stellar-xdr = "28"
 typst-utils = "0.15"
 wasm-bindgen-shared = "0.2"
+# Turns its own version into bytes; needs nothing else.
+zed_extension_api = "0.7"

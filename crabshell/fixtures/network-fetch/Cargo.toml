@@ -27,6 +27,23 @@ tracel-llvm-bundler = { version = "=22.1.4-6", features = ["xtask"] }
 # Fall back without network: a bundled copy of pci.ids, no MKL at all.
 pci-ids = "0.2"
 intel-mkl-src = "0.8"
+# Names a local copy for rustc to link; the script itself only stats it.
+sherpa-onnx-sys = "2"
+# Its offline path still runs bindgen on the headers it ships.
+xgboost_lib-sys = "3"
+# Skips the download on a feature, and emits nothing at all.
+oboe-sys = { version = "0.6", features = ["test"] }
+# Downloads only with `bundled`, which the consumer leaves off.
+postgresql_embedded = { version = "0.21", default-features = false, features = [
+    "theseus",
+    "tls-rustls-ring",
+] }
+# Each downloads a MeCab dictionary only with its `embed-*` feature.
+lindera-ipadic = "6"
+lindera-ipadic-neologd = "6"
+lindera-ko-dic = "6"
+lindera-unidic = "6"
+lindera-cc-cedict = "6"
 # Download only for other targets: the WASI SDK, wintun, prebuilt binaries.
 rquickjs-sys = "0.14"
 tun = "0.8"

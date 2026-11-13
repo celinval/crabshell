@@ -28,9 +28,14 @@ env = [
 network = true
 # Copies its pregenerated bindings. It only checks that the local copy exists;
 # otherwise it downloads into a cache under HOME and copies the library into
-# the target dir, which no variable names.
+# the target dir, which no variable names. Before that, it unwraps
+# CARGO_MANIFEST_DIR to look for `../../vendor/pdfium`, a dir of its own
+# monorepo; from the registry that's someone else's, so it isn't requested.
 read = [":manifest_dir/bindings.rs"]
-env = ["HOME", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "PDFIUM_LIB_PATH", "PDFIUM_INCLUDE_PATH"]
+env = [
+    "HOME", "XDG_CACHE_HOME", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "CARGO_MANIFEST_DIR",
+    "PDFIUM_LIB_PATH", "PDFIUM_INCLUDE_PATH",
+]
 
 [package.ort-sys]
 network = true
@@ -103,6 +108,99 @@ env = [
     "CARGO_FEATURE_UPDATE_BINDINGS", "TARGET",
 ]
 
+# Names the local copy to rustc, which reads the archives outside the
+# sandbox; the script itself only checks that the directory exists. Without
+# the switch it downloads an archive into a cache above OUT_DIR, and in
+# `shared` mode reads the library dir and copies it into the target dir and
+# into a Tauri project, neither of which a variable names.
+[package.sherpa-onnx-sys]
+network = true
+read = [":sherpa_onnx_lib_dir"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "CARGO_FEATURE_SHARED", "CARGO_FEATURE_STATIC",
+    "CARGO_MANIFEST_DIR", "CARGO_TARGET_DIR", "DOCS_RS", "PROFILE", "TARGET",
+    "SHERPA_ONNX_ARCHIVE_DIR", "SHERPA_ONNX_LIB_DIR",
+]
+
+# Generates bindings from the headers it ships, then takes the library dir
+# from the consumer. Without it, it downloads a checksum-verified archive,
+# keeps a copy in a cache under CARGO_HOME, and stages it beside the target
+# dir's dependencies, which no variable names. The signing tools are macOS
+# only.
+[package.xgboost_lib-sys]
+network = true
+read = [":manifest_dir/xgboost", ":manifest_dir/lib"]
+write = [":cargo_home/xgboost-prebuilt"]
+run = ["codesign", "install_name_tool"]
+requests = ["bindgen"]
+env = [
+    "CARGO_HOME", "CARGO_MANIFEST_DIR", "HOME", "HOMEBREW_PREFIX", "TARGET", "USERPROFILE",
+    "XGBOOST_LIB_CACHE", "XGBOOST_LIB_DIR", "XGBOOST_LIB_URL",
+]
+
+# Prints nothing on its `test` feature, which also skips the library: it
+# otherwise compiles the bundled C++, or downloads and extracts a release
+# archive into OUT_DIR on `fetch-prebuilt`.
+[package.oboe-sys]
+network = true
+read = [":manifest_dir/oboe", ":manifest_dir/oboe-ext", ":out_dir"]
+requests = ["cc", "cxx", "bindgen"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS", "CC_*", "CXX_*", "DOCS_RS", "PROFILE", "TARGET",
+]
+
+# Stages the PostgreSQL archive only on its `bundled` feature, into OUT_DIR
+# and a cache under HOME that no variable names.
+[package.postgresql_embedded]
+network = true
+env = ["HOME", "POSTGRESQL_RELEASES_URL", "POSTGRESQL_VERSION", "TARGET"]
+
+# The dictionary crates all call the same code in lindera-dictionary, which
+# does nothing unless the crate's `embed-*` feature or a cache dir is set.
+# It then downloads and MD5-checks a MeCab archive, or writes a dummy
+# dictionary under DOCS_RS, and builds it into OUT_DIR or into the cache dir,
+# which the consumer names relative to the workspace root. It declares
+# LINDERA_CTX_FREQ_FILE without reading it.
+[package.lindera-ipadic]
+network = true
+read = [":manifest_dir/metadata.json", ":manifest_dir/context_id_freq.txt", ":out_dir"]
+env = [
+    "CARGO_PKG_VERSION", "DOCS_RS", "LINDERA_BUILD_DICTIONARY_CACHE_DIR",
+    "LINDERA_DICTIONARIES_PATH",
+]
+
+[package.lindera-ipadic-neologd]
+network = true
+read = [":manifest_dir/metadata.json", ":manifest_dir/context_id_freq.txt", ":out_dir"]
+env = [
+    "CARGO_PKG_VERSION", "DOCS_RS", "LINDERA_BUILD_DICTIONARY_CACHE_DIR",
+    "LINDERA_DICTIONARIES_PATH",
+]
+
+[package.lindera-ko-dic]
+network = true
+read = [":manifest_dir/metadata.json", ":manifest_dir/context_id_freq.txt", ":out_dir"]
+env = [
+    "CARGO_PKG_VERSION", "DOCS_RS", "LINDERA_BUILD_DICTIONARY_CACHE_DIR",
+    "LINDERA_DICTIONARIES_PATH",
+]
+
+[package.lindera-unidic]
+network = true
+read = [":manifest_dir/metadata.json", ":manifest_dir/context_id_freq.txt", ":out_dir"]
+env = [
+    "CARGO_PKG_VERSION", "DOCS_RS", "LINDERA_BUILD_DICTIONARY_CACHE_DIR",
+    "LINDERA_DICTIONARIES_PATH",
+]
+
+[package.lindera-cc-cedict]
+network = true
+read = [":manifest_dir/metadata.json", ":manifest_dir/context_id_freq.txt", ":out_dir"]
+env = [
+    "CARGO_PKG_VERSION", "DOCS_RS", "LINDERA_BUILD_DICTIONARY_CACHE_DIR",
+    "LINDERA_DICTIONARIES_PATH",
+]
+
 # Only download on other targets or features: tun fetches wintun.dll on
 # Windows and copies it into the target dir, which no variable names.
 [package.tun]
@@ -116,6 +214,59 @@ network = true
 read = [":manifest_dir/xz", ":manifest_dir/config.h", ":out_dir"]
 requests = ["cc"]
 env = ["CARGO_CFG_TARGET_ENDIAN", "TARGET", "LZMA_API_STATIC"]
+
+# Compiles the vendored bzip2 for sherpa-onnx-sys, unless pkg-config finds
+# one, as it does here.
+[package.bzip2-sys]
+read = [":manifest_dir/bzip2-1.0.8", ":out_dir"]
+requests = ["pkg-config", "cc"]
+env = ["TARGET", "BZIP2_NO_PKG_CONFIG", "BZIP2_STATIC", "BZIP2_DYNAMIC"]
+
+# Compiles the vendored zstd, unless pkg-config is asked for one.
+[package.zstd-sys]
+read = [":manifest_dir/zstd", ":out_dir"]
+requests = ["pkg-config", "cc"]
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_WINDOWS",
+    "CARGO_MANIFEST_DIR", "TARGET", "ZSTD_SYS_NO_HIDE_SYMBOLS", "ZSTD_SYS_USE_PKG_CONFIG",
+]
+
+[package.zstd-safe]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_OS"]
+
+# Writes the target and host triples into OUT_DIR as macros, and exits
+# without them.
+[package.target-triple]
+env = ["HOST", "TARGET"]
+
+# Records the target for bindgen's consumers, and the knobs clang-sys reads.
+[package.bindgen]
+env = ["TARGET"]
+
+# With the `runtime` feature, its build script does nothing.
+[package.clang-sys]
+
+[package.prettyplease]
+env = [
+    "CARGO_MANIFEST_LINKS", "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR",
+    "CARGO_PKG_VERSION_MINOR",
+]
+
+# Version checks through rustversion's `cfg!` macro, evaluated when the build
+# script is compiled.
+[package.encoding_rs]
+
+[package.parking_lot_core]
+env = ["CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-epoch]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-deque]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
 
 # Pulled in by the download clients (rustls, reqwest, ureq) and the rest.
 [package.ring]
@@ -243,3 +394,4 @@ env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
 # Only emit directives and write OUT_DIR, which the floor covers.
 [package.mime_guess]
 [package.rustls]
+[package.rayon-core]

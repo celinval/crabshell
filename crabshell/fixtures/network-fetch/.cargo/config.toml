@@ -17,7 +17,15 @@ ORT_LIB_PATH = { value = "prebuilt", relative = true }
 ORT_PREFER_DYNAMIC_LINK = "1"
 PDFIUM_INCLUDE_PATH = { value = "prebuilt", relative = true }
 PDFIUM_LIB_PATH = { value = "prebuilt", relative = true }
+SHERPA_ONNX_LIB_DIR = { value = "prebuilt/sherpa", relative = true }
 SODIUM_LIB_DIR = { value = "prebuilt", relative = true }
 SODIUM_SHARED = "1"
+XGBOOST_LIB_DIR = { value = "prebuilt", relative = true }
 Z3_LIBRARY_PATH_OVERRIDE = { value = "prebuilt", relative = true }
 Z3_SYS_Z3_VERSION = "4.15.4"
+
+# Vendor libbzip2 instead of linking the system one. bzip2-sys is a build
+# dependency of sherpa-onnx-sys, so the system copy would be loaded when that
+# build script starts, before any policy can be consulted, and nothing in a
+# request can name it.
+BZIP2_NO_PKG_CONFIG = "1"

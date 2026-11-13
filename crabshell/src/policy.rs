@@ -78,11 +78,15 @@ pub const DEFAULT_ENV: &[&str] = &["TARGET", "HOST", "CARGO_CFG_*", "CARGO_FEATU
 /// The dynamic loader and the libraries every std build script links on `host`.
 ///
 /// A build script is a host program built with std. On `x86_64-*-linux-gnu`
-/// its ELF interpreter is the dynamic loader, and it needs `libc.so.6` and
-/// `libgcc_s.so.1` (for unwinding). Each library has candidate locations
-/// (Fedora-style `/lib64`, Debian-style `/lib/x86_64-linux-gnu`); candidates
-/// that don't exist are skipped. Hosts not listed get nothing, which fails
-/// closed.
+/// its ELF interpreter is the dynamic loader, and it needs `libc.so.6`,
+/// `libgcc_s.so.1` (for unwinding) and `libm.so.6`, which the linker pulls in
+/// for float math. Each library has candidate locations (Fedora-style
+/// `/lib64`, Debian-style `/lib/x86_64-linux-gnu`); candidates that don't
+/// exist are skipped. Hosts not listed get nothing, which fails closed.
+///
+/// The loader resolves them before the script runs, so a script that links
+/// one and can't read it dies with `error while loading shared libraries`,
+/// which no request can prevent: only the consumer's host knows the paths.
 ///
 /// They're implicit access. These stand in for built-in variables with
 /// per-host defaults that config will be able to override; see
@@ -96,6 +100,7 @@ pub fn implicit_runtime(host: &str) -> Vec<&'static str> {
                 "/lib64/libgcc_s.so.1",
                 "/lib/x86_64-linux-gnu/libgcc_s.so.1",
             ],
+            &["/lib64/libm.so.6", "/lib/x86_64-linux-gnu/libm.so.6"],
         ],
         _ => &[],
     };

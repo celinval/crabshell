@@ -55,6 +55,11 @@ enum Grants {
     Tight,
     /// A broad policy, e.g. any env var (`sandbox.loose.toml`).
     Loose,
+    /// A policy that denies one crate's switch (`sandbox.denied.toml`).
+    ///
+    /// Outside [`Scenario::ALL`]: a fixture that has one checks it in a test
+    /// of its own, which expects the build to fail.
+    Denied,
 }
 
 /// One cell of the requests × grants matrix.
@@ -106,6 +111,7 @@ impl Scenario {
             Grants::Default => PathBuf::from("/dev/null"),
             Grants::Tight => fixture.dir().join("sandbox.tight.toml"),
             Grants::Loose => fixture.dir().join("sandbox.loose.toml"),
+            Grants::Denied => fixture.dir().join("sandbox.denied.toml"),
         }
     }
 
@@ -886,12 +892,53 @@ fn bindgen() {
 )]
 fn network_fetch() {
     // Outside the jail, the scripts would download, and pci-ids would
-    // overwrite its own sources. In the jail, the baseline builds offline, through the local copies `.cargo/config.toml` names or
-    // the scripts' fallbacks.
-    check(&Fixture {
+    // overwrite its own sources. In the jail, the baseline builds offline,
+    // through the local copies `.cargo/config.toml` names or the scripts'
+    // fallbacks.
+    check(&network_fetch_fixture());
+}
+
+/// The `network-fetch` fixture, shared by its two tests.
+fn network_fetch_fixture() -> Fixture {
+    Fixture {
         name: "network-fetch",
         dumps_env: false,
         default_suffices: false,
         git_repo: false,
-    });
+    }
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "test-requests"),
+    ignore = "needs `--features test-requests`"
+)]
+fn network_fetch_denied_switch() {
+    // Denying one crate's offline switch sends its build script down the
+    // download path, where it fails rather than degrading silently. The
+    // matrix can't show it: every cell that works grants the switch, and the
+    // default column fails earlier, on a rustc probe. So the fixture's
+    // `sandbox.denied.toml` grants everything but liteparse-pdfium-sys's
+    // `PDFIUM_*`, and the build must fail on that package alone.
+    let fixture = network_fetch_fixture();
+    let scenario = Scenario {
+        requests: Requests::Precise,
+        grants: Grants::Denied,
+    };
+    fetch(&fixture);
+    let target_dir = Scratch::get().target(&fixture, "denied");
+    let build = build(&fixture, &target_dir, &Mode::Sandboxed(&scenario));
+    let stderr = stderr(&build);
+    assert!(
+        !build.output.status.success(),
+        "{}/denied: expected the build to fail:\n{stderr}",
+        fixture.name
+    );
+    // Its download path looks for a cache under HOME first, which the policy
+    // doesn't grant either, so it panics before reaching for the network.
+    assert!(
+        stderr.contains("liteparse-pdfium-sys") && stderr.contains("HOME env var not set"),
+        "{}/denied: expected liteparse-pdfium-sys to fail on its download path:\n{stderr}",
+        fixture.name
+    );
 }

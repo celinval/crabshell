@@ -117,3 +117,7 @@ headers through `LIBDRM_INCLUDE_PATH`, since not every distro ships a
 The jail has no network, so `network-fetch` builds offline in every build,
 the baseline included: its `.cargo/config.toml` points the crates at
 `prebuilt/`, which stands in for a local copy of their native libraries.
+Only the paths reach the build scripts' output, except for
+`prebuilt/sherpa/*.a`: rustc bundles a `static` library into the rlib, so
+those have to be archives, and are empty ones. Like `bindgen`, this fixture
+needs libclang and `clang`, for xgboost_lib-sys's bindings.

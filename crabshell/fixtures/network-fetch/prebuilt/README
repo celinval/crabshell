@@ -1,3 +1,5 @@
 # Stands in for a local copy of the native libraries, so the build
-# scripts find it instead of downloading one. libduckdb.so is empty:
-# libduckdb-sys only copies it into OUT_DIR, and nothing links.
+# scripts find it instead of downloading one. Nothing links, so the
+# contents only have to exist: libduckdb.so is empty (libduckdb-sys
+# only copies it into OUT_DIR), and `sherpa/*.a` are empty archives,
+# which rustc needs to bundle into the rlib.

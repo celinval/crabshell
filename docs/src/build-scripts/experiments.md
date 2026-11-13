@@ -156,12 +156,16 @@ What the requests cost, per build script:
 | `lang-runtime` | 43 | 0–20 | `rustc`, `python`, `java` | 0 |
 | `protoc` | 80 | 0–20 | `rustc`, `cc`, `protoc` | 2 |
 | `bindgen` | 40 | 0–20 | `rustc`, `cc`, `bindgen`, `pkg-config` | 2 |
-| `network-fetch` | 38 | 0–20 | `rustc`, `cc`, `pkg-config` | 0 |
+| `network-fetch` | 60 | 0–20 | `rustc`, `cc`, `cxx`, `pkg-config`, `bindgen`, `autotools` | 6 |
 
 - **Almost no request names a path or a program.** The floor and named grants
   absorb all host knowledge, so a vendor can write requests without knowing
   the user's system. The exceptions are two tools no grant covers:
   drm-fourcc's `rustfmt` and pq-sys's `pg_config`, each run by one crate.
+- **No request names a path or a program,** except in `network-fetch`,
+  where six name a tool the download path runs and two a consumer variable
+  (see below). The floor and named grants absorb all host knowledge, so a
+  vendor can write requests without knowing the user's system.
 - **Env names are the whole remaining cost,** and about half are variables
   Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
   Granting those by default would roughly halve the largest requests (`libc`,
@@ -934,6 +938,81 @@ verus_prettyplease, zed_extension_api), or a listing of their own files
   checkout its directives name paths outside the crate. In `CARGO_HOME` git
   finds no repository, so, as for wasm-bindgen-shared and typst-utils,
   denying it makes no difference.
+### More downloads
+The `network-fetch` fixture grew to 60 build scripts: a local copy named only
+for rustc (sherpa-onnx-sys), an offline path that still generates bindings
+(xgboost_lib-sys), features that switch the download off (oboe-sys,
+postgresql_embedded) and five MeCab dictionary crates (lindera-ipadic,
+-ipadic-neologd, -ko-dic, -unidic, -cc-cedict) that do nothing without theirs.
+Every cell behaves as expected. Most of the category's remaining crates can't
+join; the bullets below say why.
+- **A script's own shared libraries load before any policy applies.**
+  sherpa-onnx-sys's build script links `libbz2.so.1`, because its build
+  dependency bzip2-sys found the system copy through pkg-config, and
+  tracel-llvm-bundler's links `libm.so.6`. The loader opens both before the
+  script starts, so it dies with `error while loading shared libraries` and
+  no `cargo:warning`. No request can name them: the crate doesn't know the
+  host's paths, and the library is chosen by a build dependency. `libm.so.6`
+  joined implicit access, next to libc and libgcc_s; for libbz2 the fixture
+  sets `BZIP2_NO_PKG_CONFIG`, so bzip2-sys compiles its vendored copy. Both
+  scripts load fine *without* requests, since the `cc` grant's library dirs
+  cover them, so precise requests are what exposes this.
+- **A checksum pins the artifact, so no stand-in works.** libduckdb-sys
+  accepts an empty `libduckdb.so` and sherpa-onnx-sys empty archives, but
+  risc0-circuit-recursion SHA-256-checks `recursion_zkr.zip` before copying
+  it, and v8 checks its archive. Their switches for a local copy
+  (`RECURSION_SRC_PATH`, `RUSTY_V8_ARCHIVE`) only move the download, so
+  neither builds offline. risc0 dropped the download in 4.1 instead: the
+  archive now ships in the crate, and the build script that fetched it is
+  gone.
+- **Shared download dirs sit above `OUT_DIR`, which nothing names.** v8 takes
+  a lock file in `target/<profile>/build` and extracts into
+  `target/<profile>/gn_out`, wasmer caches wee8 four levels above `OUT_DIR`,
+  and sherpa-onnx-sys's `shared` mode copies the libraries into
+  `target/<profile>`. `:out_dir` is the deepest path a request or a policy can
+  name, so those paths are denied in every cell, even with a warm cache. v8,
+  v8-goose and wasmer are left out for that reason.
+- **`DOCS_RS` is the only offline switch for some crates, and it is global.**
+  hwlocality-sys, lbug, oboe-sys, sherpa-onnx-sys and v8 skip their native
+  setup when it's set. Cargo's `[env]` applies to the whole workspace, so a
+  fixture can only set it for every crate at once, which would turn off the
+  local-copy paths this fixture exists to test. A crate whose only switch is
+  `DOCS_RS` needs a fixture of its own.
+- **A download cache under `CARGO_HOME` is nameable; one under `HOME` isn't.**
+  xgboost_lib-sys keeps its verified copy in
+  `$CARGO_HOME/xgboost-prebuilt/<tag>`, so its request writes
+  `:cargo_home/xgboost-prebuilt`. liteparse-pdfium-sys, ort-sys,
+  intel-mkl-src, lbug and postgresql_embedded use dirs under `HOME`, which no
+  variable names, so their requests can only record `HOME`.
+- **Naming a library for rustc needs no grant at all.** sherpa-onnx-sys only
+  checks that `SHERPA_ONNX_LIB_DIR` is a directory and prints it as
+  `rustc-link-search`; rustc then bundles the `static` archives into the rlib,
+  outside the sandbox. So the archives must exist when rustc runs, while the
+  build script never reads them. Only crates that copy the artifact
+  themselves, like libduckdb-sys, need the directory readable.
+- **A crate whose feature is off is still a crate with a build script.**
+  oboe-sys (`test`), postgresql_embedded (without `bundled`) and the five
+  lindera dictionaries print no directives at all: their scripts read a few
+  knobs and return. They cost one request each and nothing can degrade, which
+  is what a fetching crate looks like once the consumer opts out of the fetch.
+  lindera-dictionary declares `LINDERA_CTX_FREQ_FILE` without reading it, one
+  more `rerun-if-env-changed` that overstates.
+- **The same host-specific grant is needed twice now.** xgboost_lib-sys
+  generates bindings even on its offline path, so this fixture needs the
+  `bindgen` grant the `bindgen` fixture defines, copied verbatim: a policy can
+  only `include` files inside its own fixture, since the jail reads nothing
+  else. Two fixtures needing the same distro-specific list of libraries and
+  headers argues for a built-in `bindgen` grant.
+- **A denied switch fails loudly, which the matrix can't show.**
+  `network_fetch_denied_switch` builds the fixture under the tight policy
+  minus liteparse-pdfium-sys's `PDFIUM_*`: the script takes its download path
+  and fails, and the build fails with it. Every working cell of the matrix
+  grants the switch, and the default column fails earlier on a rustc probe,
+  so observing this needed a scenario of its own. Its first run showed that
+  round 1's request missed `CARGO_MANIFEST_DIR`, which the fallback path
+  unwraps: a request is only checked on the paths the matrix runs, so knobs
+  read after a switch go unverified. The silent half (libbpf-sys and z3-sys
+  dropping a search path) still doesn't show up in directives.
 ## Methodology TODOs
 
 - **A control variant for crabshell's own effect.** A permissive policy

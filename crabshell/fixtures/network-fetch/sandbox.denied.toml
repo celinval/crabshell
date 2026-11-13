@@ -1,0 +1,25 @@
+#:schema ../../schema/sandbox.schema.json
+# `sandbox.tight.toml` with one offline switch left out: the consumer grants
+# everything except the `PDFIUM_*` variables naming the local copy of
+# libpdfium. liteparse-pdfium-sys then takes its download path, which fails
+# instead of degrading silently. Used by one test of its own, since the
+# default column fails earlier, on a rustc probe.
+include = ["grants.toml"]
+
+[variables]
+duckdb_lib_dir = { env = "DUCKDB_LIB_DIR" }
+sherpa_onnx_lib_dir = { env = "SHERPA_ONNX_LIB_DIR" }
+
+[external]
+read = { inherit = true, value = [":out_dir", ":duckdb_lib_dir", ":sherpa_onnx_lib_dir"] }
+grants = ["rustc", "cc", "pkg-config", "bindgen"]
+env = { inherit = true, value = [
+    "DOCS_RS", "CARGO_NET_OFFLINE", "ORT_*", "DUCKDB_*", "SODIUM_*",
+    "LIBBPF_SYS_LIBRARY_PATH*", "Z3_*", "CXXSTDLIB", "SWAGGER_UI_*", "MKLROOT",
+    "SHERPA_ONNX_*", "XGBOOST_*", "LINDERA_*", "POSTGRESQL_*",
+    "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_LINKS", "CARGO_PKG_NAME", "CARGO_PKG_VERSION",
+    "CARGO_PKG_VERSION_*",
+    "DEBUG", "OPT_LEVEL", "PROFILE", "RING_PREGENERATE_ASM", "LZMA_API_STATIC", "ICU4X_DATA_DIR",
+    "BZIP2_*", "ZSTD_SYS_*", "RUSTC_BOOTSTRAP", "RUSTC_STAGE",
+    "LIBC_BUILD_VERBOSE", "LIBC_CI", "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
+] }

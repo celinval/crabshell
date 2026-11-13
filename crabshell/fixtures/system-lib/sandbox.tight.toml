@@ -1,10 +1,12 @@
 #:schema ../../schema/sandbox.schema.json
 # The tightest consumer policy that works without crate requests: the union of
 # requests.toml, granted to every external crate.
+include = ["grants.toml"]
+
 [external]
 # OUT_DIR is write-only; compile probes and cc-rs read back what they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc", "pkg-config", "cc"]
+grants = ["rustc", "pkg-config", "pkg-config-path", "cc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
@@ -17,6 +19,11 @@ env = { inherit = true, value = [
     "MONGOCRYPT_LIB_DIR", "LIBRARY_PATH", "OPENMP_STATIC", "LIBPCAP_*",
     "WINAPI_NO_BUNDLED_LIBRARIES", "WINAPI_STATIC_NOBUNDLE", "RUST_FONTCONFIG_DLOPEN",
     "FONTCONFIG_*", "X11_*", "XEXT_*", "GL_*", "XCURSOR_*", "XXF86VM_*", "XFT_*",
-    "XINERAMA_*", "XI_*", "XMU_*", "XRANDR_*", "XTST_*", "XRENDER_*", "XPRESENT_*",
-    "XSCRNSAVER_*", "XT_*",
+    "XFIXES_*", "XINERAMA_*", "XI_*", "XMU_*", "XRANDR_*", "XTST_*", "XRENDER_*",
+    "XPRESENT_*", "XSCRNSAVER_*", "XT_*",
+    "ALSA_*", "DBUS_1_*", "EGL_*", "GLIB_2.0_*", "GOBJECT_2.0_*", "LIBMAGIC_*",
+    "LIBPCSCLITE_*", "LIBSYSTEMD_*", "LIBELOGIND_*", "PCSC_LIB_DIR", "PCSC_LIB_NAME",
+    "SYSTEM_DEPS_*", "SYSTEMD_*", "HOST_SYSTEMD_*", "TARGET_SYSTEMD_*",
+    "MSVC_SPECTRE_*", "VCToolsInstallDir",
+    "VCPKG_ROOT", "VCPKGRS_*", "NO_VCPKG", "LOCALAPPDATA",
 ] }

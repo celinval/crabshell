@@ -14,17 +14,39 @@ libz-sys = "1"
 lzma-sys = "0.1"
 openssl-sys = "0.9"
 zstd-sys = { version = "2", default-features = false, features = ["pkg-config"] }
+# ALSA is installed, so alsa-sys (through midir) probes it for real.
+midir = "0.11"
+# Probed through the `.pc` files under `pkgconfig/`, which stand in for
+# libraries installed in a prefix of the consumer's choosing. glib-sys and
+# gobject-sys probe through the system-deps crate, from their own manifests.
+glib-sys = "0.22"
+gobject-sys = "0.22"
+libdbus-sys = "0.2"
+magic-sys = "0.4"
+# Located through a consumer's environment variables: the pkg-config package
+# name for libsystemd-sys, the library directory for pcsc-sys.
+libsystemd-sys = "0.9"
+pcsc-sys = "1"
 # Libraries that needn't be installed: the scripts fall back, only emit link
-# directives, or record what pkg-config knows for loading at runtime.
+# directives on their own target, or record what pkg-config knows for loading
+# at runtime.
 clang-sys = { version = "1", features = ["runtime"] }
+coremidi-sys = "3"
 inotify-sys = "0.1"
+khronos-egl = { version = "6", features = ["dynamic"] }
 libpulse-simple-sys = "1"
 libseccomp = "0.4"
+libxdo-sys = "0.11"
 mongocrypt-sys = "0.1"
+msvc_spectre_libs = "0.2"
 odbc-sys = "0.31"
 openmp-sys = "1"
 pcap = "2"
 tiny-xlib = { version = "0.2", features = ["dlopen"] }
 winapi = "0.3"
+winapi-x86_64-pc-windows-gnu = "0.4"
+windows_x86_64_msvc = "0.53"
+wit-bindgen-rt = "0.44"
+x11 = "2"
 x11-dl = "2"
 yeslogic-fontconfig-sys = { version = "6", features = ["dlopen"] }

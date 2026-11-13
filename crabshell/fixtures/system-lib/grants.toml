@@ -1,0 +1,19 @@
+#:schema ../../schema/sandbox.schema.json
+# Reading the consumer's own `.pc` directory, which crabshell has no built-in
+# grant for: the built-in `pkg-config` grant reads the system directories, and
+# a crate can't name the prefix a consumer installed its libraries in.
+#
+# It's a grant of its own rather than an extension of `pkg-config`, because a
+# machine-facts user config (`fixtures/hosts/*.toml`, and `crabshell-probe`'s
+# output) replaces a project's grant of the same name instead of layering over
+# it. Since requests narrow to what the crate asked for, the crates that probe
+# these libraries have to request it by name.
+[variables]
+# The consumer's `.pc` directory, from PKG_CONFIG_PATH. Unset, the entries
+# using it are dropped and the probes find nothing.
+pkgconfig_dir = { env = "PKG_CONFIG_PATH" }
+
+# PKG_CONFIG_PATH itself is part of the built-in `pkg-config` grant, so the
+# directory it names is all this adds.
+[grant.pkg-config-path]
+read = [":pkgconfig_dir"]

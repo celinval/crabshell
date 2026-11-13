@@ -1,0 +1,10 @@
+# Stands in for libdbus, probed by libdbus-sys. See glib-2.0.pc.
+prefix=${pcfiledir}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: dbus
+Description: Free desktop message bus
+Version: 1.14.10
+Libs: -L${libdir} -ldbus-1
+Cflags: -I${includedir}/dbus-1.0

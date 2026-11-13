@@ -5,9 +5,50 @@
 # Every build script in the fixture is listed; a crate that reads its own
 # files requests exactly those, since the crate root is otherwise narrowed
 # away. Tools come from named grants
-# (`rustc`, `pkg-config`, `cc`); a crate lists the knobs it reads itself,
-# including the pkg-config crate's per-library `<LIB>_NO_PKG_CONFIG`,
-# `<LIB>_STATIC` and `<LIB>_DYNAMIC`.
+# (`rustc`, `pkg-config`, `cc`), and the consumer's own `.pc` directory from
+# `pkg-config-path`, which `grants.toml` defines; a crate lists the knobs it
+# reads itself, including the pkg-config crate's per-library
+# `<LIB>_NO_PKG_CONFIG`, `<LIB>_STATIC` and `<LIB>_DYNAMIC`.
+
+[package.alsa-sys]
+# Probes ALSA, then on 32-bit glibc compiles a snippet against its headers to
+# measure `snd_htimestamp_t`. cc-rs opens its files in OUT_DIR read-write.
+read = [":out_dir"]
+requests = ["pkg-config", "cc"]
+env = [
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "ALSA_NO_PKG_CONFIG", "ALSA_STATIC", "ALSA_DYNAMIC",
+]
+
+# glib-sys and gobject-sys probe through the system-deps crate, which reads
+# the libraries and versions to probe from the crate's own manifest. Its
+# per-library knobs are spelled from the dependency's key
+# (`SYSTEM_DEPS_GLIB_2_0_LIB`), while the pkg-config crate's keep the library
+# name as it is, dots included (`GLIB_2.0_STATIC`). It reads the
+# target-specific `PKG_CONFIG_PATH` variants too (`PKG_CONFIG_PATH_<target>`,
+# `HOST_PKG_CONFIG_PATH`), which the `pkg-config` grant covers.
+[package.glib-sys]
+read = [":manifest_path"]
+requests = ["pkg-config", "pkg-config-path"]
+env = [
+    "CARGO_FEATURE_*", "CARGO_MANIFEST_DIR", "DOCS_RS", "HOST", "TARGET",
+    "PKG_CONFIG_SYSROOT_DIR", "SYSROOT",
+    "SYSTEM_DEPS_BUILD_INTERNAL", "SYSTEM_DEPS_LINK", "SYSTEM_DEPS_NO_PREBUILT",
+    "SYSTEM_DEPS_GLIB_2_0_*", "SYSTEM_DEPS_GOBJECT_2_0_*",
+    "GLIB_2.0_NO_PKG_CONFIG", "GLIB_2.0_STATIC", "GLIB_2.0_DYNAMIC",
+    "GOBJECT_2.0_NO_PKG_CONFIG", "GOBJECT_2.0_STATIC", "GOBJECT_2.0_DYNAMIC",
+]
+
+[package.gobject-sys]
+read = [":manifest_path"]
+requests = ["pkg-config", "pkg-config-path"]
+env = [
+    "CARGO_FEATURE_*", "CARGO_MANIFEST_DIR", "DOCS_RS", "HOST", "TARGET",
+    "PKG_CONFIG_SYSROOT_DIR", "SYSROOT",
+    "SYSTEM_DEPS_BUILD_INTERNAL", "SYSTEM_DEPS_LINK", "SYSTEM_DEPS_NO_PREBUILT",
+    "SYSTEM_DEPS_GOBJECT_2_0_*",
+    "GOBJECT_2.0_NO_PKG_CONFIG", "GOBJECT_2.0_STATIC", "GOBJECT_2.0_DYNAMIC",
+]
 
 [package.libc]
 requests = ["rustc"]
@@ -23,6 +64,12 @@ env = [
     "RUST_LIBC_UNSTABLE_GNU_TIME_BITS", "RUST_LIBC_UNSTABLE_MUSL_V1_2_3", "WIND_RELEASE_ID",
 ]
 
+[package.libdbus-sys]
+# Probes libdbus, or builds the vendored copy with the `vendored` feature.
+read = [":manifest_dir/vendor", ":out_dir"]
+requests = ["pkg-config", "pkg-config-path", "cc"]
+env = ["DBUS_1_NO_PKG_CONFIG", "DBUS_1_STATIC", "DBUS_1_DYNAMIC"]
+
 [package.libsqlite3-sys]
 # Reads pre-generated bindings for the linked library, and the vendored
 # sqlite3 (with its own bindings) when bundled.
@@ -34,6 +81,20 @@ env = [
     "SQLITE_MAX_COLUMN", "SQLITE_MAX_EXPR_DEPTH", "SQLITE_MAX_VARIABLE_NUMBER",
     "SQLITE3_INCLUDE_DIR", "SQLITE3_LIB_DIR", "SQLITE3_STATIC",
     "SQLITE3_NO_PKG_CONFIG", "SQLITE3_DYNAMIC",
+]
+
+# libsystemd-sys reads its knobs through the build-env crate, which tries
+# `<KNOB>_<target>`, `<KNOB>_<target with underscores>` and
+# `HOST_<KNOB>`/`TARGET_<KNOB>` before the plain name. Here the triple is a
+# suffix, so prefix patterns cover every form, unlike openssl-sys's below.
+[package.libsystemd-sys]
+requests = ["pkg-config", "pkg-config-path"]
+# `SYSTEMD_*` also covers the knobs the pkg-config crate derives from the
+# package name SYSTEMD_PKG_NAME gives it, `LIBSYSTEMD_*` those of its default.
+env = [
+    "HOST", "TARGET",
+    "SYSTEMD_*", "HOST_SYSTEMD_*", "TARGET_SYSTEMD_*", "LIBSYSTEMD_*",
+    "LIBELOGIND_NO_PKG_CONFIG", "LIBELOGIND_STATIC", "LIBELOGIND_DYNAMIC",
 ]
 
 [package.libz-sys]
@@ -54,6 +115,17 @@ requests = ["pkg-config", "cc"]
 env = [
     "CARGO_CFG_TARGET_ENDIAN", "LZMA_API_STATIC", "TARGET",
     "LIBLZMA_NO_PKG_CONFIG", "LIBLZMA_STATIC", "LIBLZMA_DYNAMIC",
+]
+
+[package.magic-sys]
+# Probes libmagic, then falls back to vcpkg, which gives up on a non-MSVC
+# target before reading most of its knobs. Without either the script exits 1.
+requests = ["pkg-config", "pkg-config-path"]
+env = [
+    "CARGO_CFG_TARGET_FEATURE", "DOCS_RS", "TARGET",
+    "LIBMAGIC_NO_PKG_CONFIG", "LIBMAGIC_STATIC", "LIBMAGIC_DYNAMIC",
+    "VCPKG_ROOT", "VCPKGRS_DISABLE", "VCPKGRS_DYNAMIC", "VCPKGRS_TRIPLET",
+    "VCPKGRS_NO_LIBMAGIC", "LIBMAGIC_NO_VCPKG", "NO_VCPKG", "LOCALAPPDATA",
 ]
 
 # openssl-sys also reads each knob prefixed with the target triple
@@ -89,10 +161,19 @@ env = [
 [package.clang-sys]
 # With `runtime`, the script only checks the features it was built with.
 
+[package.coremidi-sys]
+# Links the CoreMIDI framework on Apple targets.
+env = ["TARGET"]
+
 [package.inotify-sys]
 # Runs pkg-config only on NetBSD and OpenBSD.
 requests = ["pkg-config"]
 env = ["CARGO_CFG_TARGET_OS"]
+
+[package.khronos-egl]
+# Probes EGL only with the `static` feature; `dynamic` loads it at runtime.
+requests = ["pkg-config"]
+env = ["EGL_NO_PKG_CONFIG", "EGL_STATIC", "EGL_DYNAMIC"]
 
 [package.libpulse-sys]
 # Falls back to linking `libpulse.so.0` by name when pkg-config doesn't know
@@ -118,8 +199,26 @@ env = [
 [package.libseccomp-sys]
 env = ["LIBSECCOMP_LIB_PATH", "LIBSECCOMP_LINK_TYPE"]
 
+[package.libxdo-sys]
+# Only names the library to link; finding it is the linker's problem.
+
+[package.midir]
+# Links libamidi on Android, decided at compile time.
+
 [package.mongocrypt-sys]
 env = ["MONGOCRYPT_LIB_DIR"]
+
+# msvc_spectre_libs also reads `MSVC_SPECTRE_LIB_DIR_<target>` and
+# `MSVC_SPECTRE_REQUIRED_LINK_ARGS_<target>`, with the triple's dashes turned
+# into underscores; prefix patterns cover both.
+[package.msvc_spectre_libs]
+# On an MSVC target it also looks for the Spectre libraries next to the
+# `cl.exe` cc-rs finds in the Windows registry, a path no request can name.
+env = [
+    "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS",
+    "CARGO_ENCODED_RUSTFLAGS", "TARGET",
+    "MSVC_SPECTRE_LIB_DIR*", "MSVC_SPECTRE_REQUIRED_LINK_ARGS*", "VCToolsInstallDir",
+]
 
 [package.num-traits]
 # autocfg compiles its probes into OUT_DIR; without reading them back, it
@@ -149,6 +248,15 @@ env = [
     "LIBPCAP_NO_PKG_CONFIG", "LIBPCAP_STATIC", "LIBPCAP_DYNAMIC",
 ]
 
+[package.pcsc-sys]
+# Links the library in PCSC_LIB_DIR, or probes libpcsclite and exits 1
+# without it. On Windows and macOS it links the platform's own.
+requests = ["pkg-config"]
+env = [
+    "CARGO_CFG_TARGET_OS", "PCSC_LIB_DIR", "PCSC_LIB_NAME",
+    "LIBPCSCLITE_NO_PKG_CONFIG", "LIBPCSCLITE_STATIC", "LIBPCSCLITE_DYNAMIC",
+]
+
 [package.proc-macro2]
 # Reads compile probes from its own sources, and rustc's output in OUT_DIR.
 read = [":manifest_dir/src/probe", ":out_dir"]
@@ -157,6 +265,16 @@ env = ["RUSTC_BOOTSTRAP", "RUSTC_STAGE", "TARGET"]
 
 [package.quote]
 requests = ["rustc"]
+
+[package.system-deps]
+# Its own script only downloads prebuilt libraries with the `binary` feature,
+# which its users don't enable; the probing runs in theirs.
+network = true
+env = ["DOCS_RS", "SYSTEM_DEPS_BUILD_MANIFEST", "SYSTEM_DEPS_NO_PREBUILT"]
+
+[package.target-lexicon]
+requests = ["rustc"]
+env = ["TARGET"]
 
 [package.tiny-xlib]
 # With `dlopen`, records each library's libdir from pkg-config in OUT_DIR,
@@ -167,8 +285,50 @@ env = [
     "X11_XCB_NO_PKG_CONFIG", "X11_XCB_STATIC", "X11_XCB_DYNAMIC",
 ]
 
+[package.typeid]
+requests = ["rustc"]
+
 [package.winapi]
 env = ["TARGET", "WINAPI_NO_BUNDLED_LIBRARIES", "WINAPI_STATIC_NOBUNDLE"]
+
+[package.winapi-x86_64-pc-windows-gnu]
+# Adds its bundled import libraries to the link search path, for its target.
+env = ["CARGO_MANIFEST_DIR", "TARGET", "WINAPI_NO_BUNDLED_LIBRARIES"]
+
+[package.windows_x86_64_msvc]
+# Adds its bundled import libraries to the link search path, whatever the
+# target, so the crate root is all it needs beyond the variable naming it.
+env = ["CARGO_MANIFEST_DIR"]
+
+[package.wit-bindgen-rt]
+# On wasm targets, copies the static library next to its sources into OUT_DIR,
+# found through the working directory rather than CARGO_MANIFEST_DIR.
+read = [":manifest_dir/src/libwit_bindgen_cabi.a"]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_FAMILY"]
+
+[package.x11]
+# Probes one library per enabled feature, and panics if any is missing.
+requests = ["pkg-config"]
+env = [
+    "CARGO_FEATURE_*",
+    "GL_NO_PKG_CONFIG", "GL_STATIC", "GL_DYNAMIC",
+    "X11_NO_PKG_CONFIG", "X11_STATIC", "X11_DYNAMIC",
+    "X11_XCB_NO_PKG_CONFIG", "X11_XCB_STATIC", "X11_XCB_DYNAMIC",
+    "XCURSOR_NO_PKG_CONFIG", "XCURSOR_STATIC", "XCURSOR_DYNAMIC",
+    "XEXT_NO_PKG_CONFIG", "XEXT_STATIC", "XEXT_DYNAMIC",
+    "XFIXES_NO_PKG_CONFIG", "XFIXES_STATIC", "XFIXES_DYNAMIC",
+    "XFT_NO_PKG_CONFIG", "XFT_STATIC", "XFT_DYNAMIC",
+    "XI_NO_PKG_CONFIG", "XI_STATIC", "XI_DYNAMIC",
+    "XINERAMA_NO_PKG_CONFIG", "XINERAMA_STATIC", "XINERAMA_DYNAMIC",
+    "XMU_NO_PKG_CONFIG", "XMU_STATIC", "XMU_DYNAMIC",
+    "XPRESENT_NO_PKG_CONFIG", "XPRESENT_STATIC", "XPRESENT_DYNAMIC",
+    "XRANDR_NO_PKG_CONFIG", "XRANDR_STATIC", "XRANDR_DYNAMIC",
+    "XRENDER_NO_PKG_CONFIG", "XRENDER_STATIC", "XRENDER_DYNAMIC",
+    "XSCRNSAVER_NO_PKG_CONFIG", "XSCRNSAVER_STATIC", "XSCRNSAVER_DYNAMIC",
+    "XT_NO_PKG_CONFIG", "XT_STATIC", "XT_DYNAMIC",
+    "XTST_NO_PKG_CONFIG", "XTST_STATIC", "XTST_DYNAMIC",
+    "XXF86VM_NO_PKG_CONFIG", "XXF86VM_STATIC", "XXF86VM_DYNAMIC",
+]
 
 [package.x11-dl]
 # Records each X11 library's libdir from pkg-config in OUT_DIR, or None.

@@ -14,7 +14,7 @@ since `host.runner` is unstable.
 | `cfg-only` | read Cargo's environment and emit cfgs |
 | `codegen` | generate Rust source, parsers or linker scripts into `OUT_DIR` from their own data, their own sources, or a parser generator they compile first |
 | `rustc-probe` | also run `$RUSTC` to detect versions or features |
-| `system-lib` | locate system libraries through pkg-config or the C compiler, or fall back without them |
+| `system-lib` | locate system libraries through pkg-config, the C compiler, a consumer's own `.pc` files or environment knobs, or fall back without them |
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs, CMake, or configure scripts and make |
 | `vcs-metadata` | record the commit, toolchain or build time: in the workspace's own crates, directly or through `built`, `vergen-gitcl` and `shadow-rs`, and in registry crates |
 | `lang-runtime` | configure language bindings: run the Python interpreter (pyo3), read its config from `DEP_*` (numpy), or generate Node-API, JNI, Erlang NIF and UniFFI glue |
@@ -80,6 +80,16 @@ RUSTC_BOOTSTRAP=1 CRABSHELL_REQUESTS=$PWD/requests.toml cargo -Zhost-config -Zta
 The `system-lib` policies extend the built-in `pkg-config` grant for Amazon
 Linux, where `pkg-config` is a wrapper that runs `rpm`; other distros may need
 different overrides.
+Several of the libraries its crates probe aren't installed on either CI or the
+development host, so the fixture ships `.pc` files under `pkgconfig/` that
+stand in for them, as a cross-compilation sysroot or a vcpkg prefix would, and
+its `.cargo/config.toml` points the crates at them through `PKG_CONFIG_PATH`,
+`SYSTEMD_PKG_NAME` and `PCSC_LIB_DIR`. Nothing links, so only the build
+scripts' view of those libraries matters. The crates that probe them request
+the fixture's `pkg-config-path` grant, which reads the directory
+`PKG_CONFIG_PATH` names. ALSA is expected to be installed
+(`alsa-lib-devel`, or `libasound2-dev` on Debian); without it alsa-sys fails
+every build, the baseline included.
 
 The `rustc-probe` policies also grant `cc`, which the category otherwise
 doesn't need: s2n-quic-platform's probes are executables, so rustc links them.

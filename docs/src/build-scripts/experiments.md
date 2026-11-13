@@ -13,7 +13,7 @@ has several `sandbox.*.toml` policy variants:
 |---|---|
 | `cfg-only` | crossbeam-utils, crossbeam-epoch, crossbeam-deque, rayon-core, tiny-keccak, crunchy, icu_properties_data |
 | `rustc-probe` | libc, getrandom, nix, parking_lot_core, proc-macro2, quote, rustix, serde, serde_core, thiserror, anyhow, async-io, camino, constant_time_eq, cookie, crc32fast, crossbeam-utils, doc-comment, encoding_rs, erased-serde, eyre, fs-err, heapless, httparse, io-lifetimes, matrixmultiply, memoffset, paste, portable-atomic, portable-atomic-util, proc-macro-error, proc-macro-error-attr, proc-macro-hack, ref-cast, rustversion, slotmap, syn 1, typeid, zmij, allocative, atomic-traits, bigdecimal, bnum, branches, circular-queue, const_fn, crc32c, decorum, erasable, error-chain, field-offset, fixed, flatbuffers, float16, hex_lit, im-rc, libm, maybe-uninit, multer, no-panic, num-traits, proc-macro2-diagnostics, rstest_macros, s2n-quic-platform, slice-dst, slog, stabby-abi, stabby-macros, substring, wasm-bindgen, wasm-bindgen-shared |
-| `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys (all via pkg-config), libc, libseccomp, libseccomp-sys, pcap, libpulse-sys, libpulse-simple-sys, openmp-sys, x11-dl, tiny-xlib, yeslogic-fontconfig-sys, clang-sys, inotify-sys, odbc-sys, mongocrypt-sys, winapi, num-traits, proc-macro2, quote |
+| `system-lib` | openssl-sys, libsqlite3-sys, libz-sys, lzma-sys, zstd-sys, alsa-sys (all via pkg-config), glib-sys, gobject-sys (via system-deps), libdbus-sys, magic-sys, libsystemd-sys, pcsc-sys, x11, libc, libseccomp, libseccomp-sys, pcap, libpulse-sys, libpulse-simple-sys, openmp-sys, x11-dl, tiny-xlib, yeslogic-fontconfig-sys, clang-sys, inotify-sys, khronos-egl, odbc-sys, mongocrypt-sys, coremidi-sys, libxdo-sys, midir, msvc_spectre_libs, winapi, winapi-x86_64-pc-windows-gnu, windows_x86_64_msvc, wit-bindgen-rt, system-deps, target-lexicon, typeid, num-traits, proc-macro2, quote |
 | `declared` | crossbeam-utils, patched to declare `[package.metadata.crabshell]` |
 
 `cargo test --features test-requests` (`crabshell/fixtures.rs`) first builds each
@@ -149,7 +149,7 @@ What the requests cost, per build script:
 |---|---:|---|---|---:|
 | `cfg-only` | 36 | 0–6 | – | 0 |
 | `rustc-probe` | 73 | 0–20 | `rustc`, `cc` | 0 |
-| `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
+| `system-lib` | 42 | 0–52 | `rustc`, `pkg-config`, `pkg-config-path`, `cc` | 0 |
 | `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
@@ -330,6 +330,65 @@ What the requests cost, per build script:
 - **The only machine-specific config is the consumer's.** On Amazon Linux the
   built-in `pkg-config` grant needs extending (`sh`, `rpm` and rpm's
   libraries); no request changes.
+- **A consumer's own `.pc` directory needs a grant of its own.** Most of the
+  category's remaining crates probe libraries installed on neither CI nor the
+  test host, so the fixture ships stand-in `.pc` files under `pkgconfig/`,
+  with no host paths in them, and points the crates
+  at them with `PKG_CONFIG_PATH`, as a cross-compilation sysroot or a vcpkg
+  prefix would. That directory can't ride in `[external] read`: requests
+  narrow it away, and no crate can name a prefix the consumer chose. It has
+  to be part of a named grant the crate requests. Extending the built-in
+  `pkg-config` grant doesn't work either, since a machine-facts user config
+  (`fixtures/hosts/*.toml`, or `crabshell-probe`'s output) replaces a
+  project's grant of the same name instead of layering over it. The fixture
+  defines `pkg-config-path`, reading `:pkgconfig_dir` imported from
+  `PKG_CONFIG_PATH` — which a built-in `:pkgconfig_paths` would make
+  unnecessary.
+- **system-deps probes from the crate's own manifest.** glib-sys's and
+  gobject-sys's build scripts name no library at all: system-deps reads
+  `[package.metadata.system-deps]` from `$CARGO_MANIFEST_DIR/Cargo.toml`, so
+  they need `CARGO_MANIFEST_DIR` even though the file is inside the crate
+  root. It declares 10 `SYSTEM_DEPS_<KEY>_*` knobs per library on top of 13
+  `PKG_CONFIG_*` ones, and emits `cargo:rustc-cfg=system_deps_have_<key>` per
+  library found, so a denied probe does show up in the directives.
+- **Per-library knobs aren't always valid identifiers.** The pkg-config crate
+  uppercases the library name and maps only `-` to `_`, so glib-2.0's knobs
+  are `GLIB_2.0_STATIC` and friends, dot included. Patterns match them, but no
+  shell can set them.
+- **Most probes fail the build rather than degrade.** alsa-sys (ALSA is
+  installed here), glib-sys, gobject-sys, libdbus-sys, magic-sys,
+  libsystemd-sys and pcsc-sys panic or exit 1 when their probe fails, unlike
+  the fallbacks above: denying the `pkg-config` grant, `PKG_CONFIG_PATH` or
+  the directory it names stops the build instead of quietly changing a cfg.
+  magic-sys's second chance, vcpkg, bails out before reading its own knobs on
+  a non-MSVC target, so the fallback is unobservable here.
+- **The package name to probe can itself be consumer config.**
+  libsystemd-sys probes `libsystemd` unless `SYSTEMD_PKG_NAME` names another
+  implementation; the fixture points it at elogind, as a musl system would.
+  The pkg-config crate then derives its knobs from that value
+  (`LIBELOGIND_STATIC`), so the request can't enumerate them without knowing
+  the consumer's choice.
+- **Knobs suffix the target triple as often as they prefix it.**
+  libsystemd-sys reads its knobs through the build-env crate
+  (`SYSTEMD_PKG_NAME_<target>`, then `HOST_SYSTEMD_PKG_NAME`, then the plain
+  name) and msvc_spectre_libs appends the triple to `MSVC_SPECTRE_LIB_DIR`.
+  Prefix patterns cover those, unlike openssl-sys's.
+- **Feature-gated probes make a request the union of every target.** x11
+  probes one library per enabled feature, 17 in all, so its request lists 51
+  `<LIB>_*` names although the fixture enables no feature and the script
+  probes nothing: the fixture's largest request belongs to the crate that does
+  the least here.
+- **`framework` link kinds can't cross targets.** accelerate-src prints
+  `cargo:rustc-link-lib=framework=Accelerate` whatever the target, and rustc
+  rejects a framework outside Apple, so it fails the build before any policy
+  applies; it's left out. coremidi-sys gates the same directive on `TARGET`,
+  so it's in.
+- **A script that compiles a probe with bare `rustc` can't even be
+  baselined.** libudev-sys unwraps `Command::new("rustc")`'s result, which
+  under rustup is the proxy in `~/.cargo/bin`, outside the jail: the baseline
+  panics too, so unlike doc-comment's silent loss the crate can't join the
+  fixture at all. Its library is missing anyway: this host installs `udev.pc`
+  but not `libudev.pc`.
 - **A crate's own script being cfg-only doesn't make its build cfg-only.**
   `cfg-only` keeps working under the default grant alone, but the category's
   most downloaded crates had to stay out of it. libm's script fails without

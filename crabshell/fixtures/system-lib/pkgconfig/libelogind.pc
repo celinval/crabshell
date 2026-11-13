@@ -1,0 +1,12 @@
+# Stands in for libelogind, the systemd-free implementation of libsystemd's
+# login API, which `.cargo/config.toml` names through SYSTEMD_PKG_NAME. See
+# glib-2.0.pc.
+prefix=${pcfiledir}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: elogind
+Description: elogind Login Manager
+Version: 255.5
+Libs: -L${libdir} -lelogind
+Cflags: -I${includedir}/elogind/systemd

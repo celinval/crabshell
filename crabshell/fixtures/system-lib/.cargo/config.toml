@@ -7,3 +7,13 @@ runner = ["../../../target/debug/crabshell"]
 
 [env]
 CRABSHELL_CONFIG = { value = "sandbox.toml", relative = true }
+# The consumer's own `.pc` directory, standing in for libraries installed in a
+# prefix of its choosing. The crates that probe them must also be granted it,
+# through the `pkg-config-path` grant in `grants.toml`.
+PKG_CONFIG_PATH = { value = "pkgconfig", relative = true }
+# libsystemd-sys probes `libsystemd` by default; this points it at elogind's
+# implementation instead, as a musl or BSD system would. Without the variable
+# the script probes `libsystemd` and exits 1.
+SYSTEMD_PKG_NAME = "libelogind"
+# pcsc-sys links libpcsclite from this directory instead of probing it.
+PCSC_LIB_DIR = { value = "pkgconfig/lib", relative = true }

@@ -388,3 +388,37 @@ requests = ["rustc"]
 [package.zmij]
 requests = ["rustc"]
 env = ["OPT_LEVEL"]
+
+# Crates whose own script only reads Cargo's environment, but whose build
+# needs the `rustc` grant for a version probe below them.
+
+# Both check the target OS and stop the build on anything else, so they fail
+# outright without the variable.
+[package.procfs]
+env = ["CARGO_CFG_TARGET_OS"]
+
+[package.socketcan]
+env = ["CARGO_CFG_TARGET_OS"]
+
+# Point dependent build scripts at their bundled C headers, naming them
+# through CARGO_MANIFEST_DIR, which they unwrap.
+[package.encoding_c]
+env = ["CARGO_MANIFEST_DIR"]
+
+[package.encoding_c_mem]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Read nothing: a fixed `has_i128` cfg, a cfg from features resolved when the
+# script is compiled, and two bodies a cfg or feature leaves empty.
+[package.num-bigint-dig]
+[package.test-fuzz-internal]
+[package.mini-moka]
+[package.sha1collisiondetection]
+
+# version_check.
+[package.generic-array]
+requests = ["rustc"]
+
+[package.serde_json]
+env = ["CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_POINTER_WIDTH"]
+

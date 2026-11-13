@@ -72,3 +72,13 @@ typeid = "1"
 wasm-bindgen = "0.2"
 zerocopy = "0.8"
 zmij = "1"
+# Their own scripts only read Cargo's environment, but a version probe below
+# them needs `rustc`.
+encoding_c = "0.9"
+encoding_c_mem = "0.2"
+mini-moka = "0.10"
+num-bigint-dig = "0.9"
+procfs = "0.18"
+sha1collisiondetection = "0.3"
+socketcan = "4"
+test-fuzz-internal = "8"

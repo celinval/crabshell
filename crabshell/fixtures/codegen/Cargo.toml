@@ -60,3 +60,14 @@ unicode-general-category = "1.1"
 woothee = "0.13"
 fst = "0.4"
 ss58-registry = "1.51"
+# Generators that rewrite their README into OUT_DIR for rustdoc.
+rust_decimal = "1.43"
+readme-rustdocifier = "0.1"
+reed-solomon-simd = "3"
+ply-rs = "0.1"
+# Parse their own data and serialize it into OUT_DIR.
+irg-kvariants = "0.1"
+jrsonnet-evaluator = "0.4"
+phonenumber = "0.3"
+# Its default feature precompiles the tokenizer DFAs.
+riptoken = "0.3"

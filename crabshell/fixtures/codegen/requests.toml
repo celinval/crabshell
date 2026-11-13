@@ -346,3 +346,80 @@ requests = ["rustc"]
 
 # Its data is compiled into the build script, so it only writes OUT_DIR.
 [package.unicode_names2]
+
+# Rewrite their README into OUT_DIR for rustdoc to include. Each reads it
+# relative to the working dir, the crate root, so it requests just that file.
+[package.rust_decimal]
+read = [":manifest_dir/README.md"]
+
+# readme-rustdocifier names the crate in the rewritten links, so both it and
+# its consumer fail outright without the package metadata.
+[package.readme-rustdocifier]
+read = [":manifest_dir/README.md"]
+env = ["CARGO_PKG_NAME", "CARGO_PKG_VERSION"]
+
+[package.reed-solomon-simd]
+read = [":manifest_dir/README.md"]
+env = ["CARGO_PKG_NAME", "CARGO_PKG_VERSION"]
+
+# skeptic turns the README's code blocks into tests in OUT_DIR, finding it
+# through CARGO_MANIFEST_DIR and naming the target triple in each test.
+[package.ply-rs]
+read = [":manifest_dir/README.md"]
+env = ["CARGO_MANIFEST_DIR", "TARGET"]
+
+# Compresses its dictionary into OUT_DIR, through CARGO_MANIFEST_DIR.
+[package.irg-kvariants]
+read = [":manifest_dir/dictionaries/source/kVariants.tsv"]
+env = ["CARGO_MANIFEST_DIR"]
+
+# Parse their bundled data and serialize it into OUT_DIR: the Jsonnet
+# standard library, compiled into the build script, and the metadata XML,
+# read relative to the crate root.
+[package.jrsonnet-evaluator]
+
+[package.phonenumber]
+read = [":manifest_dir/assets/PhoneNumberMetadata.xml"]
+
+# Precompiles the tokenizer DFAs for the target's byte order.
+[package.riptoken]
+env = ["CARGO_CFG_TARGET_ENDIAN"]
+
+# Version probes and directive-only scripts the generators pull in (see
+# rustc-probe and cfg-only).
+[package.camino]
+requests = ["rustc"]
+
+# version_check runs `$RUSTC --version`, and the profile becomes a cfg.
+[package.error-chain]
+requests = ["rustc"]
+env = ["PROFILE"]
+
+[package.getrandom]
+requests = ["rustc"]
+env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
+
+[package.rustix]
+# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
+read = [":out_dir"]
+requests = ["rustc"]
+env = [
+    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
+    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
+    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
+    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
+    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
+]
+
+[package.crossbeam-utils]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-epoch]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+[package.crossbeam-deque]
+env = ["TARGET", "CARGO_CFG_SANITIZE"]
+
+# Only emit directives and write OUT_DIR, which the floor covers.
+[package.rayon-core]
+[package.pulldown-cmark]

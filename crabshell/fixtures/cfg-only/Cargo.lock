@@ -74,8 +74,10 @@ dependencies = [
  "objc2",
  "rayon-core",
  "rb-sys-env",
+ "rio_api",
  "scratch",
  "scuffle-workspace-hack",
+ "smallbox",
  "syscalls",
  "tiny-keccak",
  "tree-sitter-language",
@@ -393,6 +395,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "rio_api"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb24af4f2e3226a44cb6f31f547bba67710ddaf7104af89f254ede509b8f26a4"
+
+[[package]]
 name = "scratch"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -409,6 +417,12 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "smallbox"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8d91712aabb2e735436c02f70d990d8b2241f42dd092a973694e198ea95fc93"
 
 [[package]]
 name = "static_assertions"

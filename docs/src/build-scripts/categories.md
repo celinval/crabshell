@@ -29,3 +29,9 @@ highest-privilege label; the 54 unlabelled scripts are excluded):
 The tier assignment is coarse. It counts what a crate *might* need under
 some feature set, not what one build does.
 
+Reading the 54 unlabelled scripts (see the
+[experiments](experiments.md#the-unlabelled-scripts)) puts 34 of them in
+tier 0, one in tier 1 and one in tier 2. The other 18 fit no tier: 15 write
+into their own sources or the target dir, two install hooks in the
+consumer's repository, and one probes for a tool that may not exist.
+

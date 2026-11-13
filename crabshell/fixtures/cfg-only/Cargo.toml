@@ -47,3 +47,6 @@ syscalls = { version = "0.8", default-features = false }
 tiny-keccak = { version = "2", features = ["sha3"] }
 tree-sitter-language = "0.1"
 valuable = "0.1"
+# Their scripts read nothing: a deprecation warning, and layout assertions.
+rio_api = "0.8"
+smallbox = "0.8"

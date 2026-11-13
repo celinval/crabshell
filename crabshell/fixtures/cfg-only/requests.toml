@@ -115,3 +115,8 @@ read = [":out_dir"]
 [package.embassy-time-driver]
 [package.nextest-workspace-hack]
 [package.scuffle-workspace-hack]
+
+# Read nothing: rio_api only prints a deprecation warning, and smallbox
+# asserts the layout of fat pointers in the build script itself.
+[package.rio_api]
+[package.smallbox]

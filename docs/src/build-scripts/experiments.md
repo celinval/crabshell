@@ -150,7 +150,7 @@ What the requests cost, per build script:
 | `cfg-only` | 36 | 0–6 | – | 0 |
 | `rustc-probe` | 39 | 0–20 | `rustc` | 0 |
 | `system-lib` | 23 | 0–33 | `rustc`, `pkg-config`, `cc` | 0 |
-| `codegen` | 46 | 0–20 | `rustc` | 0 |
+| `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 33 | 0–20 | `rustc`, `cc`, `cxx`, `cmake`, `autotools` | 0 |
 | `vcs-metadata` | 43 | 0–36 | `rustc`, `git`, `sh`, `grep`, `awk` | 0 |
 | `lang-runtime` | 34 | 0–20 | `rustc`, `python` | 0 |
@@ -379,18 +379,25 @@ What the requests cost, per build script:
 
 ### More generators
 
-The `codegen` fixture grew to 46 build scripts: table generators (snap,
-selectors, terminfo, cgmath, gl), generators reading their own data
-(oid-registry, gherkin, iso_currency, grok, tls-parser, khronos_api), a
-lalrpop parser (basic-cookies), a linker script (defmt) and env-configured
+The `codegen` fixture grew to 83 build scripts: table generators (snap,
+selectors, terminfo, cgmath, gl, fst, ss58-registry, packed_struct),
+generators reading their own data (oid-registry, gherkin, iso_currency, grok,
+tls-parser, khronos_api, human_name, htmlize, hyphenation, precis-core,
+precis-profiles, codepage-437, font-awesome-as-a-crate, cranelift-isle,
+stop-words), generators reading their own Rust sources (iref, miniserde),
+parser generators (basic-cookies and lalrpop, ntriple and rust-peg,
+sqlite3-parser and a lemon it compiles from C), a template engine
+(amq-protocol and handlebars), a linker script (defmt) and env-configured
 constants (smoltcp, fastnum). Every cell behaves as expected, and beyond the
 directives, every generated file in `OUT_DIR` matched the baseline byte for
-byte.
+byte, bar one that no two builds agree on (below).
 
 - **Most generators open their data relative to the working dir,** the
-  crate root, so they work under the default grant's crate-root read. Only
-  those using `CARGO_MANIFEST_DIR` (chrono-tz, web_atoms, tls-parser) need
-  the variable.
+  crate root, so they work under the default grant's crate-root read. The
+  ones that join `CARGO_MANIFEST_DIR` instead (chrono-tz, web_atoms,
+  tls-parser, human_name, hyphenation, miniserde, cpp_demangle,
+  precis-core, precis-profiles) need the variable, and fail outright without
+  it, since they all unwrap it.
 - **lalrpop walks the whole crate root** for `.lalrpop` files, not just
   `src`, so a crate using it requests `:manifest_dir`. Narrowed to `src`, it
   fails loudly; so does grok's `glob`, when its patterns dir can't be listed.
@@ -407,6 +414,67 @@ byte.
 - **Compile probes can be blind to denial.** heapless compiles an ARM
   `clrex` probe from `OUT_DIR`; on x86 it fails whether or not rustc can
   read it.
+- **Data compiled into the script escapes the policy.** pinyin reads its
+  table with `include_str!` through `env!("CARGO_MANIFEST_DIR")`,
+  ss58-registry its registry JSON, stop-words its `nltk` word lists (but not
+  the ISO one, which it opens at build time), amq-protocol its handlebars
+  template, and amq-protocol-codegen the AMQP spec from the build
+  dependency's own source dir. Those reads happen when the script, or the
+  library it calls, is compiled, so no request covers them and no denial
+  reaches them. packed_struct reads its size features with `cfg!` rather
+  than `CARGO_FEATURE_*`, for the same reason.
+- **A generator can read its own module tree.** iref inlines `src/uri/mod.rs`
+  into one file, following every `mod` declaration it finds, so the request
+  has to name the directory rather than the files; miniserde copies
+  `src/place.rs` with a module renamed after the patch version, and
+  codepage-437 splices each dialect's `overlaps.rs` into its output.
+- **`is_file` probes are invisible to the policy.** Landlock gates opening,
+  not `stat`, so amq-protocol finds its README beside the manifest, or at the
+  workspace root above it, with no read grant at all, and cpp_demangle sees
+  that the `in/` and `tests/` dirs it generates tests from are missing — as
+  they are in any published package, which is how a widely used crate ships a
+  build script that does nothing. amq-protocol passes the README's path to
+  rustc with `rustc-env`, and the crate `include_str!`s it outside the
+  sandbox.
+- **A script can run what it just compiled, and a read grant is what allows
+  it.** sqlite3-parser builds lemon and mkkeywordhash from vendored C with
+  cc-rs, then runs both from `OUT_DIR` to generate its parser and keyword
+  hash. A `run` entry can't name them: crabshell resolves `run` before the
+  script starts, when the files don't exist yet. The `read` grant for
+  `OUT_DIR` carries Landlock's execute right, so it works, and nothing in the
+  request records it.
+- **Writing a file a tool opens read-write needs the dir readable.** With
+  `OUT_DIR` write-only, `ld` can't create rlemon there and cc-rs's
+  compiler-family probe can't create its temp file; both report `Permission
+  denied` and sqlite3-parser fails. Like `/dev/null`, a dir written by
+  programs the script runs has to be granted read as well.
+- **Not every generator's output is reproducible.**
+  font-awesome-as-a-crate writes its icon lookups in `HashMap` order, so its
+  generated file differs between any two builds, the baseline's included.
+  Directives still match, but `OUT_DIR` can't be compared byte for byte.
+- **Network paths are feature-gated more often than patched out.**
+  precis-core and precis-profiles download the UCD files only with their
+  `networking` feature, and otherwise read the copy bundled under
+  `resources/ucd`; woothee's `generate` feature clones its upstream
+  repository into a temp dir and rewrites its own `src/dataset.rs` from the
+  YAML found there, while the default build script does nothing. Each
+  request records the network, woothee's `git` grant and its writes into its
+  own sources; a request naming a grant the policy doesn't define just
+  narrows away.
+- **A consumer knob can redirect generated code anywhere.** amq-protocol
+  writes its protocol module to `AMQ_PROTOCOL_CODEGEN_DIR` when that's set,
+  which no variable names and no policy here can grant. Denied, it falls back
+  to `OUT_DIR`, which is what an unconfigured build does.
+- **Perfect-hash builders need nothing but their input.** htmlize runs
+  phf_codegen over `entities.json` and human_name over four JSON files under
+  `build/`; the hashes are computed in the script. hyphenation instead copies
+  its bundled `dictionaries/` into `OUT_DIR` file by file, and rebuilds them
+  from `patterns/` on a normalization feature, so its request names both.
+- **A pure-Rust generator can still pull a C build.** amq-protocol's
+  handlebars brings pest, pest_stack_guard, stacker and psm, whose build
+  script assembles its stack-switching routines: the `cc` grant this fixture
+  now needs is owed as much to a template engine as to the one crate that
+  compiles a tool on purpose.
 - **A tool vendored in a crate can only be granted by path.**
   protoc-bin-vendored ships protoc inside its crate, and perfetto_protos
   runs it through a path compiled into that dependency. A bare `run =

@@ -1,5 +1,5 @@
 # Depends on crates whose build scripts generate Rust source, parsers or
-# linker scripts into `OUT_DIR` from their own data, without running tools.
+# linker scripts into `OUT_DIR` from their own data.
 [workspace]
 
 [package]
@@ -34,3 +34,29 @@ tls-parser = "0.12"
 cgmath = { version = "0.18", features = ["swizzle"] }
 terminfo = "0.9"
 unicode_names2 = "4.0.0"
+# The feature renders its handlebars template; the default one is a TLS stack.
+amq-protocol = { version = "10", default-features = false, features = ["codegen"] }
+# Compiles the lemon parser generator from C and runs it on its grammar.
+sqlite3-parser = "0.17"
+# Builds its grammar with rust-peg.
+ntriple = "0.1"
+cranelift-isle = "0.135"
+nano-gemm-f64 = "0.2"
+cpp_demangle = "0.5"
+# The feature makes its build script generate the entity map.
+htmlize = { version = "1.1", features = ["unescape"] }
+human_name = "2"
+hyphenation = "0.8"
+iref = "4"
+miniserde = "0.1"
+codepage-437 = "0.1"
+font-awesome-as-a-crate = "0.3"
+packed_struct = "0.10"
+pinyin = "0.11"
+stop-words = "0.10"
+proc-macro-nested = "0.1"
+precis-profiles = "0.2"
+unicode-general-category = "1.1"
+woothee = "0.13"
+fst = "0.4"
+ss58-registry = "1.51"

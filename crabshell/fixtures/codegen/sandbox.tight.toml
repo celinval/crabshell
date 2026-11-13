@@ -4,7 +4,8 @@
 [external]
 # OUT_DIR is write-only; compile probes read back what they write.
 read = { inherit = true, value = [":out_dir"] }
-grants = ["rustc"]
+# `cc` is for the two generators that build their tool from vendored C.
+grants = ["rustc", "cc"]
 # The default grant already covers TARGET, HOST, CARGO_CFG_* and
 # CARGO_FEATURE_*, so only the rest is added.
 env = { inherit = true, value = [
@@ -12,4 +13,5 @@ env = { inherit = true, value = [
     "RUSTC_BOOTSTRAP", "RUSTC_STAGE", "LIBC_BUILD_VERBOSE", "LIBC_CI",
     "RUST_LIBC_UNSTABLE_*", "WIND_RELEASE_ID",
     "ICU4X_DATA_DIR", "LALRPOP_LANE_TABLE", "OPT_LEVEL", "RUST_FASTNUM_*", "SMOLTCP_*",
+    "AMQ_PROTOCOL_CODEGEN_*",
 ] }

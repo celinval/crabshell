@@ -12,7 +12,7 @@ since `host.runner` is unstable.
 | Fixture | Build scripts that… |
 |---|---|
 | `cfg-only` | read Cargo's environment and emit cfgs |
-| `codegen` | generate Rust source, parsers or linker scripts into `OUT_DIR` from their own data |
+| `codegen` | generate Rust source, parsers or linker scripts into `OUT_DIR` from their own data, their own sources, or a parser generator they compile first |
 | `rustc-probe` | also run `$RUSTC` to detect versions or features |
 | `system-lib` | locate system libraries through pkg-config or the C compiler, or fall back without them |
 | `cc-toolchain` | compile vendored C, C++ and assembly through cc-rs, CMake, or configure scripts and make |

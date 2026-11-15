@@ -399,21 +399,6 @@ env = ["PROFILE"]
 requests = ["rustc"]
 env = ["CARGO_CFG_SANITIZE", "CARGO_CFG_TARGET_FAMILY"]
 
-[package.rustix]
-# Reads rustc's output in OUT_DIR; without it, it silently drops cfgs.
-read = [":out_dir"]
-requests = ["rustc"]
-env = [
-    "CARGO_CFG_MIRI", "CARGO_CFG_RUSTIX_NO_LINUX_RAW", "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_ASM",
-    "CARGO_CFG_RUSTIX_USE_EXPERIMENTAL_FEATURES", "CARGO_CFG_RUSTIX_USE_LIBC",
-    "CARGO_CFG_TARGET_ABI", "CARGO_CFG_TARGET_ARCH", "CARGO_CFG_TARGET_ENDIAN",
-    "CARGO_CFG_TARGET_ENV", "CARGO_CFG_TARGET_OS", "CARGO_CFG_TARGET_POINTER_WIDTH",
-    "CARGO_FEATURE_RUSTC_DEP_OF_STD", "CARGO_FEATURE_USE_LIBC", "TARGET",
-]
-
-[package.crossbeam-utils]
-env = ["TARGET", "CARGO_CFG_SANITIZE"]
-
 [package.crossbeam-epoch]
 env = ["TARGET", "CARGO_CFG_SANITIZE"]
 

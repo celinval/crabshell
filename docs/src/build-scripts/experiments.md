@@ -147,33 +147,29 @@ What the requests cost, per build script:
 
 | Fixture | Scripts | Env names per request | Grants requested | Paths or programs |
 |---|---:|---|---|---:|
-| `cfg-only` | 36 | 0–6 | – | 0 |
-| `rustc-probe` | 73 | 0–20 | `rustc`, `cc` | 0 |
+| `cfg-only` | 38 | 0–6 | – | 0 |
+| `rustc-probe` | 87 | 0–20 | `rustc`, `cc` | 0 |
 | `system-lib` | 42 | 0–52 | `rustc`, `pkg-config`, `pkg-config-path`, `cc` | 0 |
-| `codegen` | 83 | 0–20 | `rustc`, `cc`, `git` | 0 |
+| `codegen` | 102 | 0–20 | `rustc`, `cc`, `git` | 0 |
 | `cc-toolchain` | 53 | 0–20 | `rustc`, `cc`, `cxx`, `clang`, `cmake`, `autotools`, and `git`, `pkg-config`, which no policy grants | 0 |
-| `vcs-metadata` | 81 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
-| `lang-runtime` | 43 | 0–20 | `rustc`, `python`, `java` | 0 |
-| `protoc` | 80 | 0–20 | `rustc`, `cc`, `protoc` | 2 |
-| `bindgen` | 40 | 0–20 | `rustc`, `cc`, `bindgen`, `pkg-config` | 2 |
-| `network-fetch` | 60 | 0–20 | `rustc`, `cc`, `cxx`, `pkg-config`, `bindgen`, `autotools` | 6 |
+| `vcs-metadata` | 99 | 0–36 | `rustc`, `git`, `git-repo`, `sh`, `grep`, `awk` | 0 |
+| `lang-runtime` | 50 | 0–20 | `rustc`, `python`, `java` | 0 |
+| `protoc` | 90 | 0–20 | `rustc`, `cc`, `protoc` | 2 |
+| `bindgen` | 41 | 0–20 | `rustc`, `cc`, `bindgen`, `pkg-config` | 2 |
+| `network-fetch` | 67 | 0–20 | `rustc`, `cc`, `cxx`, `pkg-config`, `bindgen`, `autotools` | 6 |
 
-- **Almost no request names a path or a program.** The floor and named grants
-| `cfg-only` | 24 | 0–6 | – | 0 |
-| `rustc-probe` | 53 | 0–20 | `rustc` | 0 |
-| `codegen` | 65 | 0–20 | `rustc` | 0 |
-  absorb all host knowledge, so a vendor can write requests without knowing
-  the user's system. The exceptions are two tools no grant covers:
-  drm-fourcc's `rustfmt` and pq-sys's `pg_config`, each run by one crate.
-- **No request names a path or a program,** except in `network-fetch`,
-  where six name a tool the download path runs and two a consumer variable
-  (see below). The floor and named grants absorb all host knowledge, so a
-  vendor can write requests without knowing the user's system.
+- **Few requests name a path or a program.** The floor and named grants
+  absorb most host knowledge, so a vendor can write requests without knowing
+  the user's system. The exceptions are tools no grant covers or that only a
+  download path runs (drm-fourcc's `rustfmt`, pq-sys's `pg_config`,
+  protosol's bundled protoc, hdfs-native's `cp`, and `curl`, `zig` and `z3`
+  in network-fetch), and consumer variables naming a local copy
+  (`:duckdb_lib_dir`, `:libdrm_include_path`).
 - **Env names are the whole remaining cost,** and about half are variables
   Cargo itself defines (`CARGO_CFG_*`, `CARGO_FEATURE_*`, `TARGET`, `HOST`).
   Granting those by default would roughly halve the largest requests (`libc`,
   `openssl-sys`); see the open question on the default policy.
-- **8 of 23 build scripts read their own crate,** so they request the files
+- **Many build scripts read their own crate,** so they request the files
   they use, e.g. thiserror's `build/probe.rs` or libz-sys's `src/smoke.c`;
   requests otherwise narrow the crate root away. Two of them, proc-macro2 and
   thiserror, compile probe sources from their crate: without that request
@@ -520,7 +516,7 @@ What the requests cost, per build script:
 
 ### More generators
 
-The `codegen` fixture grew to 83 build scripts: table generators (snap,
+The `codegen` fixture grew to 102 build scripts: table generators (snap,
 selectors, terminfo, cgmath, gl, fst, ss58-registry, packed_struct),
 generators reading their own data (oid-registry, gherkin, iso_currency, grok,
 tls-parser, khronos_api, human_name, htmlize, hyphenation, precis-core,
@@ -799,7 +795,7 @@ byte, bar one that no two builds agree on (below).
 
 ### More version probes
 
-The `rustc-probe` fixture grew to 73 build scripts: crates running `$RUSTC`
+The `rustc-probe` fixture grew to 87 build scripts: crates running `$RUSTC`
 themselves (const_fn, branches, allocative, hex_lit, maybe-uninit, no-panic,
 stabby-macros), through rustc_version (atomic-traits, field-offset,
 flatbuffers, float16, crc32c, rstest_macros, stabby-abi), version_check
@@ -868,7 +864,7 @@ wasm-bindgen). Every cell behaves as expected.
   both.
 
 ### More build metadata
-`vcs-metadata` grew to 81 build scripts. Two members now record the commit
+`vcs-metadata` grew to 99 build scripts. Two members now record the commit
 without running `git` themselves: `with-vergen-gix`, where vergen-gix reads
 the repository in process with gix, and `with-git-version`, where a
 proc-macro runs `git` while rustc expands it. The registry crates added embed
@@ -942,7 +938,7 @@ verus_prettyplease, zed_extension_api), or a listing of their own files
   finds no repository, so, as for wasm-bindgen-shared and typst-utils,
   denying it makes no difference.
 ### More downloads
-The `network-fetch` fixture grew to 60 build scripts: a local copy named only
+The `network-fetch` fixture grew to 67 build scripts: a local copy named only
 for rustc (sherpa-onnx-sys), an offline path that still generates bindings
 (xgboost_lib-sys), features that switch the download off (oboe-sys,
 postgresql_embedded) and five MeCab dictionary crates (lindera-ipadic,

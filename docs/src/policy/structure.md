@@ -89,8 +89,8 @@ lib_dir = "/usr/lib64"
 A package is local when its manifest directory is outside `CARGO_HOME`, which
 crabshell reads from the build script's environment. This mirrors the
 distinction Cargo itself uses for `--cap-lints` and rebuild detection: the
-question is whether the source is yours, not whether it is in your member
-list.
+question is where the source lives, not whether it is in your member list.
+Local doesn't mean trusted; see the [threat model](../threat-model.md#trust).
 
 Note this is deliberately *not* Cargo's `[profile.*.package."*"]` semantics,
 where `*` means "every package except workspace members" — and so matches a

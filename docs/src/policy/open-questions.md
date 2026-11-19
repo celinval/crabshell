@@ -10,6 +10,24 @@
   source inside your project, so the `CARGO_HOME` test classifies it as
   `[local]`. The environment alone cannot distinguish a vendored directory from
   a path dependency; resolving this needs the manifest or `cargo metadata`.
+- **Classification compares paths as spelled.** A package is local when
+  `CARGO_MANIFEST_DIR` doesn't start with `CARGO_HOME`, and neither is
+  canonicalized. If they name the same directory differently (e.g. through a
+  symlink), a fetched package is classified local, which usually means the
+  looser table.
+- **Local IPC is reachable.** The network filter allows `AF_UNIX` sockets,
+  and the Landlock ruleset enables no scopes, so a script can connect to
+  abstract Unix sockets (e.g. an X11 server) and signal the user's other
+  processes. Whether it can also connect to named sockets is untested. If it
+  can, unconfined local services are reachable: the D-Bus session bus, for
+  one, can start a process outside the sandbox.
+- **The default grant can exceed a local package's source.** `:manifest_dir`
+  is whatever directory holds the manifest. For a root package at the
+  workspace root, that is the whole repository, including `.git`, `.env`
+  files and `target/`.
+- **`read` grants execute.** On the Linux backend, a package may run programs
+  it ships without listing them in `run`. They stay in the same sandbox, but
+  the policy doesn't show it.
 - **Policy changes don't rerun build scripts.** The policy isn't part of
   Cargo's fingerprint, so after a policy edit, results cached under the old
   policy remain until a clean build.

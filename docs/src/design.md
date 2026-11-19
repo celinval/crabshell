@@ -72,13 +72,15 @@ read = [":manifest_dir"]                   # its own files
 env  = ["OPENSSL_DIR", "OPENSSL_STATIC"]   # knobs it reads
 ```
 
-Nothing needs listing for what a build script can't run without: its
-[implicit access](policy/structure.md) (`OUT_DIR`, `/dev/null`, a private
-`TMPDIR`, the dynamic loader and libc). When the policy says nothing, a
-package is also granted read access to its own directory, the **default
-grant**, which tables can replace and a request may narrow.
-Everything else must be listed. Once a crate declares anything, unlisted
-fields request nothing.
+Nothing needs listing for what a build script can't run without:
+its [implicit access](policy/structure.md)
+(`OUT_DIR`, `/dev/null`, a private `TMPDIR`, the dynamic loader and libc).
+A field no table sets falls back to the **default grant**:
+read access to the package's own directory,
+and the build facts `TARGET`, `HOST`, `CARGO_CFG_*` and `CARGO_FEATURE_*`.
+Tables can replace it and a request may narrow it.
+Everything else must be listed.
+Once a crate declares anything, unlisted fields request nothing.
 
 **What the consumer grants** — a top-level `sandbox.toml` sets, per package, what
 any build script in the graph is actually allowed. The consumer is the upper

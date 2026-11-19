@@ -12,7 +12,7 @@
 //! a path list like `PATH`, so a single path is a one-element list, and a path
 //! containing `:` can't be imported.
 //!
-//! Entries may also be glob patterns, in the syntax of the [`glob`] crate:
+//! Entries may also be glob patterns, in the syntax of the [`glob`](mod@glob) crate:
 //! `*` and `?` within a component, `[...]` character classes, and `**` as a
 //! whole component for any depth. [`Expander`] expands variables, then globs,
 //! before resolution compares anything; env entries match the same syntax

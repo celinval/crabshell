@@ -87,7 +87,7 @@ Once a crate declares anything, unlisted fields request nothing.
 any build script in the graph is actually allowed. The consumer is the upper
 bound: a package's requests are *restrictive*, not permissive, and the effective
 set is the intersection of the two. The `sandbox.toml` schema is in the
-[policy specification](policy/README.md), kept separate because the policy
+[policy specification](policy/), kept separate because the policy
 surface can evolve without touching the runner mechanism.
 
 ### Flow

@@ -6,6 +6,7 @@ We follow these tenets to guide our design, in priority order:
 
 1. *Security is non-negotiable.* No convenience or speedup may let a build
    script reach more than it was granted.
+   The [threat model](threat-model.md) defines whom we trust and what we protect.
 2. *Usability drives adoption.* Most build scripts should run with minimal
    annotations, and the policies people do write should survive updates and
    work across build environments.

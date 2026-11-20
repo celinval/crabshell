@@ -5,6 +5,7 @@
 # Design
 
 - [Design overview](design.md)
+- [Threat model](threat-model.md)
 - [Policy specification](policy/README.md)
   - [Structure](policy/structure.md)
   - [Resolution](policy/resolution.md)

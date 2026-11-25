@@ -58,8 +58,8 @@ Everything else is out of scope:
 ## What is protected
 
 Beyond its [implicit access](policy/structure.md#tables)
-and the [default grant](#defaults),
-a build script must not:
+and its [effective policy grant](policy/resolution.md) (including any
+[default grant](#defaults)), a build script must not:
 
 - read host files, environment variables (e.g. `CARGO_REGISTRY_TOKEN`),
   or other packages' sources and outputs;

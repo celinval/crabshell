@@ -56,5 +56,4 @@ snmalloc-sys = { version = "0.7", features = ["build_cmake"] }
 # configure scripts and make.
 libffi-sys = "4"
 mp3lame-sys = "0.1"
-sasl2-sys = { version = "0.1", features = ["vendored"] }
 tikv-jemalloc-sys = "0.7"

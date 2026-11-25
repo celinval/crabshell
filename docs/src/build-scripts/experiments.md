@@ -189,7 +189,7 @@ What the requests cost, per build script:
   autotools crate looks up the C++ compiler even for C projects. The `cc`
   grant already passes `CXX*`; the fixture adds a one-line `cxx` grant.
 - **Configure scripts degrade silently where cargo can't see it.** jemalloc,
-  Cyrus SASL and LAME build through `sh`, about 50 coreutils and `make`
+  LAME and libffi build through `sh`, about 50 coreutils and `make`
   (the fixture's `autotools` grant). Without `file` and its magic database,
   `dd`, `getconf` and `objdump`, configure still succeeds and every `cargo:`
   directive matches, but libtool is configured differently (`LD` without

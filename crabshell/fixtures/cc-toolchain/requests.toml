@@ -247,13 +247,6 @@ env = [
     "CARGO_PKG_VERSION_PRE", "DEBUG", "RING_PREGENERATE_ASM",
 ]
 
-[package.sasl2-sys]
-# Copies the vendored Cyrus SASL to OUT_DIR, configures and builds it, then
-# preprocesses its own `version.c` against the installed headers.
-read = [":manifest_dir/sasl2", ":manifest_dir/version.c", ":out_dir"]
-requests = ["cc", "autotools"]
-env = ["HOST", "SASL2_STATIC", "TARGET"]
-
 [package.secp256k1-sys]
 # Compiles the vendored libsecp256k1.
 read = [":manifest_dir/depend/secp256k1", ":out_dir"]

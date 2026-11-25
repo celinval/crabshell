@@ -640,23 +640,32 @@ fn script_runs(target_dir: &Path) -> Vec<ScriptRun> {
     out
 }
 
-/// Every build script's `cargo:` directives, by package.
+/// Every build script run's `cargo:` directives, by package.
+///
+/// A lock can hold two versions of a crate, each running its own script, so a
+/// package maps to one block of directives per run, sorted: the order the runs
+/// are found in is their build dirs', which differs between hosts.
 ///
 /// Other output is diagnostics, e.g. cc-rs prints each compiler invocation
 /// with its full environment, which differs by design under a sandbox.
 /// Directives may name files in `OUT_DIR`, whose path differs between builds,
 /// so it reads as `<out-dir>`.
-fn directives(target_dir: &Path) -> BTreeMap<String, String> {
-    let mut out = BTreeMap::new();
+fn directives(target_dir: &Path) -> BTreeMap<String, Vec<String>> {
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for run in script_runs(target_dir) {
         if let Ok(text) = std::fs::read_to_string(&run.stdout) {
             let out_dir = run.out_dir.to_string_lossy();
-            let lines: &mut String = out.entry(run.package).or_default();
-            for line in text.lines().filter(|line| line.starts_with("cargo:")) {
-                lines.push_str(&line.replace(&*out_dir, "<out-dir>"));
-                lines.push('\n');
-            }
+            let block = text
+                .lines()
+                .filter(|line| line.starts_with("cargo:"))
+                .map(|line| line.replace(&*out_dir, "<out-dir>"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            out.entry(run.package).or_default().push(block);
         }
+    }
+    for blocks in out.values_mut() {
+        blocks.sort();
     }
     out
 }
@@ -726,7 +735,7 @@ fn check(fixture: &Fixture) {
 ///
 /// An unlisted package would keep the consumer's full grant, hiding a missing
 /// request.
-fn assert_requests_cover(fixture: &Fixture, scripts: &BTreeMap<String, String>) {
+fn assert_requests_cover(fixture: &Fixture, scripts: &BTreeMap<String, Vec<String>>) {
     #[derive(serde::Deserialize)]
     struct Requests {
         package: BTreeMap<String, toml::Value>,

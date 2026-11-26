@@ -64,9 +64,16 @@ fn network_is_denied_unless_granted() {
 
 #[test]
 fn rejects_bad_arguments() {
-    let status = |args: &[&str]| Command::new(JAIL).args(args).status().unwrap().success();
+    // Capture jail's diagnostics rather than letting them reach the test's
+    // own stderr, where they read as failures.
+    let rejects = |args: &[&str], message: &str| {
+        let output = Command::new(JAIL).args(args).output().unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?}: accepted");
+        assert!(stderr.contains(message), "{args:?}: said {stderr:?}");
+    };
 
-    assert!(!status(&["--bogus", "--", PROBE]));
-    assert!(!status(&["--read"]));
-    assert!(!status(&["--read", "/usr"]));
+    rejects(&["--bogus", "--", PROBE], "unexpected argument `--bogus`");
+    rejects(&["--read"], "`--read` needs a PATH");
+    rejects(&["--read", "/usr"], "missing `-- PROGRAM`");
 }

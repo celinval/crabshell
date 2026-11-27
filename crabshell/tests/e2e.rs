@@ -431,6 +431,40 @@ fn a_declaration_tightens_the_grant() {
     ));
 }
 
+/// A declaration names a path through an env var the consumer redirected, so
+/// the grant survives narrowing instead of being clamped to a fixed guess.
+#[test]
+fn a_declaration_names_a_path_from_a_requested_env_var() {
+    let build = Build::new(
+        "[external]\nread = [\":sdk/include\"]\n\n[variables]\nsdk = { env = \"SDK_DIR\" }\n",
+    );
+    let manifest = build.manifest_dir("dep", &Origin::External);
+    std::fs::write(
+        manifest.join("Cargo.toml"),
+        "[package]\nname = \"dep\"\n\n[package.metadata.crabshell]\nenv = [\"SDK_DIR\"]\nread = [\":sdk_dir/include\"]\n",
+    )
+    .unwrap();
+    let sdk = build.dir.path().join("sdk");
+    std::fs::create_dir_all(sdk.join("include")).unwrap();
+    std::fs::write(sdk.join("include/sdk.h"), "x").unwrap();
+    std::fs::write(sdk.join("private.key"), "secret").unwrap();
+    let env = [("SDK_DIR", sdk.to_str().unwrap())];
+
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["readable", sdk.join("include/sdk.h").to_str().unwrap()]
+    ));
+    // The declaration named a subpath, so the rest of the SDK stays out.
+    assert!(build.check(
+        "dep",
+        Origin::External,
+        &env,
+        &["unreadable", sdk.join("private.key").to_str().unwrap()]
+    ));
+}
+
 #[test]
 fn the_floor_grants_dev_null_and_a_private_tmpdir() {
     let build = Build::new("[external]\n");

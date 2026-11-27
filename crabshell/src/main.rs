@@ -73,17 +73,28 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         host: std::env::var("HOST").unwrap_or_default(),
     };
     let variables = paths::Variables::new(&config.variables, |name| std::env::var_os(name));
-    let names = std::env::vars_os()
+    let names: Vec<String> = std::env::vars_os()
         .filter_map(|(name, _)| name.into_string().ok())
         .collect();
-    let x = paths::Expander::new(variables, names);
+    let x = paths::Expander::new(variables, names.clone());
     let permissions = policy::resolve(&config, &pkg, &x)?;
     let declared = match injected(&pkg.name)? {
         Some(declared) => Some(declared),
         None => declared::load(&manifest_dir)?,
     };
     let mut permissions = match declared {
-        Some(declared) => policy::tighten(permissions, &declared, &pkg, &config, &x)?,
+        Some(declared) => {
+            let (vars, shadowed) =
+                paths::Variables::for_declaration(|name| std::env::var_os(name), &declared.env);
+            let decl = paths::Expander::new(vars, names.clone());
+            if !shadowed.is_empty() && std::env::var_os("CRABSHELL_LOG").is_some() {
+                eprintln!(
+                    "crabshell: {}'s declaration shadows built-ins: {shadowed:?}",
+                    pkg.name
+                );
+            }
+            policy::tighten(permissions, &declared, &pkg, &config, &x, &decl)?
+        }
         None => permissions,
     };
     if let Some((path, mut user)) = user {

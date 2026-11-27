@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 
 use std::cell::RefCell;
 
-use crate::config::{Source, VariableDef};
+use crate::config::{EnvImport, Source, VariableDef};
 use crate::policy::Expand;
 
 /// Variables crabshell defines, from the build script's environment.
@@ -100,6 +100,37 @@ impl Variables {
             values.insert(name.clone(), evaluate(def, &env));
         }
         Self { values }
+    }
+
+    /// The built-ins, plus one variable per exact name in `env`.
+    ///
+    /// A declaration resolves against these: each environment variable it
+    /// requests becomes a variable of the same name in lowercase, shadowing a
+    /// built-in. Patterns (`CARGO_CFG_*`) name no single value, so they add
+    /// nothing. Returns the shadowed built-ins, to report under
+    /// `CRABSHELL_LOG`.
+    pub fn for_declaration(
+        env: impl Fn(&str) -> Option<OsString> + Copy,
+        requested: &[String],
+    ) -> (Self, Vec<String>) {
+        let defs: BTreeMap<String, VariableDef> = requested
+            .iter()
+            .filter(|name| !name.ends_with('*'))
+            .map(|name| {
+                let def = VariableDef::One(Source::Env(EnvImport {
+                    env: name.clone(),
+                    default: None,
+                }));
+                (name.to_lowercase(), def)
+            })
+            .filter(|(name, _)| is_valid_name(name))
+            .collect();
+        let shadowed = defs
+            .keys()
+            .filter(|name| BUILTIN.contains(&name.as_str()))
+            .cloned()
+            .collect();
+        (Self::new(&defs, env), shadowed)
     }
 
     /// Expand a policy entry; `None` when its variable is undefined.
@@ -333,6 +364,7 @@ mod tests {
             "RUSTC" => Some("/tc/nightly/bin/rustc".into()),
             "OPENSSL_DIR" => Some("/opt/ssl".into()),
             "PKG_CONFIG_PATH" => Some("/a/pc:/b/pc".into()),
+            "SYSROOT" => Some("/sdk".into()),
             _ => None,
         }
     }
@@ -376,6 +408,30 @@ mod tests {
     fn a_definition_redefines_a_builtin() {
         let v = vars(&[("sysroot", VariableDef::One(path("/opt/tc")))]);
         assert_eq!(v.expand(":sysroot").unwrap(), Some(vec!["/opt/tc".into()]));
+    }
+
+    /// A declaration names paths from the env vars it requests.
+    #[test]
+    fn a_declaration_names_its_requested_env_vars() {
+        let requested = ["PKG_CONFIG_PATH".to_string(), "CARGO_CFG_*".to_string()];
+        let (v, shadowed) = Variables::for_declaration(env, &requested);
+        assert_eq!(
+            v.expand(":pkg_config_path").unwrap(),
+            Some(vec!["/a/pc".into(), "/b/pc".into()])
+        );
+        // A pattern names no single value, so it adds nothing.
+        assert!(v.expand(":cargo_cfg_").is_err());
+        // The consumer's variables aren't in scope.
+        assert!(v.expand(":lib_dir").is_err());
+        assert!(shadowed.is_empty());
+    }
+
+    /// An env var the crate requests shadows a built-in, like any inner scope.
+    #[test]
+    fn a_requested_env_var_shadows_a_builtin() {
+        let (v, shadowed) = Variables::for_declaration(env, &["SYSROOT".to_string()]);
+        assert_eq!(v.expand(":sysroot").unwrap(), Some(vec!["/sdk".into()]));
+        assert_eq!(shadowed, ["sysroot"]);
     }
 
     #[test]

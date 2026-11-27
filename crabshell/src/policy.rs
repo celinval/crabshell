@@ -196,18 +196,28 @@ pub fn resolve(
 /// The declaration's `requests` expand through `config`'s grants first. Each
 /// list then becomes its intersection with the declaration, plus the
 /// implicit access. Network survives only if both grant it.
+///
+/// The crate's own entries expand through `decl`, which knows the built-ins
+/// and the crate's requested env vars but not the consumer's `[variables]`.
+/// The entries a named grant contributes are the consumer's, so they expand
+/// through `x`.
 pub fn tighten(
     permissions: Permissions,
     declared: &Declared,
     pkg: &PackageContext,
     config: &SandboxConfig,
     x: &impl Expand,
+    decl: &impl Expand,
 ) -> Result<Permissions, PathError> {
     let grants = grants::effective(config);
     let wanted = |own: &[String], get: fn(&Fields) -> &Option<ListField>, kind| {
-        let mut value = own.to_vec();
-        value.extend(grants::expand(&grants, &declared.requests, get));
-        expand_all(x, kind, &value)
+        let mut value = expand_all(decl, kind, own)?;
+        value.extend(expand_all(
+            x,
+            kind,
+            &grants::expand(&grants, &declared.requests, get),
+        )?);
+        Ok(dedup(value))
     };
     let keep = |granted: Vec<String>, wanted: Vec<String>, floor: &[&str]| -> Vec<String> {
         let mut out = intersect(&granted, &wanted);
@@ -492,7 +502,7 @@ mod tests {
         pkg: &PackageContext,
         config: &SandboxConfig,
     ) -> Permissions {
-        super::tighten(permissions, declared, pkg, config, &Fixed).unwrap()
+        super::tighten(permissions, declared, pkg, config, &Fixed, &Fixed).unwrap()
     }
 
     fn config(toml: &str) -> SandboxConfig {

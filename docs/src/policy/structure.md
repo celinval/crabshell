@@ -2,7 +2,7 @@
 
 ## Policy files
 
-Two files can apply to a build:
+Two files feed the policy:
 
 - **The project's policy:** the file `CRABSHELL_CONFIG` names, usually set
   for every build script through Cargo's `[env]`. Without it, only implicit
@@ -10,12 +10,29 @@ Two files can apply to a build:
   looks for a `sandbox.toml` near a package: a dependency could ship one, or
   its repository could, and grant itself anything.
 - **The user's own config:** `$XDG_CONFIG_HOME/crabshell/config.toml`, or
-  `~/.config/crabshell/config.toml`. Same format. It **caps** the project's
-  policy: each field it names (in its tables, grants or `[limits]`) is
-  intersected with the project's result, so a laptop stays safe even in a
-  project with loose permissions. Fields it doesn't name are left alone. Its
-  `[variables]` and `[grant.*]` are machine facts and replace the project's
-  of the same name.
+  `~/.config/crabshell/config.toml`. Same format, same meaning: its tables
+  grant, and its `[limits]` caps. It carries what the project can't know —
+  this machine's paths and tool quirks, and the ceiling this machine holds
+  every project to.
+
+The two are **merged into one policy** before anything resolves, similar to how Cargo
+merges its own config files, with the project taking precedence:
+
+| | Merge rule |
+|---|---|
+| The same key in both | the project's wins |
+| Arrays | joined |
+| `[grant.*]`, `[variables]` | merged per name, fields layered |
+| `[limits]` | **intersected**, per field either names |
+
+[Resolution](resolution.md) then proceeds from that single policy.
+
+`[limits]` is the exception, and the whole contract between the two files:
+**tables grant, `[limits]` caps.** Merging tables can only add, so either file
+may widen the other's — the user is trusted, since the threat model is a
+hostile dependency, not the person running the build. A line one of them means
+to hold belongs in `[limits]`, which intersects: a user who never wants a
+dependency to reach the network writes it there, not in a table.
 
 The rest of this page describes the format both files share.
 
@@ -123,8 +140,7 @@ Beneath the tables, two built-ins apply to every build script:
   `[limits]` clamps it, and a request narrows it, e.g. to
   `:manifest_dir/build/probe.rs`.
 
-A build script gets nothing beyond these unless a table or its own
-declaration grants it.
+A build script gets nothing beyond these unless a user table grants it.
 
 `TMPDIR` is `crabshell-tmp` in the build script's unit directory (next to
 `OUT_DIR`), emptied at the start of every run. A shared `/tmp` would let build

@@ -115,8 +115,8 @@ When a build script fails or behaves differently, set `CRABSHELL_LOG=1` to
 print the permissions each script ran with, then extend `sandbox.toml`.
 
 Your own `~/.config/crabshell/config.toml` (or under `$XDG_CONFIG_HOME`), if
-present, caps every project's policy: a project can't grant more than it
-allows.
+present, merges with every project's policy. Note that `[limits]` merge strategy
+is to cap what any project can grant.
 
 ### Trying crate declarations
 

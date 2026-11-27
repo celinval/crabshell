@@ -1,5 +1,9 @@
 # Resolution
 
+Resolution runs on the single policy the user config and the project policy
+[merge into](structure.md#policy-files). Note that arrays join across those
+files, where within one file a more specific table replaces what it names.
+
 Each field resolves independently. For a package `pkg` and field `f`, take the
 value from the most specific table that sets `f`, then clamp by `[limits]`:
 
@@ -21,7 +25,8 @@ then, if [limits] sets f:  value = value ∩ [limits].f   # clamp
 - **`limits` clamps per field, with a warning — it does not fail the build.**
   When a resolved value exceeds a `limits` field, the runner reduces it to the
   cap and warns. This keeps a build working under a strong global ceiling even
-  when a table requests more.
+  when a table requests more. A field either file leaves unnamed stays
+  unconstrained; a field both name clamps to the intersection.
 - **A package's declaration can only tighten, never widen.** The effective set is
   intersected with what the package declares, so a package can voluntarily reduce
   its access but never exceed the consumer's policy. This is the invariant that

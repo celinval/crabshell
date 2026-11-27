@@ -15,11 +15,12 @@
   policy remain until a clean build.
 - **A project lint.** E.g. no absolute machine paths in a checked-in
   `sandbox.toml`; those belong in the user's config.
-- **How granular should `[limits]` be?** It's the only way to cap, and it
-  applies to every package alike, so "cap what registry crates read, but not
-  my own workspace" isn't expressible. Scoping it the way grant tables are
-  scoped (`[limits.external]`, `[limits.package.foo]`) is additive, and worth
-  doing once a real policy needs it.
+- **Do declarations need explicit variable names?** A crate's variables come
+  from the env vars it requests, lowercased, which costs no syntax but ties
+  the name to the knob. `env = [{ name = "OPENSSL_DIR", alias = "ssl" }]`
+  would let a crate choose, at the price of a second form for `env` entries.
+  Worth adding only if real declarations want a name the knob doesn't give
+  them.
 - **Diagnostics need a cargo driver.** crabshell reports problems as
   `cargo::warning` lines (no `CRABSHELL_CONFIG`, a user config narrowing a
   project's policy, network granted to `[external]`), but Cargo redirects

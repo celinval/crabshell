@@ -25,6 +25,13 @@ crabshell derives these from what Cargo tells the build script:
 The mapping is a fixed list, not every `CARGO_*` variable, so new Cargo
 variables don't silently become paths.
 
+Built-ins are shortcuts, not reserved names: they save a policy from spelling
+out a path the environment already holds, and nothing enforces them. A config
+may redefine one, and a declaration's own names shadow one (see below).
+Implicit access doesn't go through them — the runner reads `OUT_DIR` and
+builds `TMPDIR` directly — so redefining `:out_dir` can't change what a build
+script may write.
+
 Built-in [grants](grants.md) may also come with variables of their own, such as
 `:pkgconfig_paths`.
 
@@ -62,10 +69,37 @@ openssl_dir = { env = "OPENSSL_DIR", default = "/usr" }                # fallbac
 
   Definitions that import those are rejected when the config loads. The check
   is by name; see [open questions](open-questions.md) for the upstream fix.
-- Crates can't define variables, only use them in declarations.
 
 crabshell doesn't run host tools to discover paths. Built-in defaults are
 static data; when they're wrong for a machine, the user sets the variable.
+
+## Variables in a declaration
+
+A crate can't define `[variables]`, and never sees the consumer's: a
+declaration resolves against the built-ins plus names of its own. That keeps a
+published declaration from depending on what a consumer happens to call
+things, so an unknown variable in a declaration is always the crate author's
+own mistake.
+
+Its own names come from the environment variables it requests, lowercased:
+
+```toml
+[package.metadata.crabshell]
+env  = ["OPENSSL_DIR"]
+read = [":openssl_dir/include", ":openssl_dir/lib"]
+```
+
+- This is how a crate declares a path it can't know the value of. Without it a
+  declaration could only name a fixed guess, and a consumer who set the knob
+  and granted the real directory would lose it to narrowing.
+- A name of its own **shadows a built-in** of the same name, like any inner
+  scope. `SYSROOT` is a real C-toolchain knob, and a crate requesting it means
+  that sysroot, not the one crabshell derives from `RUSTC`. `CRABSHELL_LOG`
+  reports a shadowed built-in.
+- The value can't widen anything: a declaration only narrows, so whatever the
+  variable holds, the result stays inside what the consumer granted.
+- An unset variable is undefined, so entries using it drop — right for a knob
+  whose absence means "use the default".
 
 ## Globs
 

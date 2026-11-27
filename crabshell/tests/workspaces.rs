@@ -384,6 +384,9 @@ fn rustup_home() -> OsString {
 /// finding the repository holding the scratch dir, which the jail can't read.
 /// `LIBCLANG_PATH`, when clang is installed, points bindgen at libclang (see
 /// [`libclang_dir`]).
+/// `CMAKE_POLICY_VERSION_MINIMUM` passes through when the host sets it, to ensure
+/// libsamplerate works with CMake 4+.
+/// there has to set it.
 fn outer_env() -> Vec<(&'static str, OsString)> {
     let scratch = Scratch::get();
     let mut env = vec![
@@ -400,6 +403,9 @@ fn outer_env() -> Vec<(&'static str, OsString)> {
     ];
     if let Some(dir) = libclang_dir() {
         env.push(("LIBCLANG_PATH", dir.clone().into()));
+    }
+    if let Some(value) = std::env::var_os("CMAKE_POLICY_VERSION_MINIMUM") {
+        env.push(("CMAKE_POLICY_VERSION_MINIMUM", value));
     }
     env
 }

@@ -36,9 +36,10 @@ fn main() -> ExitCode {
 ///
 /// Cargo identifies the package through the build script's environment, which
 /// we inherit. The project's policy comes from `CRABSHELL_CONFIG`; without it
-/// only implicit access and the default grant apply. The package's own
-/// declaration, if any, then tightens the result, and the user's config caps
-/// it. Entries expand to concrete paths and names before they're compared.
+/// the user's config is the whole policy. The two merge, the merged tables
+/// resolve, the package's own declaration tightens the result, and each
+/// file's `[limits]` clamps it. Entries expand to concrete paths and names
+/// before they're compared.
 fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
@@ -46,7 +47,7 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         .unwrap_or_default();
 
     // Cargo shows `cargo::warning` lines from a build script's stdout.
-    let mut config = match std::env::var_os("CRABSHELL_CONFIG") {
+    let project = match std::env::var_os("CRABSHELL_CONFIG") {
         Some(path) => config::load(Path::new(&path))?,
         None => {
             println!("cargo::warning=crabshell: CRABSHELL_CONFIG is not set; using the defaults");
@@ -58,9 +59,15 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         Some(path) => Some((path.to_path_buf(), config::load(path)?)),
         None => None,
     };
-    if let Some((_, user)) = &user {
-        config.take_facts(user);
-    }
+    // The project's policy and the user's merge into one, with the project
+    // on top; only their `[limits]` stay apart, to intersect at the end.
+    let user_limits = user
+        .as_ref()
+        .map(|(path, user)| (path.clone(), user.limits.clone()));
+    let config = match user {
+        Some((_, user)) => user.merge(project),
+        None => project,
+    };
     if config.external.network == Some(true) {
         println!(
             "cargo::warning=crabshell: [external] grants network to every registry and git dependency"
@@ -97,10 +104,8 @@ fn permissions() -> Result<Permissions, Box<dyn std::error::Error>> {
         }
         None => permissions,
     };
-    if let Some((path, mut user)) = user {
-        // The user's tables see the same grants and variables as the project.
-        user.take_facts(&config);
-        let caps = policy::caps(&user, &pkg, &x)?;
+    if let Some((path, limits)) = user_limits {
+        let caps = policy::ceiling(&limits, &x)?;
         let removed;
         (permissions, removed) = policy::cap(permissions, &caps, &pkg);
         if !removed.is_empty() {

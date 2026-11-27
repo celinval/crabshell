@@ -71,7 +71,7 @@ impl Build {
         self.dir.path().join("xdg")
     }
 
-    /// Write the user's own config, which caps the project's policy.
+    /// Write the user's own config, which merges with the project's policy.
     fn user_config(&self, text: &str) {
         let dir = self.xdg().join("crabshell");
         std::fs::create_dir_all(&dir).unwrap();
@@ -108,6 +108,24 @@ impl Build {
     }
 
     fn run(&self, pkg: &str, origin: Origin, env: &[(&str, &str)], args: &[&str]) -> Output {
+        self.command(pkg, origin, env, args).output().unwrap()
+    }
+
+    /// Run as a project that hasn't adopted crabshell: no `CRABSHELL_CONFIG`.
+    fn run_unconfigured(
+        &self,
+        pkg: &str,
+        origin: Origin,
+        env: &[(&str, &str)],
+        args: &[&str],
+    ) -> Output {
+        self.command(pkg, origin, env, args)
+            .env_remove("CRABSHELL_CONFIG")
+            .output()
+            .unwrap()
+    }
+
+    fn command(&self, pkg: &str, origin: Origin, env: &[(&str, &str)], args: &[&str]) -> Command {
         let mut cmd = Command::new(crabshell());
         cmd.arg(probe())
             .args(args)
@@ -121,7 +139,7 @@ impl Build {
         for (key, value) in env {
             cmd.env(key, value);
         }
-        cmd.output().unwrap()
+        cmd
     }
 }
 
@@ -615,10 +633,11 @@ fn limits_compare_paths_after_expanding_variables() {
     assert!(build.check("dep", Origin::External, &[], &["unreadable", file]));
 }
 
+/// Only the user's `[limits]` caps; it reports what it removed.
 #[test]
-fn the_user_config_caps_the_project_policy() {
+fn the_user_limits_cap_the_project_policy() {
     let build = Build::new("[external]\nenv = [\"CRABSHELL_GRANTED\", \"CRABSHELL_UNGRANTED\"]\n");
-    build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
+    build.user_config("[limits]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
     let output = build.run(
         "dep",
@@ -657,16 +676,47 @@ fn the_user_config_leaves_unnamed_fields_alone() {
     assert!(build.check("dep", Origin::External, &GRANTED, &["no-connect", &addr]));
 }
 
-/// The user config can't widen the project's policy.
+/// A user table grants, joining the project's rather than capping it.
 #[test]
-fn the_user_config_cannot_widen() {
-    let build = Build::new("[external]\nenv = []\n");
+fn a_user_table_joins_the_project_policy() {
+    let build = Build::new("[external]\nenv = [\"CRABSHELL_UNGRANTED\"]\n");
     build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
 
-    assert!(build.check(
+    for var in ["CRABSHELL_GRANTED", "CRABSHELL_UNGRANTED"] {
+        assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", var]));
+    }
+}
+
+/// With no project policy the user's config is the whole policy, which is what
+/// lets a contributor build a project that hasn't adopted crabshell.
+#[test]
+fn a_user_table_grants_without_a_project_policy() {
+    let build = Build::new("");
+    build.user_config("[external]\nenv = [\"CRABSHELL_GRANTED\"]\n");
+
+    let output = build.run_unconfigured(
         "dep",
         Origin::External,
         &GRANTED,
-        &["env-absent", "CRABSHELL_GRANTED"]
-    ));
+        &["env-present", "CRABSHELL_GRANTED"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A user `[grant.*]` extends the project's of the same name instead of
+/// replacing it, so machine facts and a project's additions both apply.
+#[test]
+fn a_user_grant_layers_over_the_project_grant() {
+    let build = Build::new(
+        "[external]\ngrants = [\"probe\"]\n\n[grant.probe]\nenv = { inherit = true, value = [\"CRABSHELL_UNGRANTED\"] }\n",
+    );
+    build.user_config("[grant.probe]\nenv = { inherit = true, value = [\"CRABSHELL_GRANTED\"] }\n");
+
+    for var in ["CRABSHELL_GRANTED", "CRABSHELL_UNGRANTED"] {
+        assert!(build.check("dep", Origin::External, &GRANTED, &["env-present", var]));
+    }
 }

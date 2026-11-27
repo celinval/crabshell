@@ -142,7 +142,7 @@ pub enum ListField {
     },
 }
 
-/// Where the user's own config lives, which caps every project's policy.
+/// Where the user's own config lives, which merges with every project's.
 ///
 /// `$XDG_CONFIG_HOME/crabshell/config.toml`, or `~/.config/crabshell/config.toml`
 /// when `XDG_CONFIG_HOME` is unset or not absolute, as the XDG spec says.
@@ -158,13 +158,26 @@ pub fn user_config_path(env: impl Fn(&str) -> Option<OsString>) -> Option<PathBu
 }
 
 impl SandboxConfig {
-    /// Take `other`'s machine facts over this config's own.
+    /// This config with `upper` merged over it, as Cargo merges config files.
     ///
-    /// Facts are `[variables]` and `[grant.*]`; each replaces one of the same
-    /// name.
-    pub fn take_facts(&mut self, other: &SandboxConfig) {
-        self.variables.extend(other.variables.clone());
-        self.grant.extend(other.grant.clone());
+    /// Grant tables **join**, so neither file discards what the other allows,
+    /// and a scalar both set takes `upper`'s. `[grant.*]` fields layer as they
+    /// do over a built-in, and `[variables]` replace by name.
+    ///
+    /// `[limits]` is not merged: ceilings intersect only once entries have
+    /// expanded to concrete values, so the merged config keeps `upper`'s and
+    /// the caller applies the other's separately.
+    pub fn merge(mut self, upper: SandboxConfig) -> SandboxConfig {
+        self.local = self.local.join(upper.local);
+        self.external = self.external.join(upper.external);
+        for (name, fields) in upper.package {
+            let lower = self.package.remove(&name).unwrap_or_default();
+            self.package.insert(name, lower.join(fields));
+        }
+        layer_grants(&mut self.grant, upper.grant);
+        self.variables.extend(upper.variables);
+        self.limits = upper.limits;
+        self
     }
 }
 
@@ -241,6 +254,22 @@ fn layer_grants(lower: &mut BTreeMap<String, Fields>, upper: BTreeMap<String, Fi
 }
 
 impl Fields {
+    /// These fields with `upper`'s joined onto them.
+    ///
+    /// Every list field unions both sides; `network` takes `upper`'s when it
+    /// sets it. Used across policy files, where neither may drop what the
+    /// other allows.
+    fn join(self, upper: Fields) -> Fields {
+        Fields {
+            read: ListField::join(self.read, upper.read),
+            write: ListField::join(self.write, upper.write),
+            run: ListField::join(self.run, upper.run),
+            env: ListField::join(self.env, upper.env),
+            network: upper.network.or(self.network),
+            grants: ListField::join(self.grants, upper.grants),
+        }
+    }
+
     /// These fields with `upper`'s set over them.
     ///
     /// An `inherit = true` extension stays one, relative to what lies below
@@ -258,6 +287,28 @@ impl Fields {
 }
 
 impl ListField {
+    /// Both sides' entries, inheriting when either side does.
+    fn join(lower: Option<ListField>, upper: Option<ListField>) -> Option<ListField> {
+        let (lower, upper) = match (lower, upper) {
+            (lower, None) => return lower,
+            (None, upper) => return upper,
+            (Some(lower), Some(upper)) => (lower, upper),
+        };
+        let inherits =
+            |field: &ListField| matches!(field, ListField::Inherit { inherit: true, .. });
+        let inherit = inherits(&lower) || inherits(&upper);
+        let mut value = list_entries(&lower).to_vec();
+        value.extend(list_entries(&upper).iter().cloned());
+        Some(if inherit {
+            ListField::Inherit {
+                inherit: true,
+                value,
+            }
+        } else {
+            ListField::Override(value)
+        })
+    }
+
     fn layer(lower: Option<ListField>, upper: Option<ListField>) -> Option<ListField> {
         match (lower, upper) {
             (lower, None) => lower,

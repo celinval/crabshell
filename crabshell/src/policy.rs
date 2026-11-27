@@ -268,47 +268,23 @@ pub struct Caps {
     pub network: Option<bool>,
 }
 
-/// The ceiling `config` sets for `pkg`: the fields its tables, grants or
-/// `[limits]` name, and nothing else. Defaults don't apply.
-pub fn caps(
-    config: &SandboxConfig,
-    pkg: &PackageContext,
-    x: &impl Expand,
-) -> Result<Caps, PathError> {
-    let chain = chain(config, pkg);
-    let grants = grants::effective(config);
-    let names = set_list(&chain, |f| &f.grants).unwrap_or_default();
-    let field = |get: fn(&Fields) -> &Option<ListField>, kind| -> Result<_, PathError> {
-        let granted = grants::expand(&grants, &names, get);
-        let value = match set_list(&chain, get) {
-            Some(mut value) => {
-                value.extend(granted);
-                Some(value)
-            }
-            None if !granted.is_empty() => Some(granted),
-            None => None,
-        };
-        let value = value.map(|value| expand_all(x, kind, &value)).transpose()?;
-        let limit = get(&config.limits)
+/// The ceiling `limits` sets: the fields it names, and nothing else.
+///
+/// A field it leaves unnamed stays unconstrained. Each policy file's own
+/// `[limits]` is applied in turn, which narrows to their intersection.
+pub fn ceiling(limits: &Fields, x: &impl Expand) -> Result<Caps, PathError> {
+    let field = |get: fn(&Fields) -> &Option<ListField>, kind| {
+        get(limits)
             .as_ref()
-            .map(|cap| expand_all(x, kind, entries(cap)));
-        Ok(match (value, limit.transpose()?) {
-            (Some(value), Some(limit)) => Some(intersect(&value, &limit)),
-            (value, limit) => value.or(limit),
-        })
-    };
-    let network = chain.iter().find_map(|fields| fields.network);
-    let network = network.or_else(|| grants::expand_network(&grants, &names).then_some(true));
-    let network = match (network, config.limits.network) {
-        (Some(a), Some(b)) => Some(a && b),
-        (a, b) => a.or(b),
+            .map(|cap| expand_all(x, kind, entries(cap)))
+            .transpose()
     };
     Ok(Caps {
         read: field(|f| &f.read, Kind::Paths)?,
         write: field(|f| &f.write, Kind::Paths)?,
         run: field(|f| &f.run, Kind::Paths)?,
         env: field(|f| &f.env, Kind::Names)?,
-        network,
+        network: limits.network,
     })
 }
 
@@ -358,28 +334,6 @@ pub fn cap(
         removed.push("network".into());
     }
     (capped, removed)
-}
-
-/// The value the most specific table that sets the field gives it, without a
-/// default: `None` when no table sets it.
-fn set_list(
-    chain: &[&Fields],
-    get: impl Fn(&Fields) -> &Option<ListField> + Copy,
-) -> Option<Vec<String>> {
-    let (head, rest) = chain.split_first()?;
-    match get(head) {
-        None => set_list(rest, get),
-        Some(ListField::Override(value)) => Some(dedup(value.clone())),
-        Some(ListField::Inherit { inherit, value }) => {
-            let mut out = if *inherit {
-                set_list(rest, get).unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            out.extend(value.iter().cloned());
-            Some(dedup(out))
-        }
-    }
 }
 
 /// The tables applying to `pkg`, most specific first.
@@ -933,10 +887,35 @@ mod tests {
         assert_eq!(tightened.read, expected);
     }
 
+    /// Grant tables join across files, so neither drops the other's entries.
     #[test]
-    fn caps_cover_only_the_fields_a_config_names() {
-        let user = config("[limits]\nnetwork = false\n\n[external]\nenv = [\"TARGET\"]\n");
-        let caps = super::caps(&user, &external("dep"), &Fixed).unwrap();
+    fn merging_joins_grant_tables() {
+        let user = config("[external]\nread = [\"/opt/sdk\"]\nenv = [\"SDK\"]\n");
+        let project = config("[external]\nread = [\"/usr/include\"]\nnetwork = true\n");
+        let merged = user.merge(project);
+        let p = resolve(&merged, &external("dep"));
+        assert!(p.read.contains(&"/opt/sdk".to_string()));
+        assert!(p.read.contains(&"/usr/include".to_string()));
+        // A field only the user sets still applies.
+        assert!(p.env.contains(&"SDK".to_string()));
+        // A scalar both could set takes the project's.
+        assert!(p.network);
+    }
+
+    /// With no project policy the user's config is the whole merge.
+    #[test]
+    fn a_user_table_grants_without_a_project_policy() {
+        let user = config("[external]\nenv = [\"CC\"]\n");
+        let p = resolve(&user.merge(SandboxConfig::default()), &external("dep"));
+        assert!(p.env.contains(&"CC".to_string()));
+    }
+
+    /// Only `[limits]` caps; a table in the same file grants instead.
+    #[test]
+    fn a_ceiling_covers_only_the_fields_limits_names() {
+        let user =
+            config("[limits]\nnetwork = false\nenv = [\"TARGET\"]\n\n[external]\nenv = [\"CC\"]\n");
+        let caps = ceiling(&user.limits, &Fixed).unwrap();
         assert_eq!(caps.env, Some(vec!["TARGET".to_string()]));
         assert_eq!(caps.network, Some(false));
         assert_eq!(caps.read, None);
@@ -946,8 +925,8 @@ mod tests {
     #[test]
     fn capping_keeps_implicit_access_and_reports_removals() {
         let project = config("[external]\nenv = [\"TARGET\", \"CC\"]\nnetwork = true\n");
-        let user = config("[external]\nenv = [\"TARGET\"]\nread = []\nnetwork = false\n");
-        let caps = super::caps(&user, &external("dep"), &Fixed).unwrap();
+        let user = config("[limits]\nenv = [\"TARGET\"]\nread = []\nnetwork = false\n");
+        let caps = ceiling(&user.limits, &Fixed).unwrap();
         let (capped, removed) = cap(resolve(&project, &external("dep")), &caps, &external("dep"));
         assert_eq!(capped.env, ["TARGET", "OUT_DIR"]);
         assert_eq!(capped.read, implicit());

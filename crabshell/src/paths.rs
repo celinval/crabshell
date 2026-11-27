@@ -371,6 +371,13 @@ mod tests {
         assert_eq!(v.expand(":out_dir/x").unwrap(), None);
     }
 
+    /// Built-ins are shortcuts, so a config may redefine one.
+    #[test]
+    fn a_definition_redefines_a_builtin() {
+        let v = vars(&[("sysroot", VariableDef::One(path("/opt/tc")))]);
+        assert_eq!(v.expand(":sysroot").unwrap(), Some(vec!["/opt/tc".into()]));
+    }
+
     #[test]
     fn passes_other_entries_through() {
         let v = vars(&[]);

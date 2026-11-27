@@ -341,9 +341,6 @@ fn validate_variable(name: &str, def: &VariableDef) -> Result<(), VariableError>
     if !crate::paths::is_valid_name(name) {
         return Err(VariableError::InvalidName);
     }
-    if crate::paths::BUILTIN.contains(&name) {
-        return Err(VariableError::Builtin);
-    }
     validate_sources(def)
 }
 
@@ -416,8 +413,6 @@ pub enum ConfigError {
 pub enum VariableError {
     /// The name isn't `[a-z][a-z0-9_]*`.
     InvalidName,
-    /// The name is a built-in variable.
-    Builtin,
     /// A path source isn't absolute.
     NotAbsolute(String),
     /// It imports an env var whose value a crate chooses (`DEP_*`, `CARGO_PKG_*`).
@@ -428,7 +423,6 @@ impl fmt::Display for VariableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VariableError::InvalidName => write!(f, "variable names are `[a-z][a-z0-9_]*`"),
-            VariableError::Builtin => write!(f, "built-in variables can't be redefined"),
             VariableError::NotAbsolute(path) => write!(f, "`{path}` must be an absolute path"),
             VariableError::CrateChosen(env) => write!(
                 f,
@@ -675,7 +669,6 @@ mod tests {
     #[test]
     fn rejects_bad_variables() {
         assert!(load_err("[variables]\nOpenSSL = \"/usr\"\n").contains("names are"));
-        assert!(load_err("[variables]\nsysroot = \"/usr\"\n").contains("can't be redefined"));
         assert!(load_err("[variables]\nx = \"usr\"\n").contains("must be an absolute path"));
         let nested = "[variables]\nx = { env = \"A\", default = { env = \"DEP_X\" } }\n";
         assert!(load_err(nested).contains("chosen by a crate"));
